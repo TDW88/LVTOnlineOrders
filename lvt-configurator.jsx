@@ -1,0 +1,2373 @@
+import React, { useState } from 'react';
+import { Camera, Zap, Shield, CloudLightning, Lightbulb, Volume2, Eye, CheckCircle, Radio, AlertCircle } from 'lucide-react';
+
+export default function LVTConfigurator() {
+  const [currentStep, setCurrentStep] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [config, setConfig] = useState({
+    units: [
+      { id: 1, zipCode: '', needsGenerator: false }
+    ],
+    ndaaCompliant: false,
+    nightVision: false,
+    softwarePackages: [],
+    leaseTerm: null, // in months: 12, 24, 36
+    contactInfo: {
+      email: '',
+      phone: '',
+      billingAddress: {
+        street: '',
+        city: '',
+        state: '',
+        zip: ''
+      },
+      shippingAddress: {
+        street: '',
+        city: '',
+        state: '',
+        zip: '',
+        sameAsBilling: false
+      }
+    }
+  });
+
+  // Base price for D3 Mobile Unit (monthly lease)
+  const BASE_MONTHLY_LEASE = 1249; // ~$15k per year / 12 months
+  
+  // Generator cost (monthly)
+  const GENERATOR_MONTHLY = 199;
+  
+  // Hardware options pricing (monthly)
+  const NDAA_MONTHLY = 125;
+  const NIGHT_VISION_MONTHLY = 175;
+  
+  // Software packages (monthly)
+  const softwarePackages = [
+    {
+      id: 'detect-deter',
+      name: 'Detect & Deter',
+      monthlyPrice: 249,
+      description: 'AI-powered intrusion detection with automated deterrence (strobes, spotlights, audio warnings)',
+      features: ['Real-time threat detection', 'Automated audio warnings', 'Strobe & spotlight activation', 'Custom alert rules']
+    },
+    {
+      id: 'alert-management',
+      name: 'Alert Management',
+      monthlyPrice: 149,
+      description: 'Advanced alert routing and response workflow management',
+      features: ['Multi-channel alerts (SMS, email, push)', 'Alert escalation workflows', 'Response tracking', 'Integration with security teams']
+    },
+    {
+      id: 'enterprise',
+      name: 'Enterprise Management',
+      monthlyPrice: 399,
+      description: 'Fleet-wide management and analytics for multiple units',
+      features: ['Centralized dashboard', 'Multi-site management', 'Advanced analytics & reporting', 'Custom user permissions', 'API access']
+    }
+  ];
+
+  // Lease term options
+  const leaseTerms = [
+    { months: 12, label: '12 Months', discount: 0 },
+    { months: 24, label: '24 Months', discount: 0.05 }, // 5% discount
+    { months: 36, label: '36 Months', discount: 0.10 }  // 10% discount
+  ];
+
+  const steps = ['Location', 'Hardware', 'Software', 'Lease Term', 'Contact Info', 'Review'];
+
+  // Simulate zip code lookup for generator requirements
+  // In production, this would call an API
+  const checkGeneratorRequirement = (zip) => {
+    // Simplified logic: certain regions need generators
+    // This would be replaced with actual API call to lookup table
+    const firstDigit = parseInt(zip.charAt(0));
+    // Simulate northern/colder states needing generators more often
+    // 0-2 = Northeast, 3-5 = Southeast/Central, 6-9 = West
+    if (firstDigit >= 0 && firstDigit <= 2) {
+      return Math.random() > 0.3; // 70% need generator in cold climates
+    } else if (firstDigit >= 3 && firstDigit <= 5) {
+      return Math.random() > 0.6; // 40% need generator in moderate climates
+    } else {
+      return Math.random() > 0.7; // 30% need generator in warm climates
+    }
+  };
+
+
+
+  const addUnit = () => {
+    const newId = Math.max(...config.units.map(u => u.id)) + 1;
+    setConfig(prev => ({
+      ...prev,
+      units: [...prev.units, { id: newId, zipCode: '', needsGenerator: false }]
+    }));
+  };
+
+  const removeUnit = (id) => {
+    if (config.units.length > 1) {
+      setConfig(prev => ({
+        ...prev,
+        units: prev.units.filter(u => u.id !== id)
+      }));
+    }
+  };
+
+  const updateUnitZipCode = (id, zipCode) => {
+    setConfig(prev => ({
+      ...prev,
+      units: prev.units.map(u => 
+        u.id === id ? { ...u, zipCode } : u
+      )
+    }));
+  };
+
+  const checkGeneratorForUnit = (id, zip) => {
+    const needsGen = checkGeneratorRequirement(zip);
+    setConfig(prev => ({
+      ...prev,
+      units: prev.units.map(u => 
+        u.id === id ? { ...u, needsGenerator: needsGen } : u
+      )
+    }));
+  };
+
+  const handleZipCodeSubmit = () => {
+    const allZipsValid = config.units.every(u => u.zipCode.length === 5);
+    if (allZipsValid) {
+      // Check generator requirements for all units
+      config.units.forEach(unit => {
+        checkGeneratorForUnit(unit.id, unit.zipCode);
+      });
+      setCurrentStep(1);
+    }
+  };
+
+  const calculateMonthlyTotal = () => {
+    const unitCount = config.units.length;
+    
+    // Base cost per unit (monthly)
+    let perUnitMonthly = BASE_MONTHLY_LEASE;
+    
+    // Add hardware options (applied to all units)
+    if (config.ndaaCompliant) {
+      perUnitMonthly += NDAA_MONTHLY;
+    }
+    if (config.nightVision) {
+      perUnitMonthly += NIGHT_VISION_MONTHLY;
+    }
+    
+    // Calculate base cost for all units
+    let monthlyTotal = perUnitMonthly * unitCount;
+    
+    // Add generators (varies by unit location)
+    const generatorCount = config.units.filter(u => u.needsGenerator).length;
+    monthlyTotal += generatorCount * GENERATOR_MONTHLY;
+    
+    // Add software packages (per unit)
+    config.softwarePackages.forEach(id => {
+      const pkg = softwarePackages.find(p => p.id === id);
+      if (pkg) monthlyTotal += pkg.monthlyPrice * unitCount;
+    });
+    
+    // Apply lease term discount if selected
+    if (config.leaseTerm) {
+      const term = leaseTerms.find(t => t.months === config.leaseTerm);
+      if (term && term.discount > 0) {
+        monthlyTotal = monthlyTotal * (1 - term.discount);
+      }
+    }
+    
+    return monthlyTotal;
+  };
+
+  // Helper to calculate monthly total for a specific term (for lease term cards)
+  const calculateMonthlyForTerm = (termMonths) => {
+    const unitCount = config.units.length;
+    
+    // Base cost per unit (monthly)
+    let perUnitMonthly = BASE_MONTHLY_LEASE;
+    
+    // Add hardware options (applied to all units)
+    if (config.ndaaCompliant) {
+      perUnitMonthly += NDAA_MONTHLY;
+    }
+    if (config.nightVision) {
+      perUnitMonthly += NIGHT_VISION_MONTHLY;
+    }
+    
+    // Calculate base cost for all units
+    let monthlyTotal = perUnitMonthly * unitCount;
+    
+    // Add generators (varies by unit location)
+    const generatorCount = config.units.filter(u => u.needsGenerator).length;
+    monthlyTotal += generatorCount * GENERATOR_MONTHLY;
+    
+    // Add software packages (per unit)
+    config.softwarePackages.forEach(id => {
+      const pkg = softwarePackages.find(p => p.id === id);
+      if (pkg) monthlyTotal += pkg.monthlyPrice * unitCount;
+    });
+    
+    // Apply discount for this specific term
+    const term = leaseTerms.find(t => t.months === termMonths);
+    if (term && term.discount > 0) {
+      monthlyTotal = monthlyTotal * (1 - term.discount);
+    }
+    
+    return monthlyTotal;
+  };
+
+  const calculateContractTotal = () => {
+    if (!config.leaseTerm) return 0;
+    return calculateMonthlyTotal() * config.leaseTerm;
+  };
+
+  const toggleHardwareOption = (option) => {
+    setConfig(prev => ({ ...prev, [option]: !prev[option] }));
+  };
+
+  const toggleSoftwarePackage = (id) => {
+    setConfig(prev => {
+      const packages = prev.softwarePackages.includes(id)
+        ? prev.softwarePackages.filter(p => p !== id)
+        : [...prev.softwarePackages, id];
+      return { ...prev, softwarePackages: packages };
+    });
+  };
+
+  const updateContactInfo = (field, value) => {
+    setConfig(prev => ({
+      ...prev,
+      contactInfo: {
+        ...prev.contactInfo,
+        [field]: value
+      }
+    }));
+  };
+
+  const updateAddress = (type, field, value) => {
+    setConfig(prev => ({
+      ...prev,
+      contactInfo: {
+        ...prev.contactInfo,
+        [type]: {
+          ...prev.contactInfo[type],
+          [field]: value
+        }
+      }
+    }));
+  };
+
+  const canProceed = () => {
+    if (currentStep === 0) {
+      return config.units.every(u => u.zipCode.length === 5);
+    }
+    if (currentStep === 1) return true; // Hardware options are optional
+    if (currentStep === 2) return true; // Software packages are optional
+    if (currentStep === 3) return config.leaseTerm !== null; // Lease term required
+    if (currentStep === 4) {
+      // Contact info required
+      const { email, phone, billingAddress, shippingAddress } = config.contactInfo;
+      const billingValid = billingAddress.street && billingAddress.city && 
+                          billingAddress.state && billingAddress.zip;
+      const shippingValid = shippingAddress.sameAsBilling || 
+                           (shippingAddress.street && shippingAddress.city && 
+                            shippingAddress.state && shippingAddress.zip);
+      return email && phone && billingValid && shippingValid;
+    }
+    return true;
+  };
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #1b1e23 0%, #272a2f 50%, #1b1e23 100%)',
+      color: '#ffffff',
+      fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      overflow: 'hidden'
+    }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800;900&display=swap');
+        
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+        
+        @keyframes slideUp {
+          from {
+            opacity: 0;
+            transform: translateY(30px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        @keyframes glow {
+          0%, 100% {
+            box-shadow: 0 0 20px rgba(86, 211, 204, 0.4);
+          }
+          50% {
+            box-shadow: 0 0 40px rgba(86, 211, 204, 0.7);
+          }
+        }
+        
+        .option-card {
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          animation: slideUp 0.6s ease-out;
+        }
+        
+        .option-card:hover {
+          transform: translateY(-8px);
+        }
+        
+        .selected-card {
+          animation: glow 2s ease-in-out infinite;
+        }
+        
+        .step-indicator {
+          transition: all 0.3s ease;
+        }
+        
+        .step-indicator.active {
+          transform: scale(1.1);
+        }
+        
+        .gradient-text {
+          background: linear-gradient(135deg, #56d3cc, #7de8e0);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+        
+        .noise-bg {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          opacity: 0.03;
+          z-index: 0;
+          pointer-events: none;
+          background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+      `}</style>
+
+      <div className="noise-bg"></div>
+
+      {/* Header */}
+      <header style={{
+        padding: '20px 48px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderBottom: '1px solid rgba(255,255,255,0.12)',
+        backdropFilter: 'blur(10px)',
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        background: 'rgba(39, 42, 47, 0.95)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              width="60" 
+              height="28"
+              viewBox="0 0 76 36" 
+              fill="none" 
+              className="logo"
+              style={{ color: '#ffffff' }}
+            >
+              <path d="M14.1675 0.521484L29.4019 35.5215H29.4528H39.1845L23.9501 0.521484H14.1675Z" fill="currentColor"></path>
+              <path d="M9.45465 27.2862V0.521484H0.5V35.5215H24.6763L21.097 27.2862H9.45465Z" fill="currentColor"></path>
+              <path d="M44.6873 0.521484L36.6753 18.9222L41.5666 30.1557L50.8779 8.75678H55.5654V35.5215H64.5201V8.75678H71.9207L75.5 0.521484H44.6873Z" fill="currentColor"></path>
+            </svg>
+            <div>
+              <div style={{ 
+                fontSize: '9px', 
+                fontWeight: '600',
+                letterSpacing: '0.5px',
+                color: 'rgba(255,255,255,0.6)',
+                textTransform: 'uppercase'
+              }}>
+                LiveView Technologies
+              </div>
+            </div>
+          </div>
+          <div style={{ 
+            height: '40px', 
+            width: '1px', 
+            background: 'rgba(255,255,255,0.2)',
+            margin: '0 8px'
+          }}></div>
+          <div style={{
+            fontSize: '11px',
+            fontWeight: '600',
+            letterSpacing: '0.5px',
+            color: 'rgba(255,255,255,0.7)',
+            textTransform: 'uppercase',
+            maxWidth: '200px',
+            lineHeight: '1.3'
+          }}>
+            Configure Your Security System
+          </div>
+        </div>
+        <div style={{ 
+          display: 'flex', 
+          gap: '32px',
+          fontSize: '13px',
+          fontWeight: '600',
+          letterSpacing: '0.5px'
+        }}>
+          {steps.map((step, idx) => (
+            <div
+              key={step}
+              className={`step-indicator ${idx === currentStep ? 'active' : ''}`}
+              style={{
+                opacity: idx === currentStep ? 1 : 0.4,
+                color: idx <= currentStep ? '#56d3cc' : '#fff',
+                textTransform: 'uppercase'
+              }}
+            >
+              {step}
+            </div>
+          ))}
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main style={{
+        maxWidth: '1400px',
+        margin: '0 auto',
+        padding: '80px 48px',
+        position: 'relative',
+        zIndex: 1
+      }}>
+        
+        {/* Step 0: Location */}
+        {currentStep === 0 && (
+          <div>
+            <h2 style={{
+              fontSize: '48px',
+              fontWeight: '700',
+              marginBottom: '16px',
+              letterSpacing: '-1px',
+              lineHeight: '1.1'
+            }}>
+              Surveillance, Deterrence, <br />and Versatility
+            </h2>
+            <p style={{
+              fontSize: '18px',
+              color: 'rgba(255,255,255,0.8)',
+              marginBottom: '64px',
+              fontWeight: '400',
+              maxWidth: '600px',
+              lineHeight: '1.6'
+            }}>
+              Meet LVT's lineup of intelligent security solutions, each leveraging AI to deter crime automatically. Rapidly-deployable as mobile units, wall mounts, or pole mounts, every unit is expertly configured to match your specific security needs.
+            </p>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '5fr 7fr',
+              gap: '48px',
+              marginBottom: '64px',
+              alignItems: 'center'
+            }}>
+              {/* Product Details */}
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                <h3 style={{
+                  fontSize: '14px',
+                  fontWeight: '800',
+                  textTransform: 'uppercase',
+                  letterSpacing: '1px',
+                  marginBottom: '24px',
+                  color: 'rgba(255,255,255,0.9)'
+                }}>
+                  Mobile Security Units
+                </h3>
+                
+                <p style={{
+                  fontSize: '16px',
+                  color: 'rgba(255,255,255,0.8)',
+                  marginBottom: '24px',
+                  lineHeight: '1.6',
+                  maxWidth: '500px'
+                }}>
+                  LVT's mobile units are a versatile, rapidly deployable solution to a wide range of security needs. Each self-contained unit includes solar panels, cellular connectivity, powerful lighting, a loud speaker, and a configurable selection of high-end cameras.
+                </p>
+
+                <p style={{
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  color: 'rgba(255,255,255,0.9)',
+                  marginBottom: '12px'
+                }}>
+                  For those who need:
+                </p>
+
+                <ul style={{
+                  listStyle: 'none',
+                  padding: 0,
+                  margin: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                  marginBottom: '32px'
+                }}>
+                  {[
+                    'Extremely rapid deployment',
+                    'On- or off-grid connectivity',
+                    'Adjustable, mobile coverage',
+                    'Automatic detection and deterrence'
+                  ].map((feature, idx) => (
+                    <li key={idx} style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '12px',
+                      fontSize: '15px',
+                      color: 'rgba(255,255,255,0.8)',
+                      fontWeight: '400',
+                      paddingLeft: '4px'
+                    }}>
+                      <span style={{
+                        width: '6px',
+                        height: '6px',
+                        background: '#56d3cc',
+                        borderRadius: '50%',
+                        marginTop: '7px',
+                        minWidth: '6px'
+                      }}></span>
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div style={{
+                  fontSize: '42px',
+                  fontWeight: '900',
+                  marginBottom: '8px',
+                  color: '#56d3cc',
+                  letterSpacing: '-1.5px'
+                }}>
+                  ${BASE_MONTHLY_LEASE.toLocaleString()}
+                  <span style={{ fontSize: '18px', color: 'rgba(255,255,255,0.6)', fontWeight: '600', marginLeft: '8px' }}>/month</span>
+                </div>
+                <p style={{
+                  fontSize: '13px',
+                  color: 'rgba(255,255,255,0.5)',
+                  fontWeight: '500'
+                }}>
+                  Base monthly lease per unit
+                </p>
+              </div>
+
+              {/* Product Image */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center'
+              }}>
+                <img 
+                  src="https://cdn.prod.website-files.com/674d649ddd92d4cd09236107/68c180ba911caf0351e75fde_81d8df77eec8c23c496c2124ef88fd43_liveunit2%201%402x.avif"
+                  alt="LVT Mobile Security Unit with solar panel and camera mast"
+                  style={{
+                    width: '100%',
+                    maxWidth: '605px',
+                    height: 'auto',
+                    objectFit: 'contain'
+                  }}
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Units Configuration Section */}
+            <div style={{
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: '16px',
+              padding: '40px',
+              maxWidth: '900px',
+              margin: '0 auto'
+            }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '32px'
+              }}>
+                <div>
+                  <h3 style={{
+                    fontSize: '24px',
+                    fontWeight: '800',
+                    marginBottom: '8px',
+                    letterSpacing: '-0.5px'
+                  }}>
+                    Deployment Locations
+                  </h3>
+                  <p style={{
+                    fontSize: '14px',
+                    color: 'rgba(255,255,255,0.7)',
+                    lineHeight: '1.6'
+                  }}>
+                    Configure unit quantities and deployment locations. Generator requirements will be determined for each location.
+                  </p>
+                </div>
+                
+                <div style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.6)',
+                  fontWeight: '600',
+                  background: 'rgba(86, 211, 204, 0.15)',
+                  padding: '8px 16px',
+                  borderRadius: '8px'
+                }}>
+                  {config.units.length} {config.units.length === 1 ? 'Unit' : 'Units'}
+                </div>
+              </div>
+
+              {/* Unit Inputs */}
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+                marginBottom: '24px'
+              }}>
+                {config.units.map((unit, index) => (
+                  <div key={unit.id} style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    display: 'flex',
+                    gap: '16px',
+                    alignItems: 'center'
+                  }}>
+                    <div style={{
+                      fontSize: '18px',
+                      fontWeight: '800',
+                      color: '#56d3cc',
+                      minWidth: '80px'
+                    }}>
+                      Unit {index + 1}
+                    </div>
+                    
+                    <div style={{ flex: 1 }}>
+                      <label style={{
+                        display: 'block',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                        marginBottom: '8px',
+                        color: 'rgba(255,255,255,0.7)'
+                      }}>
+                        Deployment Zip Code
+                      </label>
+                      <input
+                        type="text"
+                        maxLength="5"
+                        value={unit.zipCode}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '');
+                          updateUnitZipCode(unit.id, value);
+                        }}
+                        placeholder="Enter 5-digit zip"
+                        style={{
+                          width: '100%',
+                          padding: '12px 16px',
+                          background: 'rgba(39, 42, 47, 0.6)',
+                          border: '2px solid rgba(255,255,255,0.15)',
+                          borderRadius: '8px',
+                          color: '#fff',
+                          fontSize: '16px',
+                          fontWeight: '600',
+                          outline: 'none',
+                          transition: 'all 0.3s ease'
+                        }}
+                        onFocus={(e) => {
+                          e.target.style.border = '2px solid #56d3cc';
+                          e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                        }}
+                        onBlur={(e) => {
+                          e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                          e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                        }}
+                      />
+                    </div>
+
+                    {config.units.length > 1 && (
+                      <button
+                        onClick={() => removeUnit(unit.id)}
+                        style={{
+                          padding: '12px',
+                          background: 'rgba(255, 50, 50, 0.15)',
+                          border: '1px solid rgba(255, 50, 50, 0.3)',
+                          borderRadius: '8px',
+                          color: '#ff6b6b',
+                          cursor: 'pointer',
+                          transition: 'all 0.3s ease',
+                          fontSize: '14px',
+                          fontWeight: '700'
+                        }}
+                        onMouseOver={(e) => {
+                          e.target.style.background = 'rgba(255, 50, 50, 0.25)';
+                        }}
+                        onMouseOut={(e) => {
+                          e.target.style.background = 'rgba(255, 50, 50, 0.15)';
+                        }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Add Unit Button */}
+              <button
+                onClick={addUnit}
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '2px dashed rgba(255,255,255,0.2)',
+                  borderRadius: '10px',
+                  color: '#fff',
+                  fontSize: '14px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  marginBottom: '24px'
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.background = 'rgba(86, 211, 204, 0.15)';
+                  e.target.style.borderColor = '#56d3cc';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.background = 'rgba(255,255,255,0.08)';
+                  e.target.style.borderColor = 'rgba(255,255,255,0.2)';
+                }}
+              >
+                + Add Another Unit
+              </button>
+
+              {/* Continue Button */}
+              <button
+                onClick={handleZipCodeSubmit}
+                disabled={!canProceed()}
+                style={{
+                  width: '100%',
+                  padding: '16px',
+                  background: canProceed() ? '#56d3cc' : 'rgba(86, 211, 204, 0.2)',
+                  color: canProceed() ? '#1b1e23' : 'rgba(255,255,255,0.4)',
+                  border: 'none',
+                  borderRadius: '10px',
+                  fontSize: '16px',
+                  fontWeight: '800',
+                  cursor: canProceed() ? 'pointer' : 'not-allowed',
+                  transition: 'all 0.3s ease',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}
+                onMouseOver={(e) => {
+                  if (canProceed()) {
+                    e.target.style.background = '#00a19a';
+                    e.target.style.transform = 'scale(1.01)';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (canProceed()) {
+                    e.target.style.background = '#56d3cc';
+                    e.target.style.transform = 'scale(1)';
+                  }
+                }}
+              >
+                Continue to Hardware Options →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 1: Hardware Options */}
+        {currentStep === 1 && (
+          <div>
+            <h2 style={{
+              fontSize: '48px',
+              fontWeight: '900',
+              marginBottom: '12px',
+              letterSpacing: '-1.5px'
+            }}>
+              Hardware <span className="gradient-text">Configuration</span>
+            </h2>
+            <p style={{
+              fontSize: '18px',
+              color: 'rgba(255,255,255,0.7)',
+              marginBottom: '32px',
+              fontWeight: '400',
+              maxWidth: '800px'
+            }}>
+              Customize your D3 Mobile Units with specialized hardware options for enhanced capabilities
+            </p>
+
+            {/* Unit Count Summary */}
+            <div style={{
+              background: 'rgba(86, 211, 204, 0.08)',
+              border: '1px solid rgba(86, 211, 204, 0.2)',
+              borderRadius: '12px',
+              padding: '20px 24px',
+              marginBottom: '40px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div>
+                <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.7)', marginBottom: '4px' }}>
+                  Configuring
+                </div>
+                <div style={{ fontSize: '24px', fontWeight: '800', color: '#56d3cc' }}>
+                  {config.units.length} {config.units.length === 1 ? 'Unit' : 'Units'}
+                </div>
+              </div>
+              <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', textAlign: 'right' }}>
+                Hardware options apply to all units
+              </div>
+            </div>
+
+            {/* Generator Recommendations */}
+            {config.units.some(u => u.needsGenerator) && (
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))',
+                border: '2px solid #56d3cc',
+                borderRadius: '16px',
+                padding: '28px 32px',
+                marginBottom: '40px'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '20px'
+                }}>
+                  <Zap style={{ width: '32px', height: '32px', color: '#56d3cc', minWidth: '32px', marginTop: '4px' }} />
+                  <div style={{ flex: 1 }}>
+                    <h3 style={{
+                      fontSize: '20px',
+                      fontWeight: '800',
+                      marginBottom: '12px',
+                      letterSpacing: '-0.3px'
+                    }}>
+                      Smart Generator Backup Recommended
+                    </h3>
+                    <p style={{
+                      fontSize: '14px',
+                      color: 'rgba(255,255,255,0.7)',
+                      lineHeight: '1.6',
+                      marginBottom: '16px'
+                    }}>
+                      Based on your deployment locations, {config.units.filter(u => u.needsGenerator).length} of your {config.units.length} {config.units.length === 1 ? 'unit requires' : 'units require'} smart generator backup for optimal uptime:
+                    </p>
+                    <div style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '12px'
+                    }}>
+                      {config.units.filter(u => u.needsGenerator).map((unit, idx) => (
+                        <div key={unit.id} style={{
+                          background: 'rgba(86, 211, 204, 0.15)',
+                          padding: '8px 16px',
+                          borderRadius: '8px',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          color: '#fff'
+                        }}>
+                          Unit {config.units.indexOf(unit) + 1}: {unit.zipCode}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{
+                    textAlign: 'right'
+                  }}>
+                    <div style={{
+                      fontSize: '28px',
+                      fontWeight: '900',
+                      color: '#56d3cc',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      +${(GENERATOR_MONTHLY * config.units.filter(u => u.needsGenerator).length).toLocaleString()}
+                    </div>
+                    <div style={{
+                      fontSize: '11px',
+                      color: 'rgba(255,255,255,0.6)',
+                      marginTop: '4px'
+                    }}>
+                      {config.units.filter(u => u.needsGenerator).length} {config.units.filter(u => u.needsGenerator).length === 1 ? 'generator' : 'generators'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, 1fr)',
+              gap: '24px'
+            }}>
+              {/* NDAA Compliant Toggle */}
+              <div
+                className={`option-card ${config.ndaaCompliant ? 'selected-card' : ''}`}
+                onClick={() => toggleHardwareOption('ndaaCompliant')}
+                style={{
+                  background: config.ndaaCompliant
+                    ? 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))'
+                    : 'rgba(255,255,255,0.04)',
+                  border: config.ndaaCompliant
+                    ? '2px solid #56d3cc'
+                    : '2px solid rgba(255,255,255,0.1)',
+                  borderRadius: '16px',
+                  padding: '32px',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  marginBottom: '20px'
+                }}>
+                  <div style={{
+                    width: '64px',
+                    height: '64px',
+                    background: config.ndaaCompliant
+                      ? 'rgba(86, 211, 204, 0.15)'
+                      : 'rgba(255,255,255,0.08)',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: config.ndaaCompliant ? '#56d3cc' : '#fff'
+                  }}>
+                    <Shield className="w-8 h-8" />
+                  </div>
+                  
+                  {config.ndaaCompliant && (
+                    <CheckCircle style={{
+                      color: '#56d3cc',
+                      width: '28px',
+                      height: '28px'
+                    }} />
+                  )}
+                </div>
+
+                <h3 style={{
+                  fontSize: '22px',
+                  fontWeight: '800',
+                  marginBottom: '10px',
+                  letterSpacing: '-0.5px'
+                }}>
+                  NDAA Compliant Cameras
+                </h3>
+
+                <p style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.65)',
+                  marginBottom: '20px',
+                  lineHeight: '1.6'
+                }}>
+                  Upgrade to NDAA-compliant camera systems required for federal government and critical infrastructure deployments.
+                </p>
+
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  marginBottom: '24px'
+                }}>
+                  {[
+                    'NDAA Section 889 compliant',
+                    'Approved for federal sites',
+                    'Secure supply chain verified',
+                    'Critical infrastructure ready'
+                  ].map((feature, idx) => (
+                    <div key={idx} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '13px',
+                      color: 'rgba(255,255,255,0.7)',
+                      fontWeight: '500'
+                    }}>
+                      <div style={{
+                        width: '4px',
+                        height: '4px',
+                        background: config.ndaaCompliant ? '#56d3cc' : 'rgba(255,255,255,0.4)',
+                        borderRadius: '50%'
+                      }}></div>
+                      {feature}
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{
+                  fontSize: '28px',
+                  fontWeight: '900',
+                  color: config.ndaaCompliant ? '#56d3cc' : 'rgba(255,255,255,0.6)'
+                }}>
+                  +${NDAA_MONTHLY.toLocaleString()}/mo
+                </div>
+              </div>
+
+              {/* Night Vision Toggle */}
+              <div
+                className={`option-card ${config.nightVision ? 'selected-card' : ''}`}
+                onClick={() => toggleHardwareOption('nightVision')}
+                style={{
+                  background: config.nightVision
+                    ? 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))'
+                    : 'rgba(255,255,255,0.04)',
+                  border: config.nightVision
+                    ? '2px solid #56d3cc'
+                    : '2px solid rgba(255,255,255,0.1)',
+                  borderRadius: '16px',
+                  padding: '32px',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  marginBottom: '20px'
+                }}>
+                  <div style={{
+                    width: '64px',
+                    height: '64px',
+                    background: config.nightVision
+                      ? 'rgba(86, 211, 204, 0.15)'
+                      : 'rgba(255,255,255,0.08)',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: config.nightVision ? '#56d3cc' : '#fff'
+                  }}>
+                    <Eye className="w-8 h-8" />
+                  </div>
+                  
+                  {config.nightVision && (
+                    <CheckCircle style={{
+                      color: '#56d3cc',
+                      width: '28px',
+                      height: '28px'
+                    }} />
+                  )}
+                </div>
+
+                <h3 style={{
+                  fontSize: '22px',
+                  fontWeight: '800',
+                  marginBottom: '10px',
+                  letterSpacing: '-0.5px'
+                }}>
+                  Long-Range Thermal
+                </h3>
+
+                <p style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.65)',
+                  marginBottom: '20px',
+                  lineHeight: '1.6'
+                }}>
+                  Advanced thermal imaging cameras for complete darkness visibility and extended perimeter coverage.
+                </p>
+
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  marginBottom: '24px'
+                }}>
+                  {[
+                    'Track movement 1,200+ feet away',
+                    '100% darkness visibility',
+                    'Weather-independent detection',
+                    'Covers 8 football fields'
+                  ].map((feature, idx) => (
+                    <div key={idx} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '13px',
+                      color: 'rgba(255,255,255,0.7)',
+                      fontWeight: '500'
+                    }}>
+                      <div style={{
+                        width: '4px',
+                        height: '4px',
+                        background: config.nightVision ? '#56d3cc' : 'rgba(255,255,255,0.4)',
+                        borderRadius: '50%'
+                      }}></div>
+                      {feature}
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{
+                  fontSize: '28px',
+                  fontWeight: '900',
+                  color: config.nightVision ? '#56d3cc' : 'rgba(255,255,255,0.6)'
+                }}>
+                  +${NIGHT_VISION_MONTHLY.toLocaleString()}/mo
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Software Packages */}
+        {currentStep === 2 && (
+          <div>
+            <h2 style={{
+              fontSize: '48px',
+              fontWeight: '900',
+              marginBottom: '12px',
+              letterSpacing: '-1.5px'
+            }}>
+              Software <span className="gradient-text">Packages</span>
+            </h2>
+            <p style={{
+              fontSize: '18px',
+              color: 'rgba(255,255,255,0.7)',
+              marginBottom: '56px',
+              fontWeight: '400',
+              maxWidth: '800px'
+            }}>
+              Enhance your D3 Mobile Unit with advanced software capabilities for detection, alerting, and fleet management
+            </p>
+
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '24px'
+            }}>
+              {softwarePackages.map((pkg, idx) => (
+                <div
+                  key={pkg.id}
+                  className={`option-card ${config.softwarePackages.includes(pkg.id) ? 'selected-card' : ''}`}
+                  onClick={() => toggleSoftwarePackage(pkg.id)}
+                  style={{
+                    animationDelay: `${idx * 0.1}s`,
+                    background: config.softwarePackages.includes(pkg.id)
+                      ? 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))'
+                      : 'rgba(255,255,255,0.04)',
+                    border: config.softwarePackages.includes(pkg.id)
+                      ? '2px solid #56d3cc'
+                      : '2px solid rgba(255,255,255,0.1)',
+                    borderRadius: '16px',
+                    padding: '32px',
+                    cursor: 'pointer',
+                    position: 'relative',
+                    transition: 'all 0.3s ease'
+                  }}
+                >
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr auto',
+                    gap: '32px',
+                    alignItems: 'flex-start'
+                  }}>
+                    <div>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '16px',
+                        marginBottom: '16px'
+                      }}>
+                        <h3 style={{
+                          fontSize: '26px',
+                          fontWeight: '800',
+                          letterSpacing: '-0.5px'
+                        }}>
+                          {pkg.name}
+                        </h3>
+                        {config.softwarePackages.includes(pkg.id) && (
+                          <CheckCircle style={{
+                            color: '#56d3cc',
+                            width: '28px',
+                            height: '28px'
+                          }} />
+                        )}
+                      </div>
+
+                      <p style={{
+                        fontSize: '15px',
+                        color: 'rgba(255,255,255,0.7)',
+                        marginBottom: '24px',
+                        lineHeight: '1.6'
+                      }}>
+                        {pkg.description}
+                      </p>
+
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(2, 1fr)',
+                        gap: '12px'
+                      }}>
+                        {pkg.features.map((feature, fidx) => (
+                          <div key={fidx} style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '8px',
+                            fontSize: '13px',
+                            color: 'rgba(255,255,255,0.8)',
+                            fontWeight: '500'
+                          }}>
+                            <div style={{
+                              width: '5px',
+                              height: '5px',
+                              background: config.softwarePackages.includes(pkg.id) ? '#56d3cc' : 'rgba(255,255,255,0.4)',
+                              borderRadius: '50%',
+                              marginTop: '6px',
+                              minWidth: '5px'
+                            }}></div>
+                            <span>{feature}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{
+                      textAlign: 'right'
+                    }}>
+                      <div style={{
+                        fontSize: '36px',
+                        fontWeight: '900',
+                        color: config.softwarePackages.includes(pkg.id) ? '#56d3cc' : 'rgba(255,255,255,0.6)',
+                        letterSpacing: '-1px'
+                      }}>
+                        +${pkg.monthlyPrice.toLocaleString()}/mo
+                      </div>
+                      <div style={{
+                        fontSize: '12px',
+                        color: 'rgba(255,255,255,0.5)',
+                        marginTop: '4px',
+                        fontWeight: '600'
+                      }}>
+                        per unit/month
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {config.softwarePackages.length === 0 && (
+              <div style={{
+                marginTop: '32px',
+                padding: '24px',
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '12px',
+                textAlign: 'center'
+              }}>
+                <p style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.6)',
+                  fontWeight: '500'
+                }}>
+                  Software packages are optional. You can add them now or upgrade later.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+
+        {/* Step 3: Lease Term */}
+        {currentStep === 3 && (
+          <div>
+            <h2 style={{
+              fontSize: '48px',
+              fontWeight: '700',
+              marginBottom: '16px',
+              letterSpacing: '-1px',
+              lineHeight: '1.1'
+            }}>
+              Select Your <span className="gradient-text">Lease Term</span>
+            </h2>
+            <p style={{
+              fontSize: '18px',
+              color: 'rgba(255,255,255,0.8)',
+              marginBottom: '64px',
+              fontWeight: '400',
+              maxWidth: '600px',
+              lineHeight: '1.6'
+            }}>
+              Choose the lease duration that works best for your security needs. Longer terms offer greater savings.
+            </p>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '24px',
+              maxWidth: '1000px',
+              margin: '0 auto'
+            }}>
+              {leaseTerms.map((term, idx) => {
+                const monthlyForThisTerm = calculateMonthlyForTerm(term.months);
+                const totalCost = monthlyForThisTerm * term.months;
+                const isSelected = config.leaseTerm === term.months;
+                
+                return (
+                  <div
+                    key={term.months}
+                    onClick={() => setConfig(prev => ({ ...prev, leaseTerm: term.months }))}
+                    className={`option-card ${isSelected ? 'selected-card' : ''}`}
+                    style={{
+                      animationDelay: `${idx * 0.1}s`,
+                      background: isSelected
+                        ? 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))'
+                        : 'rgba(255,255,255,0.04)',
+                      border: isSelected
+                        ? '2px solid #56d3cc'
+                        : '2px solid rgba(255,255,255,0.1)',
+                      borderRadius: '16px',
+                      padding: '32px',
+                      cursor: 'pointer',
+                      position: 'relative',
+                      transition: 'all 0.3s ease'
+                    }}
+                  >
+                    {term.discount > 0 && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '16px',
+                        right: '16px',
+                        background: '#56d3cc',
+                        color: '#1b1e23',
+                        padding: '4px 12px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: '800',
+                        textTransform: 'uppercase'
+                      }}>
+                        Save {(term.discount * 100)}%
+                      </div>
+                    )}
+                    
+                    {isSelected && (
+                      <CheckCircle style={{
+                        position: 'absolute',
+                        top: '24px',
+                        left: '24px',
+                        color: '#56d3cc',
+                        width: '28px',
+                        height: '28px'
+                      }} />
+                    )}
+
+                    <h3 style={{
+                      fontSize: '32px',
+                      fontWeight: '900',
+                      marginBottom: '12px',
+                      color: isSelected ? '#56d3cc' : '#fff',
+                      letterSpacing: '-1px',
+                      marginTop: term.discount > 0 ? '24px' : '0'
+                    }}>
+                      {term.label}
+                    </h3>
+
+                    <div style={{
+                      fontSize: '48px',
+                      fontWeight: '900',
+                      marginBottom: '8px',
+                      color: '#56d3cc',
+                      letterSpacing: '-2px'
+                    }}>
+                      ${Math.round(monthlyForThisTerm).toLocaleString()}
+                      <span style={{ fontSize: '20px', color: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>/mo</span>
+                    </div>
+
+                    <div style={{
+                      fontSize: '14px',
+                      color: 'rgba(255,255,255,0.6)',
+                      marginBottom: '24px'
+                    }}>
+                      ${totalCost.toLocaleString()} total contract
+                    </div>
+
+                    <div style={{
+                      padding: '12px',
+                      background: 'rgba(255,255,255,0.05)',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      color: 'rgba(255,255,255,0.7)',
+                      lineHeight: '1.5'
+                    }}>
+                      <div style={{ marginBottom: '6px', fontWeight: '600' }}>Includes:</div>
+                      • Installation & setup<br/>
+                      • 24/7 monitoring support<br/>
+                      • Maintenance & repairs
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Contact Information */}
+        {currentStep === 4 && (
+          <div>
+            <h2 style={{
+              fontSize: '48px',
+              fontWeight: '700',
+              marginBottom: '16px',
+              letterSpacing: '-1px',
+              lineHeight: '1.1'
+            }}>
+              Contact & <span className="gradient-text">Delivery Information</span>
+            </h2>
+            <p style={{
+              fontSize: '18px',
+              color: 'rgba(255,255,255,0.8)',
+              marginBottom: '64px',
+              fontWeight: '400',
+              maxWidth: '600px',
+              lineHeight: '1.6'
+            }}>
+              We'll use this information to finalize your lease agreement and coordinate unit delivery.
+            </p>
+
+            <div style={{
+              maxWidth: '800px',
+              margin: '0 auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '32px'
+            }}>
+              {/* Contact Information */}
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '16px',
+                padding: '32px'
+              }}>
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  marginBottom: '24px',
+                  color: '#56d3cc'
+                }}>
+                  Contact Information
+                </h3>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                      marginBottom: '8px',
+                      color: 'rgba(255,255,255,0.7)'
+                    }}>
+                      Email Address *
+                    </label>
+                    <input
+                      type="email"
+                      value={config.contactInfo.email}
+                      onChange={(e) => updateContactInfo('email', e.target.value)}
+                      placeholder="your.email@company.com"
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        background: 'rgba(39, 42, 47, 0.6)',
+                        border: '2px solid rgba(255,255,255,0.15)',
+                        borderRadius: '8px',
+                        color: '#fff',
+                        fontSize: '16px',
+                        fontWeight: '500',
+                        outline: 'none',
+                        transition: 'all 0.3s ease'
+                      }}
+                      onFocus={(e) => {
+                        e.target.style.border = '2px solid #56d3cc';
+                        e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                        e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                      marginBottom: '8px',
+                      color: 'rgba(255,255,255,0.7)'
+                    }}>
+                      Phone Number *
+                    </label>
+                    <input
+                      type="tel"
+                      value={config.contactInfo.phone}
+                      onChange={(e) => updateContactInfo('phone', e.target.value)}
+                      placeholder="(555) 123-4567"
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        background: 'rgba(39, 42, 47, 0.6)',
+                        border: '2px solid rgba(255,255,255,0.15)',
+                        borderRadius: '8px',
+                        color: '#fff',
+                        fontSize: '16px',
+                        fontWeight: '500',
+                        outline: 'none',
+                        transition: 'all 0.3s ease'
+                      }}
+                      onFocus={(e) => {
+                        e.target.style.border = '2px solid #56d3cc';
+                        e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                        e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Billing Address */}
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '16px',
+                padding: '32px'
+              }}>
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  marginBottom: '24px',
+                  color: '#56d3cc'
+                }}>
+                  Billing Address
+                </h3>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <input
+                    type="text"
+                    value={config.contactInfo.billingAddress.street}
+                    onChange={(e) => updateAddress('billingAddress', 'street', e.target.value)}
+                    placeholder="Street Address *"
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      background: 'rgba(39, 42, 47, 0.6)',
+                      border: '2px solid rgba(255,255,255,0.15)',
+                      borderRadius: '8px',
+                      color: '#fff',
+                      fontSize: '16px',
+                      fontWeight: '500',
+                      outline: 'none'
+                    }}
+                  />
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '16px' }}>
+                    <input
+                      type="text"
+                      value={config.contactInfo.billingAddress.city}
+                      onChange={(e) => updateAddress('billingAddress', 'city', e.target.value)}
+                      placeholder="City *"
+                      style={{
+                        padding: '12px 16px',
+                        background: 'rgba(39, 42, 47, 0.6)',
+                        border: '2px solid rgba(255,255,255,0.15)',
+                        borderRadius: '8px',
+                        color: '#fff',
+                        fontSize: '16px',
+                        fontWeight: '500',
+                        outline: 'none'
+                      }}
+                    />
+                    <input
+                      type="text"
+                      value={config.contactInfo.billingAddress.state}
+                      onChange={(e) => updateAddress('billingAddress', 'state', e.target.value)}
+                      placeholder="State *"
+                      maxLength="2"
+                      style={{
+                        padding: '12px 16px',
+                        background: 'rgba(39, 42, 47, 0.6)',
+                        border: '2px solid rgba(255,255,255,0.15)',
+                        borderRadius: '8px',
+                        color: '#fff',
+                        fontSize: '16px',
+                        fontWeight: '500',
+                        outline: 'none'
+                      }}
+                    />
+                    <input
+                      type="text"
+                      value={config.contactInfo.billingAddress.zip}
+                      onChange={(e) => updateAddress('billingAddress', 'zip', e.target.value.replace(/\D/g, ''))}
+                      placeholder="Zip *"
+                      maxLength="5"
+                      style={{
+                        padding: '12px 16px',
+                        background: 'rgba(39, 42, 47, 0.6)',
+                        border: '2px solid rgba(255,255,255,0.15)',
+                        borderRadius: '8px',
+                        color: '#fff',
+                        fontSize: '16px',
+                        fontWeight: '500',
+                        outline: 'none'
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Shipping Address */}
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '16px',
+                padding: '32px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                  <h3 style={{
+                    fontSize: '20px',
+                    fontWeight: '800',
+                    color: '#56d3cc'
+                  }}>
+                    Shipping Address
+                  </h3>
+                  
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={config.contactInfo.shippingAddress.sameAsBilling}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        if (checked) {
+                          setConfig(prev => ({
+                            ...prev,
+                            contactInfo: {
+                              ...prev.contactInfo,
+                              shippingAddress: {
+                                ...prev.contactInfo.billingAddress,
+                                sameAsBilling: true
+                              }
+                            }
+                          }));
+                        } else {
+                          updateAddress('shippingAddress', 'sameAsBilling', false);
+                        }
+                      }}
+                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                    />
+                    <span style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)', fontWeight: '500' }}>
+                      Same as billing address
+                    </span>
+                  </label>
+                </div>
+                
+                {!config.contactInfo.shippingAddress.sameAsBilling && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <input
+                      type="text"
+                      value={config.contactInfo.shippingAddress.street}
+                      onChange={(e) => updateAddress('shippingAddress', 'street', e.target.value)}
+                      placeholder="Street Address *"
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        background: 'rgba(39, 42, 47, 0.6)',
+                        border: '2px solid rgba(255,255,255,0.15)',
+                        borderRadius: '8px',
+                        color: '#fff',
+                        fontSize: '16px',
+                        fontWeight: '500',
+                        outline: 'none'
+                      }}
+                    />
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '16px' }}>
+                      <input
+                        type="text"
+                        value={config.contactInfo.shippingAddress.city}
+                        onChange={(e) => updateAddress('shippingAddress', 'city', e.target.value)}
+                        placeholder="City *"
+                        style={{
+                          padding: '12px 16px',
+                          background: 'rgba(39, 42, 47, 0.6)',
+                          border: '2px solid rgba(255,255,255,0.15)',
+                          borderRadius: '8px',
+                          color: '#fff',
+                          fontSize: '16px',
+                          fontWeight: '500',
+                          outline: 'none'
+                        }}
+                      />
+                      <input
+                        type="text"
+                        value={config.contactInfo.shippingAddress.state}
+                        onChange={(e) => updateAddress('shippingAddress', 'state', e.target.value)}
+                        placeholder="State *"
+                        maxLength="2"
+                        style={{
+                          padding: '12px 16px',
+                          background: 'rgba(39, 42, 47, 0.6)',
+                          border: '2px solid rgba(255,255,255,0.15)',
+                          borderRadius: '8px',
+                          color: '#fff',
+                          fontSize: '16px',
+                          fontWeight: '500',
+                          outline: 'none'
+                        }}
+                      />
+                      <input
+                        type="text"
+                        value={config.contactInfo.shippingAddress.zip}
+                        onChange={(e) => updateAddress('shippingAddress', 'zip', e.target.value.replace(/\D/g, ''))}
+                        placeholder="Zip *"
+                        maxLength="5"
+                        style={{
+                          padding: '12px 16px',
+                          background: 'rgba(39, 42, 47, 0.6)',
+                          border: '2px solid rgba(255,255,255,0.15)',
+                          borderRadius: '8px',
+                          color: '#fff',
+                          fontSize: '16px',
+                          fontWeight: '500',
+                          outline: 'none'
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Step 5: Review */}
+        {currentStep === 5 && (
+          <div>
+            <h2 style={{
+              fontSize: '48px',
+              fontWeight: '700',
+              marginBottom: '16px',
+              letterSpacing: '-1px',
+              lineHeight: '1.1'
+            }}>
+              Your Custom <span className="gradient-text">D3 Mobile Units</span>
+            </h2>
+            <p style={{
+              fontSize: '18px',
+              color: 'rgba(255,255,255,0.8)',
+              marginBottom: '56px',
+              fontWeight: '400',
+              maxWidth: '800px',
+              lineHeight: '1.6'
+            }}>
+              Review your lease configuration and connect with an LVT specialist to finalize your deployment
+            </p>
+            
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '2fr 1fr',
+              gap: '28px'
+            }}>
+              <div style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '16px',
+                padding: '40px'
+              }}>
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  marginBottom: '28px',
+                  color: '#56d3cc',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  System Configuration
+                </h3>
+                
+                {/* Unit Summary */}
+                <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                  <div style={{
+                    fontSize: '11px',
+                    textTransform: 'uppercase',
+                    color: 'rgba(255,255,255,0.5)',
+                    letterSpacing: '1px',
+                    marginBottom: '14px',
+                    fontWeight: '600'
+                  }}>
+                    Base Units
+                  </div>
+                  <div style={{
+                    fontSize: '18px',
+                    fontWeight: '700',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '16px'
+                  }}>
+                    <span>{config.units.length} × D3 Mobile Security {config.units.length === 1 ? 'Unit' : 'Units'}</span>
+                    <span style={{ color: '#56d3cc' }}>
+                      ${(BASE_PRICE * config.units.length).toLocaleString()}
+                    </span>
+                  </div>
+                  
+                  {/* Show each deployment location */}
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    marginTop: '12px'
+                  }}>
+                    {config.units.map((unit, idx) => (
+                      <div key={unit.id} style={{
+                        fontSize: '13px',
+                        color: 'rgba(255,255,255,0.6)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}>
+                        <div style={{
+                          width: '4px',
+                          height: '4px',
+                          background: 'rgba(255,255,255,0.4)',
+                          borderRadius: '50%'
+                        }}></div>
+                        <span>Unit {idx + 1}: {unit.zipCode}</span>
+                        {unit.needsGenerator && (
+                          <span style={{
+                            background: 'rgba(86, 211, 204, 0.2)',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            fontWeight: '700',
+                            color: '#56d3cc'
+                          }}>
+                            + Generator
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Generators */}
+                {config.units.some(u => u.needsGenerator) && (
+                  <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{
+                      fontSize: '11px',
+                      textTransform: 'uppercase',
+                      color: 'rgba(255,255,255,0.5)',
+                      letterSpacing: '1px',
+                      marginBottom: '10px',
+                      fontWeight: '600'
+                    }}>
+                      Power Systems
+                    </div>
+                    <div style={{
+                      fontSize: '16px',
+                      fontWeight: '600',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <span>{config.units.filter(u => u.needsGenerator).length} × Smart Generator Backup</span>
+                      <span style={{ color: '#56d3cc' }}>
+                        +${(GENERATOR_MONTHLY * config.units.filter(u => u.needsGenerator).length).toLocaleString()}/mo
+                      </span>
+                    </div>
+                    <div style={{
+                      fontSize: '12px',
+                      color: 'rgba(255,255,255,0.5)',
+                      marginTop: '4px'
+                    }}>
+                      Monthly per generator
+                    </div>
+                  </div>
+                )}
+                
+                {/* Hardware Options */}
+                {(config.ndaaCompliant || config.nightVision) && (
+                  <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{
+                      fontSize: '11px',
+                      textTransform: 'uppercase',
+                      color: 'rgba(255,255,255,0.5)',
+                      letterSpacing: '1px',
+                      marginBottom: '10px',
+                      fontWeight: '600'
+                    }}>
+                      Hardware Options
+                    </div>
+                    {config.ndaaCompliant && (
+                      <div style={{
+                        fontSize: '16px',
+                        fontWeight: '600',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '8px'
+                      }}>
+                        <span>{config.units.length} × NDAA Compliant Cameras</span>
+                        <span style={{ color: '#56d3cc' }}>
+                          +${(NDAA_MONTHLY * config.units.length).toLocaleString()}/mo
+                        </span>
+                      </div>
+                    )}
+                    {config.nightVision && (
+                      <div style={{
+                        fontSize: '16px',
+                        fontWeight: '600',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <span>{config.units.length} × Long-Range Thermal</span>
+                        <span style={{ color: '#56d3cc' }}>
+                          +${(NIGHT_VISION_MONTHLY * config.units.length).toLocaleString()}/mo
+                        </span>
+                      </div>
+                    )}
+                    <div style={{
+                      fontSize: '12px',
+                      color: 'rgba(255,255,255,0.5)',
+                      marginTop: '4px'
+                    }}>
+                      Monthly per unit
+                    </div>
+                  </div>
+                )}
+                
+                {/* Software Packages */}
+                {config.softwarePackages.length > 0 && (
+                  <div>
+                    <div style={{
+                      fontSize: '11px',
+                      textTransform: 'uppercase',
+                      color: 'rgba(255,255,255,0.5)',
+                      letterSpacing: '1px',
+                      marginBottom: '10px',
+                      fontWeight: '600'
+                    }}>
+                      Software Packages
+                    </div>
+                    {config.softwarePackages.map(id => {
+                      const pkg = softwarePackages.find(p => p.id === id);
+                      return (
+                        <div key={id} style={{
+                          fontSize: '16px',
+                          fontWeight: '600',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: '8px'
+                        }}>
+                          <span>{config.units.length} × {pkg?.name}</span>
+                          <span style={{ color: '#56d3cc' }}>
+                            +${(pkg?.monthlyPrice * config.units.length).toLocaleString()}/mo
+                          </span>
+                        </div>
+                      );
+                    })}
+                    <div style={{
+                      fontSize: '12px',
+                      color: 'rgba(255,255,255,0.5)',
+                      marginTop: '4px'
+                    }}>
+                      Monthly per unit
+                    </div>
+                  </div>
+                )}
+
+                {!config.units.some(u => u.needsGenerator) && !config.ndaaCompliant && !config.nightVision && config.softwarePackages.length === 0 && (
+                  <div style={{
+                    padding: '24px',
+                    background: 'rgba(255,255,255,0.02)',
+                    borderRadius: '12px',
+                    textAlign: 'center'
+                  }}>
+                    <p style={{
+                      fontSize: '14px',
+                      color: 'rgba(255,255,255,0.6)',
+                      fontWeight: '500'
+                    }}>
+                      Base configuration selected. You can add hardware and software options at any time.
+                    </p>
+                  </div>
+                )}
+              </div>
+              
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(86, 211, 204, 0.15), rgba(125, 232, 224, 0.08))',
+                border: '2px solid #56d3cc',
+                borderRadius: '16px',
+                padding: '40px',
+                height: 'fit-content',
+                position: 'sticky',
+                top: '120px'
+              }}>
+                <h3 style={{
+                  fontSize: '13px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '1px',
+                  marginBottom: '20px',
+                  color: 'rgba(255,255,255,0.7)',
+                  fontWeight: '600'
+                }}>
+                  Monthly Lease Payment
+                </h3>
+                
+                <div style={{
+                  fontSize: '52px',
+                  fontWeight: '900',
+                  marginBottom: '8px',
+                  color: '#56d3cc',
+                  letterSpacing: '-2px'
+                }}>
+                  ${Math.round(calculateMonthlyTotal()).toLocaleString()}
+                  <span style={{ fontSize: '24px', color: 'rgba(255,255,255,0.6)' }}>/mo</span>
+                </div>
+
+                <div style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.6)',
+                  marginBottom: '8px',
+                  fontWeight: '600'
+                }}>
+                  {config.leaseTerm} month lease term
+                </div>
+                
+                <div style={{
+                  fontSize: '16px',
+                  color: 'rgba(255,255,255,0.7)',
+                  marginBottom: '28px',
+                  paddingTop: '12px',
+                  borderTop: '1px solid rgba(255,255,255,0.1)'
+                }}>
+                  ${calculateContractTotal().toLocaleString()} total contract
+                </div>
+                
+                <button
+                  disabled={isSubmitting}
+                  style={{
+                    width: '100%',
+                    padding: '18px',
+                    background: isSubmitting ? 'rgba(86, 211, 204, 0.5)' : '#56d3cc',
+                    color: '#1b1e23',
+                    border: 'none',
+                    borderRadius: '10px',
+                    fontSize: '16px',
+                    fontWeight: '800',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.3s ease',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    marginBottom: '16px',
+                    opacity: isSubmitting ? 0.7 : 1
+                  }}
+                  onMouseOver={(e) => {
+                    if (!isSubmitting) {
+                      e.target.style.background = '#00a19a';
+                      e.target.style.transform = 'scale(1.02)';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    if (!isSubmitting) {
+                      e.target.style.background = '#56d3cc';
+                      e.target.style.transform = 'scale(1)';
+                    }
+                  }}
+                  onClick={async () => {
+                    if (isSubmitting) return;
+                    
+                    setIsSubmitting(true);
+                    
+                    const webhookUrl = 'https://hooks.zapier.com/hooks/catch/10946150/uwcyc7m/';
+                    
+                    const monthlyTotal = Math.round(calculateMonthlyTotal());
+                    const contractTotal = calculateContractTotal();
+                    
+                    const orderData = {
+                      // Order Info
+                      timestamp: new Date().toISOString(),
+                      orderId: `LVT-${Date.now()}`,
+                      
+                      // Configuration Summary
+                      unitCount: config.units.length,
+                      deploymentZips: config.units.map(u => u.zipCode).join(', '),
+                      deploymentDetails: config.units.map((u, idx) => 
+                        `Unit ${idx + 1}: Zip ${u.zipCode}${u.needsGenerator ? ' (+ Generator)' : ''}`
+                      ).join(' | '),
+                      generatorsNeeded: config.units.filter(u => u.needsGenerator).length,
+                      
+                      // Hardware Options
+                      ndaaCompliant: config.ndaaCompliant ? 'Yes' : 'No',
+                      nightVision: config.nightVision ? 'Yes' : 'No',
+                      
+                      // Software Packages
+                      softwarePackages: config.softwarePackages.length > 0 
+                        ? config.softwarePackages.join(', ') 
+                        : 'None',
+                      
+                      // Lease Details
+                      leaseTerm: config.leaseTerm + ' months',
+                      monthlyPayment: monthlyTotal,
+                      totalContract: contractTotal,
+                      
+                      // Contact Information
+                      email: config.contactInfo.email,
+                      phone: config.contactInfo.phone,
+                      
+                      // Billing Address
+                      billingStreet: config.contactInfo.billingAddress.street,
+                      billingCity: config.contactInfo.billingAddress.city,
+                      billingState: config.contactInfo.billingAddress.state,
+                      billingZip: config.contactInfo.billingAddress.zip,
+                      billingAddressFull: `${config.contactInfo.billingAddress.street}, ${config.contactInfo.billingAddress.city}, ${config.contactInfo.billingAddress.state} ${config.contactInfo.billingAddress.zip}`,
+                      
+                      // Shipping Address
+                      shippingStreet: config.contactInfo.shippingAddress.sameAsBilling 
+                        ? config.contactInfo.billingAddress.street 
+                        : config.contactInfo.shippingAddress.street,
+                      shippingCity: config.contactInfo.shippingAddress.sameAsBilling 
+                        ? config.contactInfo.billingAddress.city 
+                        : config.contactInfo.shippingAddress.city,
+                      shippingState: config.contactInfo.shippingAddress.sameAsBilling 
+                        ? config.contactInfo.billingAddress.state 
+                        : config.contactInfo.shippingAddress.state,
+                      shippingZip: config.contactInfo.shippingAddress.sameAsBilling 
+                        ? config.contactInfo.billingAddress.zip 
+                        : config.contactInfo.shippingAddress.zip,
+                      shippingAddressFull: config.contactInfo.shippingAddress.sameAsBilling 
+                        ? 'Same as billing' 
+                        : `${config.contactInfo.shippingAddress.street}, ${config.contactInfo.shippingAddress.city}, ${config.contactInfo.shippingAddress.state} ${config.contactInfo.shippingAddress.zip}`,
+                      sameAsBilling: config.contactInfo.shippingAddress.sameAsBilling ? 'Yes' : 'No'
+                    };
+                    
+                    try {
+                      const response = await fetch(webhookUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(orderData)
+                      });
+                      
+                      if (response.ok) {
+                        alert(`Thank you for your lease request!\n\n${config.units.length} LVT D3 Mobile ${config.units.length === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.`);
+                        
+                        // Optional: Reset form or redirect
+                        // setCurrentStep(0);
+                        // window.location.href = '/thank-you';
+                      } else {
+                        throw new Error('Submission failed');
+                      }
+                      
+                    } catch (error) {
+                      alert('There was an error submitting your request. Please try again or contact us directly at sales@lvt.com');
+                      console.error('Submission error:', error);
+                    } finally {
+                      setIsSubmitting(false);
+                    }
+                  }}
+                >
+                  {isSubmitting ? 'Submitting...' : 'Request Demo'}
+                </button>
+                
+                <div style={{
+                  fontSize: '12px',
+                  color: 'rgba(255,255,255,0.6)',
+                  textAlign: 'center',
+                  lineHeight: '1.4'
+                }}>
+                  Installation, training, and ongoing support included
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Navigation Buttons */}
+        <div style={{
+          marginTop: '64px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          position: 'relative',
+          zIndex: 100
+        }}>
+          <button
+            onClick={() => currentStep > 0 && setCurrentStep(currentStep - 1)}
+            disabled={currentStep === 0}
+            style={{
+              padding: '14px 28px',
+              background: currentStep === 0 ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.08)',
+              color: currentStep === 0 ? 'rgba(255,255,255,0.3)' : '#fff',
+              border: '2px solid rgba(255,255,255,0.15)',
+              borderRadius: '10px',
+              fontSize: '14px',
+              fontWeight: '700',
+              cursor: currentStep === 0 ? 'not-allowed' : 'pointer',
+              transition: 'all 0.3s ease',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px'
+            }}
+            onMouseOver={(e) => {
+              if (currentStep > 0) {
+                e.target.style.background = 'rgba(255,255,255,0.12)';
+              }
+            }}
+            onMouseOut={(e) => {
+              if (currentStep > 0) {
+                e.target.style.background = 'rgba(255,255,255,0.08)';
+              }
+            }}
+          >
+            ← Back
+          </button>
+          
+          {currentStep < 5 ? (
+            <button
+              onClick={() => {
+                if (currentStep === 0 && canProceed()) {
+                  handleZipCodeSubmit();
+                } else if (canProceed()) {
+                  setCurrentStep(currentStep + 1);
+                }
+              }}
+              disabled={!canProceed()}
+              style={{
+                padding: '14px 40px',
+                background: !canProceed() 
+                  ? 'rgba(86, 211, 204, 0.2)' 
+                  : '#56d3cc',
+                color: !canProceed() ? 'rgba(255,255,255,0.4)' : '#fff',
+                border: 'none',
+                borderRadius: '10px',
+                fontSize: '14px',
+                fontWeight: '800',
+                cursor: !canProceed() ? 'not-allowed' : 'pointer',
+                transition: 'all 0.3s ease',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}
+              onMouseOver={(e) => {
+                if (canProceed()) {
+                  e.target.style.background = '#00a19a';
+                  e.target.style.transform = 'scale(1.02)';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (canProceed()) {
+                  e.target.style.background = '#56d3cc';
+                  e.target.style.transform = 'scale(1)';
+                }
+              }}
+            >
+              Continue →
+            </button>
+          ) : (
+            <button
+              onClick={() => setCurrentStep(0)}
+              style={{
+                padding: '14px 40px',
+                background: 'rgba(255,255,255,0.08)',
+                color: '#fff',
+                border: '2px solid rgba(255,255,255,0.15)',
+                borderRadius: '10px',
+                fontSize: '14px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}
+              onMouseOver={(e) => {
+                e.target.style.background = 'rgba(255,255,255,0.12)';
+              }}
+              onMouseOut={(e) => {
+                e.target.style.background = 'rgba(255,255,255,0.08)';
+              }}
+            >
+              Start Over
+            </button>
+          )}
+        </div>
+      </main>
+
+      {/* Floating Price Summary */}
+      {currentStep > 0 && currentStep < 5 && (
+        <div style={{
+          position: 'fixed',
+          bottom: '28px',
+          right: '48px',
+          background: 'linear-gradient(135deg, rgba(86, 211, 204, 0.15), rgba(125, 232, 224, 0.08))',
+          backdropFilter: 'blur(20px)',
+          border: '2px solid #56d3cc',
+          borderRadius: '12px',
+          padding: '20px 28px',
+          boxShadow: '0 8px 32px rgba(86, 211, 204, 0.4)',
+          zIndex: 50
+        }}>
+          <div style={{
+            fontSize: '11px',
+            color: 'rgba(255,255,255,0.7)',
+            marginBottom: '6px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+            fontWeight: '600'
+          }}>
+            {config.leaseTerm ? `Monthly (${config.leaseTerm} mo. lease)` : 'Estimated Monthly'}
+          </div>
+          <div style={{
+            fontSize: '32px',
+            fontWeight: '900',
+            color: '#56d3cc',
+            letterSpacing: '-1px'
+          }}>
+            ${Math.round(calculateMonthlyTotal()).toLocaleString()}/mo
+          </div>
+          {config.leaseTerm && (
+            <div style={{
+              fontSize: '12px',
+              color: 'rgba(255,255,255,0.6)',
+              marginTop: '8px'
+            }}>
+              ${calculateContractTotal().toLocaleString()} total
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
