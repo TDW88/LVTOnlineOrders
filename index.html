@@ -507,25 +507,13 @@ function LVTConfigurator() {
       </header>
 
       {/* Main Content */}
-      {/* Main Container with Sidebar */}
-      <div style={{
-        display: 'flex',
-        maxWidth: '1600px',
+      <main style={{
+        maxWidth: '1400px',
         margin: '0 auto',
-        gap: '48px',
-        padding: '40px 48px',
+        padding: '80px 48px',
         position: 'relative',
-        zIndex: 1,
-        alignItems: 'flex-start'
+        zIndex: 1
       }}>
-        
-        {/* Main Content Area */}
-        <main style={{
-          flex: '1 1 auto',
-          maxWidth: currentStep === 0 ? '1200px' : '900px',
-          minWidth: 0,
-          margin: currentStep === 0 ? '0 auto' : '0'
-        }}>
         
         {/* Step 0: Location */}
         {currentStep === 0 && (
@@ -1877,43 +1865,48 @@ function LVTConfigurator() {
             </p>
             
             <div style={{
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: '16px',
-              padding: '40px'
+              display: 'grid',
+              gridTemplateColumns: '2fr 1fr',
+              gap: '28px'
             }}>
-              <h3 style={{
-                fontSize: '20px',
-                fontWeight: '800',
-                marginBottom: '28px',
-                color: '#56d3cc',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
+              <div style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '16px',
+                padding: '40px'
               }}>
-                System Configuration
-              </h3>
-              
-              {/* Unit Summary */}
-              <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                <div style={{
-                  fontSize: '11px',
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  marginBottom: '28px',
+                  color: '#56d3cc',
                   textTransform: 'uppercase',
-                  color: 'rgba(255,255,255,0.5)',
-                  letterSpacing: '1px',
-                  marginBottom: '14px',
-                  fontWeight: '600'
+                  letterSpacing: '0.5px'
                 }}>
-                  Base Units
-                </div>
-                <div style={{
-                  fontSize: '18px',
-                  fontWeight: '700',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '16px'
-                }}>
-                  <span>{config.units.length} × D3 Mobile Security {config.units.length === 1 ? 'Unit' : 'Units'}</span>
+                  System Configuration
+                </h3>
+                
+                {/* Unit Summary */}
+                <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                  <div style={{
+                    fontSize: '11px',
+                    textTransform: 'uppercase',
+                    color: 'rgba(255,255,255,0.5)',
+                    letterSpacing: '1px',
+                    marginBottom: '14px',
+                    fontWeight: '600'
+                  }}>
+                    Base Units
+                  </div>
+                  <div style={{
+                    fontSize: '18px',
+                    fontWeight: '700',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '16px'
+                  }}>
+                    <span>{config.units.length} × D3 Mobile Security {config.units.length === 1 ? 'Unit' : 'Units'}</span>
                     <span style={{ color: '#56d3cc' }}>
                       ${(BASE_PRICE * config.units.length).toLocaleString()}
                     </span>
@@ -2103,6 +2096,191 @@ function LVTConfigurator() {
                   </div>
                 )}
               </div>
+              
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(86, 211, 204, 0.15), rgba(125, 232, 224, 0.08))',
+                border: '2px solid #56d3cc',
+                borderRadius: '16px',
+                padding: '40px',
+                height: 'fit-content',
+                position: 'sticky',
+                top: '120px'
+              }}>
+                <h3 style={{
+                  fontSize: '13px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '1px',
+                  marginBottom: '20px',
+                  color: 'rgba(255,255,255,0.7)',
+                  fontWeight: '600'
+                }}>
+                  Monthly Lease Payment
+                </h3>
+                
+                <div style={{
+                  fontSize: '52px',
+                  fontWeight: '900',
+                  marginBottom: '8px',
+                  color: '#56d3cc',
+                  letterSpacing: '-2px'
+                }}>
+                  ${Math.round(calculateMonthlyTotal()).toLocaleString()}
+                  <span style={{ fontSize: '24px', color: 'rgba(255,255,255,0.6)' }}>/mo</span>
+                </div>
+
+                <div style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.6)',
+                  marginBottom: '8px',
+                  fontWeight: '600'
+                }}>
+                  {config.leaseTerm} month lease term
+                </div>
+                
+                <div style={{
+                  fontSize: '16px',
+                  color: 'rgba(255,255,255,0.7)',
+                  marginBottom: '28px',
+                  paddingTop: '12px',
+                  borderTop: '1px solid rgba(255,255,255,0.1)'
+                }}>
+                  ${calculateContractTotal().toLocaleString()} total contract
+                </div>
+                
+                <button
+                  disabled={isSubmitting}
+                  style={{
+                    width: '100%',
+                    padding: '18px',
+                    background: isSubmitting ? 'rgba(86, 211, 204, 0.5)' : '#56d3cc',
+                    color: '#1b1e23',
+                    border: 'none',
+                    borderRadius: '10px',
+                    fontSize: '16px',
+                    fontWeight: '800',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.3s ease',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    marginBottom: '16px',
+                    opacity: isSubmitting ? 0.7 : 1
+                  }}
+                  onMouseOver={(e) => {
+                    if (!isSubmitting) {
+                      e.target.style.background = '#00a19a';
+                      e.target.style.transform = 'scale(1.02)';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    if (!isSubmitting) {
+                      e.target.style.background = '#56d3cc';
+                      e.target.style.transform = 'scale(1)';
+                    }
+                  }}
+                  onClick={async () => {
+                    if (isSubmitting) return;
+                    
+                    setIsSubmitting(true);
+                    
+                    const webhookUrl = 'https://hooks.zapier.com/hooks/catch/10946150/uwcyc7m/';
+                    
+                    const monthlyTotal = Math.round(calculateMonthlyTotal());
+                    const contractTotal = calculateContractTotal();
+                    
+                    const orderData = {
+                      // Order Info
+                      timestamp: new Date().toISOString(),
+                      orderId: `LVT-${Date.now()}`,
+                      
+                      // Configuration Summary
+                      unitCount: config.units.length,
+                      deploymentZips: config.units.map(u => u.zipCode).join(', '),
+                      deploymentDetails: config.units.map((u, idx) => 
+                        `Unit ${idx + 1}: Zip ${u.zipCode}${u.needsGenerator ? ' (+ Generator)' : ''}`
+                      ).join(' | '),
+                      generatorsNeeded: config.units.filter(u => u.needsGenerator).length,
+                      
+                      // Hardware Options
+                      ndaaCompliant: config.ndaaCompliant ? 'Yes' : 'No',
+                      nightVision: config.nightVision ? 'Yes' : 'No',
+                      
+                      // Software Packages
+                      softwarePackages: config.softwarePackages.length > 0 
+                        ? config.softwarePackages.join(', ') 
+                        : 'None',
+                      
+                      // Lease Details
+                      leaseTerm: config.leaseTerm + ' months',
+                      monthlyPayment: monthlyTotal,
+                      totalContract: contractTotal,
+                      
+                      // Contact Information
+                      email: config.contactInfo.email,
+                      phone: config.contactInfo.phone,
+                      
+                      // Billing Address
+                      billingStreet: config.contactInfo.billingAddress.street,
+                      billingCity: config.contactInfo.billingAddress.city,
+                      billingState: config.contactInfo.billingAddress.state,
+                      billingZip: config.contactInfo.billingAddress.zip,
+                      billingAddressFull: `${config.contactInfo.billingAddress.street}, ${config.contactInfo.billingAddress.city}, ${config.contactInfo.billingAddress.state} ${config.contactInfo.billingAddress.zip}`,
+                      
+                      // Shipping Address
+                      shippingStreet: config.contactInfo.shippingAddress.sameAsBilling 
+                        ? config.contactInfo.billingAddress.street 
+                        : config.contactInfo.shippingAddress.street,
+                      shippingCity: config.contactInfo.shippingAddress.sameAsBilling 
+                        ? config.contactInfo.billingAddress.city 
+                        : config.contactInfo.shippingAddress.city,
+                      shippingState: config.contactInfo.shippingAddress.sameAsBilling 
+                        ? config.contactInfo.billingAddress.state 
+                        : config.contactInfo.shippingAddress.state,
+                      shippingZip: config.contactInfo.shippingAddress.sameAsBilling 
+                        ? config.contactInfo.billingAddress.zip 
+                        : config.contactInfo.shippingAddress.zip,
+                      shippingAddressFull: config.contactInfo.shippingAddress.sameAsBilling 
+                        ? 'Same as billing' 
+                        : `${config.contactInfo.shippingAddress.street}, ${config.contactInfo.shippingAddress.city}, ${config.contactInfo.shippingAddress.state} ${config.contactInfo.shippingAddress.zip}`,
+                      sameAsBilling: config.contactInfo.shippingAddress.sameAsBilling ? 'Yes' : 'No'
+                    };
+                    
+                    try {
+                      const response = await fetch(webhookUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(orderData)
+                      });
+                      
+                      if (response.ok) {
+                        alert(`Thank you for your lease request!\n\n${config.units.length} LVT D3 Mobile ${config.units.length === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.`);
+                        
+                        // Optional: Reset form or redirect
+                        // setCurrentStep(0);
+                        // window.location.href = '/thank-you';
+                      } else {
+                        throw new Error('Submission failed');
+                      }
+                      
+                    } catch (error) {
+                      alert('There was an error submitting your request. Please try again or contact us directly at sales@lvt.com');
+                      console.error('Submission error:', error);
+                    } finally {
+                      setIsSubmitting(false);
+                    }
+                  }}
+                >
+                  {isSubmitting ? 'Submitting...' : 'Request Demo'}
+                </button>
+                
+                <div style={{
+                  fontSize: '12px',
+                  color: 'rgba(255,255,255,0.6)',
+                  textAlign: 'center',
+                  lineHeight: '1.4'
+                }}>
+                  Installation, training, and ongoing support included
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -2113,8 +2291,8 @@ function LVTConfigurator() {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          paddingTop: '32px',
-          borderTop: '1px solid rgba(255,255,255,0.1)'
+          position: 'relative',
+          zIndex: 100
         }}>
           <button
             onClick={() => currentStep > 0 && setCurrentStep(currentStep - 1)}
@@ -2146,7 +2324,7 @@ function LVTConfigurator() {
             ← Back
           </button>
           
-          {currentStep < 5 && (
+          {currentStep < 5 ? (
             <button
               onClick={() => {
                 if (currentStep === 0 && canProceed()) {
@@ -2161,7 +2339,7 @@ function LVTConfigurator() {
                 background: !canProceed() 
                   ? 'rgba(86, 211, 204, 0.2)' 
                   : '#56d3cc',
-                color: !canProceed() ? 'rgba(255,255,255,0.4)' : '#1b1e23',
+                color: !canProceed() ? 'rgba(255,255,255,0.4)' : '#fff',
                 border: 'none',
                 borderRadius: '10px',
                 fontSize: '14px',
@@ -2186,326 +2364,79 @@ function LVTConfigurator() {
             >
               Continue →
             </button>
+          ) : (
+            <button
+              onClick={() => setCurrentStep(0)}
+              style={{
+                padding: '14px 40px',
+                background: 'rgba(255,255,255,0.08)',
+                color: '#fff',
+                border: '2px solid rgba(255,255,255,0.15)',
+                borderRadius: '10px',
+                fontSize: '14px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}
+              onMouseOver={(e) => {
+                e.target.style.background = 'rgba(255,255,255,0.12)';
+              }}
+              onMouseOut={(e) => {
+                e.target.style.background = 'rgba(255,255,255,0.08)';
+              }}
+            >
+              Start Over
+            </button>
           )}
         </div>
-        </main>
+      </main>
 
-        {/* Right Sidebar - Contract Info & Pricing */}
-        {currentStep > 0 && (
-          <aside style={{
-            width: '380px',
-            flexShrink: 0,
-            position: 'sticky',
-            top: '100px',
-            alignSelf: 'flex-start'
-          }}>
+      {/* Floating Price Summary */}
+      {currentStep > 0 && currentStep < 5 && (
+        <div style={{
+          position: 'fixed',
+          bottom: '28px',
+          right: '48px',
+          background: 'linear-gradient(135deg, rgba(86, 211, 204, 0.15), rgba(125, 232, 224, 0.08))',
+          backdropFilter: 'blur(20px)',
+          border: '2px solid #56d3cc',
+          borderRadius: '12px',
+          padding: '20px 28px',
+          boxShadow: '0 8px 32px rgba(86, 211, 204, 0.4)',
+          zIndex: 50
+        }}>
           <div style={{
-            background: 'linear-gradient(135deg, rgba(39, 42, 47, 0.95), rgba(27, 30, 35, 0.95))',
-            border: '2px solid rgba(86, 211, 204, 0.3)',
-            borderRadius: '16px',
-            padding: '32px',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)'
+            fontSize: '11px',
+            color: 'rgba(255,255,255,0.7)',
+            marginBottom: '6px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+            fontWeight: '600'
           }}>
-            <h3 style={{
-              fontSize: '13px',
-              textTransform: 'uppercase',
-              letterSpacing: '1px',
-              marginBottom: '24px',
-              color: 'rgba(255,255,255,0.7)',
-              fontWeight: '600',
-              borderBottom: '1px solid rgba(255,255,255,0.1)',
-              paddingBottom: '12px'
-            }}>
-              Your Configuration
-            </h3>
-            
-            {/* Unit Count */}
+            {config.leaseTerm ? `Monthly (${config.leaseTerm} mo. lease)` : 'Estimated Monthly'}
+          </div>
+          <div style={{
+            fontSize: '32px',
+            fontWeight: '900',
+            color: '#56d3cc',
+            letterSpacing: '-1px'
+          }}>
+            ${Math.round(calculateMonthlyTotal()).toLocaleString()}/mo
+          </div>
+          {config.leaseTerm && (
             <div style={{
-              marginBottom: '20px',
-              paddingBottom: '20px',
-              borderBottom: '1px solid rgba(255,255,255,0.08)'
+              fontSize: '12px',
+              color: 'rgba(255,255,255,0.6)',
+              marginTop: '8px'
             }}>
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '8px'
-              }}>
-                <span style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)' }}>
-                  D3 Mobile Units
-                </span>
-                <span style={{ fontSize: '16px', fontWeight: '700', color: '#56d3cc' }}>
-                  {config.units.length}
-                </span>
-              </div>
-              {config.units.filter(u => u.needsGenerator).length > 0 && (
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  fontSize: '12px',
-                  color: 'rgba(255,255,255,0.6)'
-                }}>
-                  <span>+ Generators</span>
-                  <span>{config.units.filter(u => u.needsGenerator).length}</span>
-                </div>
-              )}
+              ${calculateContractTotal().toLocaleString()} total
             </div>
-
-            {/* Hardware Options */}
-            {(config.ndaaCompliant || config.nightVision) && (
-              <div style={{
-                marginBottom: '20px',
-                paddingBottom: '20px',
-                borderBottom: '1px solid rgba(255,255,255,0.08)'
-              }}>
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Hardware
-                </div>
-                {config.ndaaCompliant && (
-                  <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.8)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <CheckCircle style={{ width: '14px', height: '14px', color: '#56d3cc' }} />
-                    NDAA Compliant Cameras
-                  </div>
-                )}
-                {config.nightVision && (
-                  <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <CheckCircle style={{ width: '14px', height: '14px', color: '#56d3cc' }} />
-                    Long-Range Thermal
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Software Packages */}
-            {config.softwarePackages.length > 0 && (
-              <div style={{
-                marginBottom: '20px',
-                paddingBottom: '20px',
-                borderBottom: '1px solid rgba(255,255,255,0.08)'
-              }}>
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Software
-                </div>
-                {config.softwarePackages.map(pkgId => {
-                  const pkg = softwarePackages.find(p => p.id === pkgId);
-                  return (
-                    <div key={pkgId} style={{ fontSize: '13px', color: 'rgba(255,255,255,0.8)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <CheckCircle style={{ width: '14px', height: '14px', color: '#56d3cc' }} />
-                      {pkg?.name}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Lease Term */}
-            {config.leaseTerm && (
-              <div style={{
-                marginBottom: '24px',
-                paddingBottom: '20px',
-                borderBottom: '1px solid rgba(255,255,255,0.08)'
-              }}>
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Lease Term
-                </div>
-                <div style={{ fontSize: '16px', fontWeight: '700', color: '#fff' }}>
-                  {config.leaseTerm} Months
-                </div>
-              </div>
-            )}
-
-            {/* Pricing */}
-            {currentStep > 0 && (
-              <div>
-                <div style={{
-                  fontSize: '11px',
-                  color: 'rgba(255,255,255,0.6)',
-                  marginBottom: '8px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  fontWeight: '600'
-                }}>
-                  {config.leaseTerm ? `Monthly Payment` : 'Estimated Monthly'}
-                </div>
-                <div style={{
-                  fontSize: '36px',
-                  fontWeight: '900',
-                  color: '#56d3cc',
-                  letterSpacing: '-1px',
-                  marginBottom: '8px'
-                }}>
-                  ${Math.round(calculateMonthlyTotal()).toLocaleString()}
-                  <span style={{ fontSize: '18px', color: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>/mo</span>
-                </div>
-                {config.leaseTerm && (
-                  <div style={{
-                    fontSize: '14px',
-                    color: 'rgba(255,255,255,0.6)',
-                    fontWeight: '600'
-                  }}>
-                    ${calculateContractTotal().toLocaleString()} total contract
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Contact Info (if on review step) */}
-            {currentStep === 5 && config.contactInfo.email && (
-              <div style={{
-                marginTop: '24px',
-                paddingTop: '24px',
-                borderTop: '1px solid rgba(255,255,255,0.08)'
-              }}>
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Contact
-                </div>
-                <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.8)', marginBottom: '4px' }}>
-                  {config.contactInfo.email}
-                </div>
-                <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>
-                  {config.contactInfo.phone}
-                </div>
-              </div>
-            )}
-
-            {/* Submit Button (on Review step) */}
-            {currentStep === 5 && (
-              <button
-                disabled={isSubmitting}
-                style={{
-                  width: '100%',
-                  padding: '18px',
-                  background: isSubmitting ? 'rgba(86, 211, 204, 0.5)' : '#56d3cc',
-                  color: '#1b1e23',
-                  border: 'none',
-                  borderRadius: '10px',
-                  fontSize: '16px',
-                  fontWeight: '800',
-                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.3s ease',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  marginTop: '28px',
-                  opacity: isSubmitting ? 0.7 : 1
-                }}
-                onMouseOver={(e) => {
-                  if (!isSubmitting) {
-                    e.target.style.background = '#00a19a';
-                    e.target.style.transform = 'scale(1.02)';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (!isSubmitting) {
-                    e.target.style.background = '#56d3cc';
-                    e.target.style.transform = 'scale(1)';
-                  }
-                }}
-                onClick={async () => {
-                  if (isSubmitting) return;
-                  
-                  setIsSubmitting(true);
-                  
-                  const webhookUrl = 'https://hooks.zapier.com/hooks/catch/10946150/uwcyc7m/';
-                  
-                  const monthlyTotal = Math.round(calculateMonthlyTotal());
-                  const contractTotal = calculateContractTotal();
-                  
-                  const orderData = {
-                    timestamp: new Date().toISOString(),
-                    orderId: `LVT-${Date.now()}`,
-                    unitCount: config.units.length,
-                    deploymentZips: config.units.map(u => u.zipCode).join(', '),
-                    deploymentDetails: config.units.map((u, idx) => 
-                      `Unit ${idx + 1}: Zip ${u.zipCode}${u.needsGenerator ? ' (+ Generator)' : ''}`
-                    ).join(' | '),
-                    generatorsNeeded: config.units.filter(u => u.needsGenerator).length,
-                    ndaaCompliant: config.ndaaCompliant ? 'Yes' : 'No',
-                    nightVision: config.nightVision ? 'Yes' : 'No',
-                    softwarePackages: config.softwarePackages.length > 0 
-                      ? config.softwarePackages.join(', ') 
-                      : 'None',
-                    leaseTerm: config.leaseTerm + ' months',
-                    monthlyPayment: monthlyTotal,
-                    totalContract: contractTotal,
-                    email: config.contactInfo.email,
-                    phone: config.contactInfo.phone,
-                    billingStreet: config.contactInfo.billingAddress.street,
-                    billingCity: config.contactInfo.billingAddress.city,
-                    billingState: config.contactInfo.billingAddress.state,
-                    billingZip: config.contactInfo.billingAddress.zip,
-                    billingAddressFull: `${config.contactInfo.billingAddress.street}, ${config.contactInfo.billingAddress.city}, ${config.contactInfo.billingAddress.state} ${config.contactInfo.billingAddress.zip}`,
-                    shippingStreet: config.contactInfo.shippingAddress.sameAsBilling 
-                      ? config.contactInfo.billingAddress.street 
-                      : config.contactInfo.shippingAddress.street,
-                    shippingCity: config.contactInfo.shippingAddress.sameAsBilling 
-                      ? config.contactInfo.billingAddress.city 
-                      : config.contactInfo.shippingAddress.city,
-                    shippingState: config.contactInfo.shippingAddress.sameAsBilling 
-                      ? config.contactInfo.billingAddress.state 
-                      : config.contactInfo.shippingAddress.state,
-                    shippingZip: config.contactInfo.shippingAddress.sameAsBilling 
-                      ? config.contactInfo.billingAddress.zip 
-                      : config.contactInfo.shippingAddress.zip,
-                    shippingAddressFull: config.contactInfo.shippingAddress.sameAsBilling 
-                      ? 'Same as billing' 
-                      : `${config.contactInfo.shippingAddress.street}, ${config.contactInfo.shippingAddress.city}, ${config.contactInfo.shippingAddress.state} ${config.contactInfo.shippingAddress.zip}`,
-                    sameAsBilling: config.contactInfo.shippingAddress.sameAsBilling ? 'Yes' : 'No'
-                  };
-                  
-                  try {
-                    const response = await fetch(webhookUrl, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify(orderData)
-                    });
-                    
-                    if (response.ok) {
-                      alert(`Thank you for your lease request!\n\n${config.units.length} LVT D3 Mobile ${config.units.length === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.`);
-                    } else {
-                      throw new Error('Submission failed');
-                    }
-                  } catch (error) {
-                    alert('There was an error submitting your request. Please try again or contact us directly at sales@lvt.com');
-                    console.error('Submission error:', error);
-                  } finally {
-                    setIsSubmitting(false);
-                  }
-                }}
-              >
-                {isSubmitting ? 'Submitting...' : 'Request Demo'}
-              </button>
-            )}
-
-            {/* What's Included Note (on Review step) */}
-            {currentStep === 5 && (
-              <div style={{
-                fontSize: '11px',
-                color: 'rgba(255,255,255,0.6)',
-                textAlign: 'center',
-                lineHeight: '1.5',
-                marginTop: '12px'
-              }}>
-                ✓ Installation, training & ongoing support included
-              </div>
-            )}
-          </div>
-
-          {/* Help Text */}
-          <div style={{
-            marginTop: '24px',
-            padding: '20px',
-            background: 'rgba(255,255,255,0.03)',
-            borderRadius: '12px',
-            border: '1px solid rgba(255,255,255,0.08)'
-          }}>
-            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', lineHeight: '1.6' }}>
-              Need help? Contact our team at <span style={{ color: '#56d3cc', fontWeight: '600' }}>sales@lvt.com</span> or call <span style={{ color: '#56d3cc', fontWeight: '600' }}>1-800-LVT-SECURITY</span>
-            </div>
-          </div>
-          </aside>
-        )}
-      </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
