@@ -1908,7 +1908,7 @@ function LVTConfigurator() {
                   }}>
                     <span>{config.units.length} × D3 Mobile Security {config.units.length === 1 ? 'Unit' : 'Units'}</span>
                     <span style={{ color: '#56d3cc' }}>
-                      ${(BASE_PRICE * config.units.length).toLocaleString()}
+                      ${(BASE_MONTHLY_LEASE * config.units.length).toLocaleString()}
                     </span>
                   </div>
                   
@@ -2182,7 +2182,7 @@ function LVTConfigurator() {
                     
                     setIsSubmitting(true);
                     
-                    const webhookUrl = 'https://webhooks.workato.com/webhooks/rest/6a7e39d0-1da9-4e30-8ab7-b7c732cbcb0f/new-order';
+                    const webhookUrl = 'https://webhooks.workato.com/webhooks/rest/6a7e39d0-1da9-4e30-8ab7-b7c732cbcb0f/order';
                     
                     const monthlyTotal = Math.round(calculateMonthlyTotal());
                     const contractTotal = calculateContractTotal();
@@ -2244,27 +2244,45 @@ function LVTConfigurator() {
                       sameAsBilling: config.contactInfo.shippingAddress.sameAsBilling ? 'Yes' : 'No'
                     };
                     
+                    const payload = JSON.stringify(orderData);
+                    let submitted = false;
+                    let verified = false;
+
                     try {
                       const response = await fetch(webhookUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(orderData)
+                        body: payload,
+                        credentials: 'omit'
                       });
-                      
-                      if (response.ok) {
-                        alert(`Thank you for your lease request!\n\n${config.units.length} LVT D3 Mobile ${config.units.length === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.`);
+                      submitted = response.ok;
+                      verified = response.ok;
+                    } catch (error) {
+                      try {
+                        await fetch(webhookUrl, {
+                          method: 'POST',
+                          mode: 'no-cors',
+                          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+                          body: payload
+                        });
+                        submitted = true;
+                      } catch (fallbackError) {
+                        console.error('Submission error:', fallbackError);
+                      }
+                      console.error('Submission error:', error);
+                    } finally {
+                      if (submitted) {
+                        const verificationNote = verified
+                          ? ''
+                          : '\n\nNote: The request was sent, but the browser could not verify a response due to cross-origin restrictions.';
+                        alert(`Thank you for your lease request!\n\n${config.units.length} LVT D3 Mobile ${config.units.length === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${verificationNote}`);
                         
                         // Optional: Reset form or redirect
                         // setCurrentStep(0);
                         // window.location.href = '/thank-you';
                       } else {
-                        throw new Error('Submission failed');
+                        alert('There was an error submitting your request. Please try again or contact us directly at sales@lvt.com');
                       }
-                      
-                    } catch (error) {
-                      alert('There was an error submitting your request. Please try again or contact us directly at sales@lvt.com');
-                      console.error('Submission error:', error);
-                    } finally {
                       setIsSubmitting(false);
                     }
                   }}
