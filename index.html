@@ -2246,21 +2246,17 @@ function LVTConfigurator() {
                     
                     const payload = JSON.stringify(orderData);
                     let submitted = false;
+                    let verified = false;
 
                     try {
-                      if (navigator.sendBeacon) {
-                        const blob = new Blob([payload], { type: 'application/json' });
-                        submitted = navigator.sendBeacon(webhookUrl, blob);
-                      }
-
-                      if (!submitted) {
-                        const response = await fetch(webhookUrl, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: payload
-                        });
-                        submitted = response.ok;
-                      }
+                      const response = await fetch(webhookUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: payload,
+                        credentials: 'omit'
+                      });
+                      submitted = response.ok;
+                      verified = response.ok;
                     } catch (error) {
                       try {
                         await fetch(webhookUrl, {
@@ -2276,7 +2272,10 @@ function LVTConfigurator() {
                       console.error('Submission error:', error);
                     } finally {
                       if (submitted) {
-                        alert(`Thank you for your lease request!\n\n${config.units.length} LVT D3 Mobile ${config.units.length === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.`);
+                        const verificationNote = verified
+                          ? ''
+                          : '\n\nNote: The request was sent, but the browser could not verify a response due to cross-origin restrictions.';
+                        alert(`Thank you for your lease request!\n\n${config.units.length} LVT D3 Mobile ${config.units.length === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${verificationNote}`);
                         
                         // Optional: Reset form or redirect
                         // setCurrentStep(0);
