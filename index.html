@@ -41,7 +41,7 @@
 <body>
   <div id="root"></div>
   <script type="text/babel">
-    const { useState } = React;
+    const { useState, useEffect } = React;
     
     // Icon components (inline replacements for lucide-react)
     const CheckCircle = (props) => (
@@ -88,13 +88,7 @@ function LVTConfigurator() {
         state: '',
         zip: ''
       },
-      shippingAddress: {
-        street: '',
-        city: '',
-        state: '',
-        zip: '',
-        sameAsBilling: false
-      }
+      shippingAddresses: []
     }
   });
 
@@ -141,6 +135,45 @@ function LVTConfigurator() {
   ];
 
   const steps = ['Location', 'Hardware', 'Software', 'Lease Term', 'Contact Info', 'Review'];
+
+  const uniqueLocationZips = [
+    ...new Set(config.units.map(unit => unit.zipCode).filter(zip => zip.length === 5))
+  ];
+
+  useEffect(() => {
+    setConfig(prev => {
+      const existing = prev.contactInfo.shippingAddresses || [];
+      const nextShippingAddresses = uniqueLocationZips.map(zip => {
+        const match = existing.find(address => address.zipCode === zip);
+        if (match) {
+          return { ...match, zipCode: zip };
+        }
+        return {
+          zipCode: zip,
+          street: '',
+          city: '',
+          state: '',
+          zip: '',
+          sameAsBilling: false
+        };
+      });
+
+      const hasChanges = nextShippingAddresses.length !== existing.length
+        || nextShippingAddresses.some((address, idx) => address.zipCode !== existing[idx]?.zipCode);
+
+      if (!hasChanges) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        contactInfo: {
+          ...prev.contactInfo,
+          shippingAddresses: nextShippingAddresses
+        }
+      };
+    });
+  }, [uniqueLocationZips.join('|')]);
 
   // Simulate zip code lookup for generator requirements
   // In production, this would call an API
@@ -324,6 +357,18 @@ function LVTConfigurator() {
     }));
   };
 
+  const updateShippingAddress = (zipCode, field, value) => {
+    setConfig(prev => ({
+      ...prev,
+      contactInfo: {
+        ...prev.contactInfo,
+        shippingAddresses: prev.contactInfo.shippingAddresses.map(address =>
+          address.zipCode === zipCode ? { ...address, [field]: value } : address
+        )
+      }
+    }));
+  };
+
   const canProceed = () => {
     if (currentStep === 0) {
       return config.units.every(u => u.zipCode.length === 5);
@@ -333,12 +378,17 @@ function LVTConfigurator() {
     if (currentStep === 3) return config.leaseTerm !== null; // Lease term required
     if (currentStep === 4) {
       // Contact info required
-      const { email, phone, billingAddress, shippingAddress } = config.contactInfo;
+      const { email, phone, billingAddress, shippingAddresses } = config.contactInfo;
       const billingValid = billingAddress.street && billingAddress.city && 
                           billingAddress.state && billingAddress.zip;
-      const shippingValid = shippingAddress.sameAsBilling || 
-                           (shippingAddress.street && shippingAddress.city && 
-                            shippingAddress.state && shippingAddress.zip);
+      const shippingValid = uniqueLocationZips.length > 0
+        ? uniqueLocationZips.every(zip => {
+          const address = shippingAddresses.find(entry => entry.zipCode === zip);
+          if (!address) return false;
+          if (address.sameAsBilling) return true;
+          return address.street && address.city && address.state && address.zip;
+        })
+        : false;
       return email && phone && billingValid && shippingValid;
     }
     return true;
@@ -1426,7 +1476,7 @@ function LVTConfigurator() {
                         position: 'absolute',
                         top: '16px',
                         right: '16px',
-                        background: '#56d3cc',
+                        background: '#F4CD27',
                         color: '#1b1e23',
                         padding: '4px 12px',
                         borderRadius: '6px',
@@ -1455,7 +1505,7 @@ function LVTConfigurator() {
                       marginBottom: '12px',
                       color: isSelected ? '#56d3cc' : '#fff',
                       letterSpacing: '-1px',
-                      marginTop: term.discount > 0 ? '24px' : '0'
+                      marginTop: '24px'
                     }}>
                       {term.label}
                     </h3>
@@ -1718,125 +1768,160 @@ function LVTConfigurator() {
                 </div>
               </div>
 
-              {/* Shipping Address */}
+              {/* Shipping Addresses */}
               <div style={{
                 background: 'rgba(255,255,255,0.03)',
                 border: '1px solid rgba(255,255,255,0.12)',
                 borderRadius: '16px',
                 padding: '32px'
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                  <h3 style={{
-                    fontSize: '20px',
-                    fontWeight: '800',
-                    color: '#56d3cc'
-                  }}>
-                    Shipping Address
-                  </h3>
-                  
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={config.contactInfo.shippingAddress.sameAsBilling}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        if (checked) {
-                          setConfig(prev => ({
-                            ...prev,
-                            contactInfo: {
-                              ...prev.contactInfo,
-                              shippingAddress: {
-                                ...prev.contactInfo.billingAddress,
-                                sameAsBilling: true
-                              }
-                            }
-                          }));
-                        } else {
-                          updateAddress('shippingAddress', 'sameAsBilling', false);
-                        }
-                      }}
-                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                    />
-                    <span style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)', fontWeight: '500' }}>
-                      Same as billing address
-                    </span>
-                  </label>
-                </div>
-                
-                {!config.contactInfo.shippingAddress.sameAsBilling && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <input
-                      type="text"
-                      value={config.contactInfo.shippingAddress.street}
-                      onChange={(e) => updateAddress('shippingAddress', 'street', e.target.value)}
-                      placeholder="Street Address *"
-                      style={{
-                        width: '100%',
-                        padding: '12px 16px',
-                        background: 'rgba(39, 42, 47, 0.6)',
-                        border: '2px solid rgba(255,255,255,0.15)',
-                        borderRadius: '8px',
-                        color: '#fff',
-                        fontSize: '16px',
-                        fontWeight: '500',
-                        outline: 'none'
-                      }}
-                    />
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  marginBottom: '12px',
+                  color: '#56d3cc'
+                }}>
+                  Shipping Addresses
+                </h3>
+                <p style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.65)',
+                  marginBottom: '24px'
+                }}>
+                  Add delivery details for each unique deployment location.
+                </p>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '16px' }}>
-                      <input
-                        type="text"
-                        value={config.contactInfo.shippingAddress.city}
-                        onChange={(e) => updateAddress('shippingAddress', 'city', e.target.value)}
-                        placeholder="City *"
-                        style={{
-                          padding: '12px 16px',
-                          background: 'rgba(39, 42, 47, 0.6)',
-                          border: '2px solid rgba(255,255,255,0.15)',
-                          borderRadius: '8px',
-                          color: '#fff',
-                          fontSize: '16px',
-                          fontWeight: '500',
-                          outline: 'none'
-                        }}
-                      />
-                      <input
-                        type="text"
-                        value={config.contactInfo.shippingAddress.state}
-                        onChange={(e) => updateAddress('shippingAddress', 'state', e.target.value)}
-                        placeholder="State *"
-                        maxLength="2"
-                        style={{
-                          padding: '12px 16px',
-                          background: 'rgba(39, 42, 47, 0.6)',
-                          border: '2px solid rgba(255,255,255,0.15)',
-                          borderRadius: '8px',
-                          color: '#fff',
-                          fontSize: '16px',
-                          fontWeight: '500',
-                          outline: 'none'
-                        }}
-                      />
-                      <input
-                        type="text"
-                        value={config.contactInfo.shippingAddress.zip}
-                        onChange={(e) => updateAddress('shippingAddress', 'zip', e.target.value.replace(/\D/g, ''))}
-                        placeholder="Zip *"
-                        maxLength="5"
-                        style={{
-                          padding: '12px 16px',
-                          background: 'rgba(39, 42, 47, 0.6)',
-                          border: '2px solid rgba(255,255,255,0.15)',
-                          borderRadius: '8px',
-                          color: '#fff',
-                          fontSize: '16px',
-                          fontWeight: '500',
-                          outline: 'none'
-                        }}
-                      />
-                    </div>
+                {uniqueLocationZips.length === 0 && (
+                  <div style={{
+                    padding: '16px',
+                    background: 'rgba(255,255,255,0.04)',
+                    borderRadius: '10px',
+                    color: 'rgba(255,255,255,0.6)',
+                    fontSize: '14px'
+                  }}>
+                    Enter valid zip codes in the Location step to set shipping destinations.
                   </div>
                 )}
+
+                {uniqueLocationZips.map((zip, idx) => {
+                  const address = config.contactInfo.shippingAddresses.find(entry => entry.zipCode === zip);
+                  const sameAsBilling = address?.sameAsBilling;
+
+                  return (
+                    <div
+                      key={zip}
+                      style={{
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '12px',
+                        padding: '20px',
+                        marginBottom: idx === uniqueLocationZips.length - 1 ? '0' : '16px'
+                      }}
+                    >
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '16px',
+                        gap: '16px',
+                        flexWrap: 'wrap'
+                      }}>
+                        <div style={{
+                          fontSize: '16px',
+                          fontWeight: '700',
+                          color: '#fff'
+                        }}>
+                          Location {idx + 1} • Zip {zip}
+                        </div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={!!sameAsBilling}
+                            onChange={(e) => updateShippingAddress(zip, 'sameAsBilling', e.target.checked)}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                          />
+                          <span style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)', fontWeight: '500' }}>
+                            Same as billing address
+                          </span>
+                        </label>
+                      </div>
+
+                      {!sameAsBilling && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                          <input
+                            type="text"
+                            value={address?.street || ''}
+                            onChange={(e) => updateShippingAddress(zip, 'street', e.target.value)}
+                            placeholder="Street Address *"
+                            style={{
+                              width: '100%',
+                              padding: '12px 16px',
+                              background: 'rgba(39, 42, 47, 0.6)',
+                              border: '2px solid rgba(255,255,255,0.15)',
+                              borderRadius: '8px',
+                              color: '#fff',
+                              fontSize: '16px',
+                              fontWeight: '500',
+                              outline: 'none'
+                            }}
+                          />
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '16px' }}>
+                            <input
+                              type="text"
+                              value={address?.city || ''}
+                              onChange={(e) => updateShippingAddress(zip, 'city', e.target.value)}
+                              placeholder="City *"
+                              style={{
+                                padding: '12px 16px',
+                                background: 'rgba(39, 42, 47, 0.6)',
+                                border: '2px solid rgba(255,255,255,0.15)',
+                                borderRadius: '8px',
+                                color: '#fff',
+                                fontSize: '16px',
+                                fontWeight: '500',
+                                outline: 'none'
+                              }}
+                            />
+                            <input
+                              type="text"
+                              value={address?.state || ''}
+                              onChange={(e) => updateShippingAddress(zip, 'state', e.target.value)}
+                              placeholder="State *"
+                              maxLength="2"
+                              style={{
+                                padding: '12px 16px',
+                                background: 'rgba(39, 42, 47, 0.6)',
+                                border: '2px solid rgba(255,255,255,0.15)',
+                                borderRadius: '8px',
+                                color: '#fff',
+                                fontSize: '16px',
+                                fontWeight: '500',
+                                outline: 'none'
+                              }}
+                            />
+                            <input
+                              type="text"
+                              value={address?.zip || ''}
+                              onChange={(e) => updateShippingAddress(zip, 'zip', e.target.value.replace(/\D/g, ''))}
+                              placeholder="Zip *"
+                              maxLength="5"
+                              style={{
+                                padding: '12px 16px',
+                                background: 'rgba(39, 42, 47, 0.6)',
+                                border: '2px solid rgba(255,255,255,0.15)',
+                                borderRadius: '8px',
+                                color: '#fff',
+                                fontSize: '16px',
+                                fontWeight: '500',
+                                outline: 'none'
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -1908,7 +1993,7 @@ function LVTConfigurator() {
                   }}>
                     <span>{config.units.length} × D3 Mobile Security {config.units.length === 1 ? 'Unit' : 'Units'}</span>
                     <span style={{ color: '#56d3cc' }}>
-                      ${(BASE_PRICE * config.units.length).toLocaleString()}
+                      ${(BASE_MONTHLY_LEASE * config.units.length).toLocaleString()}
                     </span>
                   </div>
                   
@@ -2182,11 +2267,26 @@ function LVTConfigurator() {
                     
                     setIsSubmitting(true);
                     
-                    const webhookUrl = 'https://webhooks.workato.com/webhooks/rest/6a7e39d0-1da9-4e30-8ab7-b7c732cbcb0f/new-order';
+                    const webhookUrl = 'https://webhooks.workato.com/webhooks/rest/6a7e39d0-1da9-4e30-8ab7-b7c732cbcb0f/order';
                     
                     const monthlyTotal = Math.round(calculateMonthlyTotal());
                     const contractTotal = calculateContractTotal();
                     
+                    const resolvedShippingAddresses = config.contactInfo.shippingAddresses.map(address => {
+                      const source = address.sameAsBilling
+                        ? config.contactInfo.billingAddress
+                        : address;
+                      return {
+                        locationZip: address.zipCode,
+                        sameAsBilling: address.sameAsBilling ? 'Yes' : 'No',
+                        street: source.street,
+                        city: source.city,
+                        state: source.state,
+                        zip: source.zip,
+                        addressFull: `${source.street}, ${source.city}, ${source.state} ${source.zip}`
+                      };
+                    });
+
                     const orderData = {
                       // Order Info
                       timestamp: new Date().toISOString(),
@@ -2225,46 +2325,49 @@ function LVTConfigurator() {
                       billingZip: config.contactInfo.billingAddress.zip,
                       billingAddressFull: `${config.contactInfo.billingAddress.street}, ${config.contactInfo.billingAddress.city}, ${config.contactInfo.billingAddress.state} ${config.contactInfo.billingAddress.zip}`,
                       
-                      // Shipping Address
-                      shippingStreet: config.contactInfo.shippingAddress.sameAsBilling 
-                        ? config.contactInfo.billingAddress.street 
-                        : config.contactInfo.shippingAddress.street,
-                      shippingCity: config.contactInfo.shippingAddress.sameAsBilling 
-                        ? config.contactInfo.billingAddress.city 
-                        : config.contactInfo.shippingAddress.city,
-                      shippingState: config.contactInfo.shippingAddress.sameAsBilling 
-                        ? config.contactInfo.billingAddress.state 
-                        : config.contactInfo.shippingAddress.state,
-                      shippingZip: config.contactInfo.shippingAddress.sameAsBilling 
-                        ? config.contactInfo.billingAddress.zip 
-                        : config.contactInfo.shippingAddress.zip,
-                      shippingAddressFull: config.contactInfo.shippingAddress.sameAsBilling 
-                        ? 'Same as billing' 
-                        : `${config.contactInfo.shippingAddress.street}, ${config.contactInfo.shippingAddress.city}, ${config.contactInfo.shippingAddress.state} ${config.contactInfo.shippingAddress.zip}`,
-                      sameAsBilling: config.contactInfo.shippingAddress.sameAsBilling ? 'Yes' : 'No'
+                      // Shipping Addresses
+                      shippingAddresses: resolvedShippingAddresses
                     };
                     
+                    const payload = JSON.stringify(orderData);
+                    let submitted = false;
+                    let verified = false;
+
                     try {
                       const response = await fetch(webhookUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(orderData)
+                        body: payload,
+                        credentials: 'omit'
                       });
-                      
-                      if (response.ok) {
-                        alert(`Thank you for your lease request!\n\n${config.units.length} LVT D3 Mobile ${config.units.length === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.`);
+                      submitted = response.ok;
+                      verified = response.ok;
+                    } catch (error) {
+                      try {
+                        await fetch(webhookUrl, {
+                          method: 'POST',
+                          mode: 'no-cors',
+                          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+                          body: payload
+                        });
+                        submitted = true;
+                      } catch (fallbackError) {
+                        console.error('Submission error:', fallbackError);
+                      }
+                      console.error('Submission error:', error);
+                    } finally {
+                      if (submitted) {
+                        const verificationNote = verified
+                          ? ''
+                          : '\n\nNote: The request was sent, but the browser could not verify a response due to cross-origin restrictions.';
+                        alert(`Thank you for your lease request!\n\n${config.units.length} LVT D3 Mobile ${config.units.length === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${verificationNote}`);
                         
                         // Optional: Reset form or redirect
                         // setCurrentStep(0);
                         // window.location.href = '/thank-you';
                       } else {
-                        throw new Error('Submission failed');
+                        alert('There was an error submitting your request. Please try again or contact us directly at sales@lvt.com');
                       }
-                      
-                    } catch (error) {
-                      alert('There was an error submitting your request. Please try again or contact us directly at sales@lvt.com');
-                      console.error('Submission error:', error);
-                    } finally {
                       setIsSubmitting(false);
                     }
                   }}
@@ -2397,7 +2500,7 @@ function LVTConfigurator() {
       {currentStep > 0 && currentStep < 5 && (
         <div style={{
           position: 'fixed',
-          bottom: '28px',
+          top: '140px',
           right: '48px',
           background: 'linear-gradient(135deg, rgba(86, 211, 204, 0.15), rgba(125, 232, 224, 0.08))',
           backdropFilter: 'blur(20px)',
