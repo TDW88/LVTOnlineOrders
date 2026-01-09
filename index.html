@@ -110,6 +110,8 @@ function LVTConfigurator() {
     contactInfo: {
       email: '',
       phone: '',
+      companyName: '',
+      fullName: '',
       billingAddress: {
         street: '',
         city: '',
@@ -587,7 +589,7 @@ function LVTConfigurator() {
     if (currentStep === 3) return config.leaseTerm !== null; // Lease term required
     if (currentStep === 4) {
       // Contact info required
-      const { email, phone, billingAddress, shippingAddresses } = config.contactInfo;
+      const { email, phone, companyName, fullName, billingAddress, shippingAddresses } = config.contactInfo;
       const billingValid = billingAddress.street && billingAddress.city && 
                           billingAddress.state && billingAddress.zip;
       const shippingValid = uniqueLocationZips.length > 0
@@ -598,7 +600,7 @@ function LVTConfigurator() {
           return address.street && address.city && address.state && address.zip;
         })
         : false;
-      return email && phone && billingValid && shippingValid;
+      return email && phone && companyName && fullName && billingValid && shippingValid;
     }
     return true;
   };
@@ -1809,6 +1811,86 @@ function LVTConfigurator() {
                       marginBottom: '8px',
                       color: 'rgba(255,255,255,0.7)'
                     }}>
+                      Company Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={config.contactInfo.companyName}
+                      onChange={(e) => updateContactInfo('companyName', e.target.value)}
+                      placeholder="Company Name"
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        background: 'rgba(39, 42, 47, 0.6)',
+                        border: '2px solid rgba(255,255,255,0.15)',
+                        borderRadius: '8px',
+                        color: '#fff',
+                        fontSize: '16px',
+                        fontWeight: '500',
+                        outline: 'none',
+                        transition: 'all 0.3s ease'
+                      }}
+                      onFocus={(e) => {
+                        e.target.style.border = '2px solid #56d3cc';
+                        e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                        e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                      marginBottom: '8px',
+                      color: 'rgba(255,255,255,0.7)'
+                    }}>
+                      Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={config.contactInfo.fullName}
+                      onChange={(e) => updateContactInfo('fullName', e.target.value)}
+                      placeholder="Full Name"
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        background: 'rgba(39, 42, 47, 0.6)',
+                        border: '2px solid rgba(255,255,255,0.15)',
+                        borderRadius: '8px',
+                        color: '#fff',
+                        fontSize: '16px',
+                        fontWeight: '500',
+                        outline: 'none',
+                        transition: 'all 0.3s ease'
+                      }}
+                      onFocus={(e) => {
+                        e.target.style.border = '2px solid #56d3cc';
+                        e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                        e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                      marginBottom: '8px',
+                      color: 'rgba(255,255,255,0.7)'
+                    }}>
                       Email Address *
                     </label>
                     <input
@@ -2548,6 +2630,8 @@ function LVTConfigurator() {
                       totalContract: contractTotal,
                       
                       // Contact Information
+                      companyName: config.contactInfo.companyName,
+                      contactName: config.contactInfo.fullName,
                       email: config.contactInfo.email,
                       phone: config.contactInfo.phone,
                       
