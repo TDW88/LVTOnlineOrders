@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LVT Mobile Security Unit Configurator</title>
+  <title>LVT Security Unit Configurator</title>
   <link rel="stylesheet" href="style.css">
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -39,10 +39,62 @@
       </svg>
     );
 
+const UNIT_TYPES = [
+  {
+    id: 'mobile',
+    name: 'Mobile Security Unit',
+    pluralName: 'Mobile Security Units',
+    baseMonthly: 2000,
+    image: 'https://cdn.prod.website-files.com/674d649ddd92d4cd09236107/68c180ba911caf0351e75fde_81d8df77eec8c23c496c2124ef88fd43_liveunit2%201%402x.avif',
+    imageAlt: 'LVT Mobile Security Unit with solar panel and camera mast',
+    description: "LVT's mobile units are a versatile, rapidly deployable solution to a wide range of security needs. Each self-contained unit includes solar panels, cellular connectivity, powerful lighting, a loud speaker, and a configurable selection of high-end cameras.",
+    needs: [
+      'Extremely rapid deployment',
+      'On- or off-grid connectivity',
+      'Adjustable, mobile coverage',
+      'Automatic detection and deterrence'
+    ],
+    generatorEligible: true
+  },
+  {
+    id: 'wall',
+    name: 'Wall Mount Unit',
+    pluralName: 'Wall Mount Units',
+    baseMonthly: 1500,
+    image: 'https://cdn.prod.website-files.com/674d649ddd92d4cd09236107/6838e36d3efe8b49f00fbc74_Wall-Mount.avif',
+    imageAlt: 'LVT Wall Mount security unit',
+    description: 'Wall mount units deliver fixed-position surveillance with a compact footprint, ideal for permanent coverage of entryways, loading zones, and building perimeters.',
+    needs: [
+      'Permanent coverage for fixed locations',
+      'Compact installation footprint',
+      'Consistent power availability',
+      'Full-time deterrence at entry points'
+    ],
+    generatorEligible: false
+  },
+  {
+    id: 'pole',
+    name: 'Pole Mount Unit',
+    pluralName: 'Pole Mount Units',
+    baseMonthly: 1500,
+    image: 'https://cdn.prod.website-files.com/674d649ddd92d4cd09236107/6838e69664a5f147d98afd9f_Pole-Mount.avif',
+    imageAlt: 'LVT Pole Mount security unit',
+    description: 'Pole mount units bring elevated coverage for lots, campuses, and large perimeters, delivering robust deterrence with a streamlined installation.',
+    needs: [
+      'Elevated coverage over wide areas',
+      'Minimal on-site footprint',
+      'Always-on monitoring for lots or campuses',
+      'Deterrence with long-range visibility'
+    ],
+    generatorEligible: false
+  }
+];
+
 function LVTConfigurator() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [config, setConfig] = useState({
+    unitType: 'mobile',
     units: [
       { id: 1, zipCode: '', needsGenerator: false, quantity: 1 }
     ],
@@ -63,8 +115,7 @@ function LVTConfigurator() {
     }
   });
 
-  // Base price for D3 Mobile Unit (monthly lease)
-  const BASE_MONTHLY_LEASE = 2000;
+  const selectedUnitType = UNIT_TYPES.find(type => type.id === config.unitType) || UNIT_TYPES[0];
   
   // Generator cost (monthly)
   const GENERATOR_MONTHLY = 1000;
@@ -155,6 +206,16 @@ function LVTConfigurator() {
     });
   }, [uniqueLocationZips.join('|')]);
 
+  useEffect(() => {
+    if (selectedUnitType.generatorEligible) {
+      return;
+    }
+    setConfig(prev => ({
+      ...prev,
+      units: prev.units.map(unit => ({ ...unit, needsGenerator: false }))
+    }));
+  }, [selectedUnitType.generatorEligible]);
+
   // Simulate zip code lookup for generator requirements
   // In production, this would call an API
   const checkGeneratorRequirement = (zip) => {
@@ -222,10 +283,17 @@ function LVTConfigurator() {
   const handleZipCodeSubmit = () => {
     const allZipsValid = config.units.every(u => u.zipCode.length === 5 && u.quantity > 0);
     if (allZipsValid) {
-      // Check generator requirements for all units
-      config.units.forEach(unit => {
-        checkGeneratorForUnit(unit.id, unit.zipCode);
-      });
+      if (selectedUnitType.generatorEligible) {
+        // Check generator requirements for all units
+        config.units.forEach(unit => {
+          checkGeneratorForUnit(unit.id, unit.zipCode);
+        });
+      } else {
+        setConfig(prev => ({
+          ...prev,
+          units: prev.units.map(unit => ({ ...unit, needsGenerator: false }))
+        }));
+      }
       setCurrentStep(1);
     }
   };
@@ -234,7 +302,7 @@ function LVTConfigurator() {
     const unitCount = totalUnits;
     
     // Base cost per unit (monthly)
-    let perUnitMonthly = BASE_MONTHLY_LEASE;
+    let perUnitMonthly = selectedUnitType.baseMonthly;
     
     // Add hardware options (applied to all units)
     if (config.ndaaCompliant) {
@@ -248,10 +316,12 @@ function LVTConfigurator() {
     let monthlyTotal = perUnitMonthly * unitCount;
     
     // Add generators (varies by unit location)
-    const generatorCount = config.units
-      .filter(u => u.needsGenerator)
-      .reduce((sum, unit) => sum + (unit.quantity || 0), 0);
-    monthlyTotal += generatorCount * GENERATOR_MONTHLY;
+    if (selectedUnitType.generatorEligible) {
+      const generatorCount = config.units
+        .filter(u => u.needsGenerator)
+        .reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+      monthlyTotal += generatorCount * GENERATOR_MONTHLY;
+    }
     
     // Add software packages (per unit)
     config.softwarePackages.forEach(id => {
@@ -275,7 +345,7 @@ function LVTConfigurator() {
     const unitCount = totalUnits;
     
     // Base cost per unit (monthly)
-    let perUnitMonthly = BASE_MONTHLY_LEASE;
+    let perUnitMonthly = selectedUnitType.baseMonthly;
     
     // Add hardware options (applied to all units)
     if (config.ndaaCompliant) {
@@ -289,10 +359,12 @@ function LVTConfigurator() {
     let monthlyTotal = perUnitMonthly * unitCount;
     
     // Add generators (varies by unit location)
-    const generatorCount = config.units
-      .filter(u => u.needsGenerator)
-      .reduce((sum, unit) => sum + (unit.quantity || 0), 0);
-    monthlyTotal += generatorCount * GENERATOR_MONTHLY;
+    if (selectedUnitType.generatorEligible) {
+      const generatorCount = config.units
+        .filter(u => u.needsGenerator)
+        .reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+      monthlyTotal += generatorCount * GENERATOR_MONTHLY;
+    }
     
     // Add software packages (per unit)
     config.softwarePackages.forEach(id => {
@@ -455,15 +527,112 @@ function LVTConfigurator() {
               Meet LVT's lineup of intelligent security solutions, each leveraging AI to deter crime automatically. Rapidly-deployable as mobile units, wall mounts, or pole mounts, every unit is expertly configured to match your specific security needs.
             </p>
 
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+              gap: '20px',
+              marginBottom: '40px'
+            }}>
+              {UNIT_TYPES.map((unit, idx) => {
+                const isSelected = config.unitType === unit.id;
+                return (
+                  <div
+                    key={unit.id}
+                    className={`option-card ${isSelected ? 'selected-card' : ''}`}
+                    onClick={() => setConfig(prev => ({ ...prev, unitType: unit.id }))}
+                    style={{
+                      animationDelay: `${idx * 0.1}s`,
+                      background: isSelected
+                        ? 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))'
+                        : 'rgba(255,255,255,0.04)',
+                      border: isSelected
+                        ? '2px solid #56d3cc'
+                        : '2px solid rgba(255,255,255,0.1)',
+                      borderRadius: '16px',
+                      padding: '20px',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease'
+                    }}
+                  >
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '12px'
+                    }}>
+                      <div style={{
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                        color: 'rgba(255,255,255,0.6)'
+                      }}>
+                        Unit Type
+                      </div>
+                      {isSelected && (
+                        <CheckCircle style={{ width: '22px', height: '22px', color: '#56d3cc' }} />
+                      )}
+                    </div>
+                    <div style={{
+                      fontSize: '18px',
+                      fontWeight: '800',
+                      marginBottom: '10px'
+                    }}>
+                      {unit.name}
+                    </div>
+                    <div style={{
+                      fontSize: '24px',
+                      fontWeight: '900',
+                      color: '#56d3cc',
+                      marginBottom: '12px'
+                    }}>
+                      ${unit.baseMonthly.toLocaleString()}
+                      <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginLeft: '6px' }}>/mo</span>
+                    </div>
+                    <div style={{
+                      width: '100%',
+                      background: 'rgba(27, 30, 35, 0.6)',
+                      borderRadius: '12px',
+                      padding: '12px',
+                      marginBottom: '12px',
+                      display: 'flex',
+                      justifyContent: 'center'
+                    }}>
+                      <img
+                        src={unit.image}
+                        alt={unit.imageAlt}
+                        style={{
+                          width: '100%',
+                          maxWidth: '220px',
+                          height: '120px',
+                          objectFit: 'contain'
+                        }}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                    <p style={{
+                      fontSize: '13px',
+                      color: 'rgba(255,255,255,0.65)',
+                      lineHeight: '1.5'
+                    }}>
+                      {unit.description}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
             <div className="hero-grid">
               {/* Product Details */}
               <div className="product-details">
                 <h3 className="product-title">
-                  Mobile Security Units
+                  {selectedUnitType.pluralName}
                 </h3>
                 
                 <p className="product-copy">
-                  LVT's mobile units are a versatile, rapidly deployable solution to a wide range of security needs. Each self-contained unit includes solar panels, cellular connectivity, powerful lighting, a loud speaker, and a configurable selection of high-end cameras.
+                  {selectedUnitType.description}
                 </p>
 
                 <p className="needs-title">
@@ -471,12 +640,7 @@ function LVTConfigurator() {
                 </p>
 
                 <ul className="needs-list">
-                  {[
-                    'Extremely rapid deployment',
-                    'On- or off-grid connectivity',
-                    'Adjustable, mobile coverage',
-                    'Automatic detection and deterrence'
-                  ].map((feature, idx) => (
+                  {selectedUnitType.needs.map((feature, idx) => (
                     <li key={idx} style={{
                       display: 'flex',
                       alignItems: 'flex-start',
@@ -500,7 +664,7 @@ function LVTConfigurator() {
                 </ul>
 
                 <div className="price-amount">
-                  ${BASE_MONTHLY_LEASE.toLocaleString()}
+                  ${selectedUnitType.baseMonthly.toLocaleString()}
                   <span style={{ fontSize: '18px', color: 'rgba(255,255,255,0.6)', fontWeight: '600', marginLeft: '8px' }}>/month</span>
                 </div>
                 <p className="price-caption">
@@ -511,8 +675,8 @@ function LVTConfigurator() {
               {/* Product Image */}
               <div className="product-image">
                 <img 
-                  src="https://cdn.prod.website-files.com/674d649ddd92d4cd09236107/68c180ba911caf0351e75fde_81d8df77eec8c23c496c2124ef88fd43_liveunit2%201%402x.avif"
-                  alt="LVT Mobile Security Unit with solar panel and camera mast"
+                  src={selectedUnitType.image}
+                  alt={selectedUnitType.imageAlt}
                   style={{
                     width: '100%',
                     maxWidth: '605px',
@@ -556,7 +720,7 @@ function LVTConfigurator() {
                     color: 'rgba(255,255,255,0.7)',
                     lineHeight: '1.6'
                   }}>
-                    Configure unit quantities and deployment locations. Generator requirements will be determined for each location.
+                    Configure unit quantities and deployment locations. Generator requirements apply to mobile units only.
                   </p>
                 </div>
                 
@@ -766,7 +930,7 @@ function LVTConfigurator() {
               fontWeight: '400',
               maxWidth: '800px'
             }}>
-              Customize your D3 Mobile Units with specialized hardware options for enhanced capabilities
+              Customize your {selectedUnitType.pluralName} with specialized hardware options for enhanced capabilities
             </p>
 
             {/* Unit Count Summary */}
@@ -794,7 +958,7 @@ function LVTConfigurator() {
             </div>
 
             {/* Generator Recommendations */}
-            {config.units.some(u => u.needsGenerator) && (
+            {selectedUnitType.generatorEligible && config.units.some(u => u.needsGenerator) && (
               <div style={{
                 background: 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))',
                 border: '2px solid #56d3cc',
@@ -1105,7 +1269,7 @@ function LVTConfigurator() {
               fontWeight: '400',
               maxWidth: '800px'
             }}>
-              Enhance your D3 Mobile Unit with advanced software capabilities for detection, alerting, and fleet management
+              Enhance your {selectedUnitType.pluralName} with advanced software capabilities for detection, alerting, and fleet management
             </p>
 
             <div style={{
@@ -1766,7 +1930,7 @@ function LVTConfigurator() {
               letterSpacing: '-1px',
               lineHeight: '1.1'
             }}>
-              Your Custom <span className="gradient-text">D3 Mobile Units</span>
+              Your Custom <span className="gradient-text">{selectedUnitType.pluralName}</span>
             </h2>
             <p style={{
               fontSize: '18px',
@@ -1821,9 +1985,9 @@ function LVTConfigurator() {
                     alignItems: 'center',
                     marginBottom: '16px'
                   }}>
-                    <span>{totalUnits} × D3 Mobile Security {totalUnits === 1 ? 'Unit' : 'Units'}</span>
+                    <span>{totalUnits} × {selectedUnitType.name}{totalUnits === 1 ? '' : 's'}</span>
                     <span style={{ color: '#56d3cc' }}>
-                      ${(BASE_MONTHLY_LEASE * totalUnits).toLocaleString()}
+                      ${(selectedUnitType.baseMonthly * totalUnits).toLocaleString()}
                     </span>
                   </div>
                   
@@ -1867,7 +2031,7 @@ function LVTConfigurator() {
                 </div>
 
                 {/* Generators */}
-                    {config.units.some(u => u.needsGenerator) && (
+                    {selectedUnitType.generatorEligible && config.units.some(u => u.needsGenerator) && (
                       <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                         <div style={{
                           fontSize: '11px',
@@ -2124,6 +2288,8 @@ function LVTConfigurator() {
                       orderId: `LVT-${Date.now()}`,
                       
                       // Configuration Summary
+                      unitType: selectedUnitType.name,
+                      baseMonthlyRate: selectedUnitType.baseMonthly,
                       unitCount: totalUnits,
                       deploymentZips: config.units.map(u => u.zipCode).join(', '),
                       deploymentDetails: config.units.map((u, idx) => 
@@ -2193,7 +2359,7 @@ function LVTConfigurator() {
                         const verificationNote = verified
                           ? ''
                           : '\n\nNote: The request was sent, but the browser could not verify a response due to cross-origin restrictions.';
-                        alert(`Thank you for your lease request!\n\n${totalUnits} LVT D3 Mobile ${totalUnits === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${verificationNote}`);
+                        alert(`Thank you for your lease request!\n\n${totalUnits} ${selectedUnitType.name}${totalUnits === 1 ? '' : 's'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${verificationNote}`);
                         
                         // Optional: Reset form or redirect
                         // setCurrentStep(0);
