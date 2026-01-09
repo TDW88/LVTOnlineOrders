@@ -1476,7 +1476,7 @@ function LVTConfigurator() {
             <p style={{
               fontSize: '18px',
               color: 'rgba(255,255,255,0.7)',
-              marginBottom: '56px',
+              marginBottom: '32px',
               fontWeight: '400',
               maxWidth: '800px'
             }}>
@@ -1484,45 +1484,50 @@ function LVTConfigurator() {
             </p>
 
             <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '24px'
+              display: 'grid',
+              gridTemplateColumns: '1fr 1.1fr',
+              gap: '40px',
+              alignItems: 'start'
             }}>
-              {softwarePackages.map((pkg, idx) => (
-                <div
-                  key={pkg.id}
-                  className={`option-card ${config.softwarePackages.includes(pkg.id) ? 'selected-card' : ''}`}
-                  onClick={() => toggleSoftwarePackage(pkg.id)}
-                  style={{
-                    animationDelay: `${idx * 0.1}s`,
-                    background: config.softwarePackages.includes(pkg.id)
-                      ? 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))'
-                      : 'rgba(255,255,255,0.04)',
-                    border: config.softwarePackages.includes(pkg.id)
-                      ? '2px solid #56d3cc'
-                      : '2px solid rgba(255,255,255,0.1)',
-                    borderRadius: '16px',
-                    padding: '32px',
-                    cursor: 'pointer',
-                    position: 'relative',
-                    transition: 'all 0.3s ease'
-                  }}
-                >
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr auto',
-                    gap: '32px',
-                    alignItems: 'flex-start'
-                  }}>
-                    <div>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '20px'
+              }}>
+                {softwarePackages.map((pkg, idx) => (
+                  <div
+                    key={pkg.id}
+                    className={`option-card ${config.softwarePackages.includes(pkg.id) ? 'selected-card' : ''}`}
+                    onClick={() => toggleSoftwarePackage(pkg.id)}
+                    style={{
+                      animationDelay: `${idx * 0.1}s`,
+                      background: config.softwarePackages.includes(pkg.id)
+                        ? 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))'
+                        : 'rgba(255,255,255,0.04)',
+                      border: config.softwarePackages.includes(pkg.id)
+                        ? '2px solid #56d3cc'
+                        : '2px solid rgba(255,255,255,0.1)',
+                      borderRadius: '16px',
+                      padding: '24px',
+                      cursor: 'pointer',
+                      position: 'relative',
+                      transition: 'all 0.3s ease'
+                    }}
+                  >
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '16px',
+                      marginBottom: '12px'
+                    }}>
                       <div style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '16px',
-                        marginBottom: '16px'
+                        gap: '12px'
                       }}>
                         <h3 style={{
-                          fontSize: '26px',
+                          fontSize: '22px',
                           fontWeight: '800',
                           letterSpacing: '-0.5px'
                         }}>
@@ -1531,92 +1536,162 @@ function LVTConfigurator() {
                         {config.softwarePackages.includes(pkg.id) && (
                           <CheckCircle style={{
                             color: '#56d3cc',
-                            width: '28px',
-                            height: '28px'
+                            width: '24px',
+                            height: '24px'
                           }} />
                         )}
                       </div>
-
-                      <p style={{
-                        fontSize: '15px',
-                        color: 'rgba(255,255,255,0.7)',
-                        marginBottom: '24px',
-                        lineHeight: '1.6'
-                      }}>
-                        {pkg.description}
-                      </p>
-
                       <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(2, 1fr)',
-                        gap: '12px'
-                      }}>
-                        {pkg.features.map((feature, fidx) => (
-                          <div key={fidx} style={{
-                            display: 'flex',
-                            alignItems: 'flex-start',
-                            gap: '8px',
-                            fontSize: '13px',
-                            color: 'rgba(255,255,255,0.8)',
-                            fontWeight: '500'
-                          }}>
-                            <div style={{
-                              width: '5px',
-                              height: '5px',
-                              background: config.softwarePackages.includes(pkg.id) ? '#56d3cc' : 'rgba(255,255,255,0.4)',
-                              borderRadius: '50%',
-                              marginTop: '6px',
-                              minWidth: '5px'
-                            }}></div>
-                            <span>{feature}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div style={{
-                      textAlign: 'right'
-                    }}>
-                      <div style={{
-                        fontSize: '36px',
+                        fontSize: '22px',
                         fontWeight: '900',
-                        color: config.softwarePackages.includes(pkg.id) ? '#56d3cc' : 'rgba(255,255,255,0.6)',
-                        letterSpacing: '-1px'
+                        color: config.softwarePackages.includes(pkg.id) ? '#56d3cc' : 'rgba(255,255,255,0.6)'
                       }}>
                         +${pkg.monthlyPrice.toLocaleString()}/mo
                       </div>
-                      <div style={{
-                        fontSize: '12px',
-                        color: 'rgba(255,255,255,0.5)',
-                        marginTop: '4px',
-                        fontWeight: '600'
-                      }}>
-                        per unit/month
-                      </div>
                     </div>
+                    <p style={{
+                      fontSize: '14px',
+                      color: 'rgba(255,255,255,0.7)',
+                      lineHeight: '1.6'
+                    }}>
+                      {pkg.description}
+                    </p>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
 
-            {config.softwarePackages.length === 0 && (
-              <div style={{
-                marginTop: '32px',
-                padding: '24px',
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: '12px',
-                textAlign: 'center'
-              }}>
-                <p style={{
-                  fontSize: '14px',
-                  color: 'rgba(255,255,255,0.6)',
-                  fontWeight: '500'
-                }}>
-                  Software packages are optional. You can add them now or upgrade later.
-                </p>
+                {config.softwarePackages.length === 0 && (
+                  <div style={{
+                    padding: '20px',
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '12px',
+                    textAlign: 'center'
+                  }}>
+                    <p style={{
+                      fontSize: '14px',
+                      color: 'rgba(255,255,255,0.6)',
+                      fontWeight: '500'
+                    }}>
+                      Software packages are optional. You can add them now or upgrade later.
+                    </p>
+                  </div>
+                )}
               </div>
-            )}
+
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '32px'
+              }}>
+                <div style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  borderRadius: '18px',
+                  padding: '28px',
+                  border: '1px solid rgba(255,255,255,0.08)'
+                }}>
+                  <img
+                    src="https://cdn.prod.website-files.com/674d649ddd92d4cd09236107/6851ead327e187b7b9e87552_Software-Lineup%203.avif"
+                    alt="Software lineup dashboard screens"
+                    style={{
+                      width: '100%',
+                      borderRadius: '16px',
+                      marginBottom: '20px',
+                      objectFit: 'cover'
+                    }}
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                  <h3 style={{
+                    fontSize: '24px',
+                    fontWeight: '800',
+                    marginBottom: '12px',
+                    letterSpacing: '-0.6px'
+                  }}>
+                    Monitor, Analyze, Respond: Smarter Security for 24/7 Protection
+                  </h3>
+                  <p style={{
+                    fontSize: '15px',
+                    color: 'rgba(255,255,255,0.7)',
+                    lineHeight: '1.7'
+                  }}>
+                    Long gone are the days of sorting through false alarms, monitoring a screen all day, and reacting only after damage has been done. With LVT’s cloud-based platform, you can take control in real time—stopping incidents before they happen, streamlining responses, and proactively protecting your site.
+                  </p>
+                </div>
+
+                <div style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  borderRadius: '18px',
+                  padding: '28px',
+                  border: '1px solid rgba(255,255,255,0.08)'
+                }}>
+                  <img
+                    src="https://cdn.prod.website-files.com/674d649ddd92d4cd09236132/68407de4d47210cb64900d81_live-surveillance-04-three-phone-screens-software.avif"
+                    alt="Mobile app live surveillance screens"
+                    style={{
+                      width: '100%',
+                      borderRadius: '16px',
+                      marginBottom: '20px',
+                      objectFit: 'cover'
+                    }}
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                  <h3 style={{
+                    fontSize: '24px',
+                    fontWeight: '800',
+                    marginBottom: '12px',
+                    letterSpacing: '-0.6px'
+                  }}>
+                    Secure Mobile App for Live Surveillance
+                  </h3>
+                  <p style={{
+                    fontSize: '15px',
+                    color: 'rgba(255,255,255,0.7)',
+                    lineHeight: '1.7'
+                  }}>
+                    The LVT Platform is a user-friendly interface that allows you to access live surveillance from any connected camera. Available on desktop and mobile devices, the system provides instant access to high-definition video streams, camera controls, and real-time alerts so your team can stay informed wherever they are.
+                  </p>
+                </div>
+
+                <div style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  borderRadius: '18px',
+                  padding: '28px',
+                  border: '1px solid rgba(255,255,255,0.08)'
+                }}>
+                  <img
+                    src="https://cdn.prod.website-files.com/674d649ddd92d4cd09236107/683077e5a3f527de14ca1a56_lvt-reporting.avif"
+                    alt="Incident reporting dashboards"
+                    style={{
+                      width: '100%',
+                      borderRadius: '16px',
+                      marginBottom: '20px',
+                      objectFit: 'cover'
+                    }}
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                  <h3 style={{
+                    fontSize: '24px',
+                    fontWeight: '800',
+                    marginBottom: '12px',
+                    letterSpacing: '-0.6px'
+                  }}>
+                    Ensure Timely Incident Management and Reporting
+                  </h3>
+                  <p style={{
+                    fontSize: '15px',
+                    color: 'rgba(255,255,255,0.7)',
+                    lineHeight: '1.7'
+                  }}>
+                    When incidents occur, every second counts. LVT streamlines incident detection, deterrence escalation, and documentation with real-time alerts, easy access to video footage, and reporting tools so your security team can act efficiently and confidently.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
