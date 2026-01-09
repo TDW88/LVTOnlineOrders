@@ -2213,7 +2213,7 @@ function LVTConfigurator() {
                         locationZip: location.zipCode,
                         unit
                       }))
-                    ).map((entry, idx) => (
+                    ).map((entry) => (
                       <div key={`${entry.locationId}-${entry.unit.id}`} style={{
                         fontSize: '13px',
                         color: 'rgba(255,255,255,0.6)',
@@ -2241,7 +2241,7 @@ function LVTConfigurator() {
                           </span>
                         )}
                       </div>
-                    )))}
+                    ))}
                   </div>
                 </div>
 
