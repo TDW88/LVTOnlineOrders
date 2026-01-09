@@ -93,10 +93,10 @@ function LVTConfigurator() {
   });
 
   // Base price for D3 Mobile Unit (monthly lease)
-  const BASE_MONTHLY_LEASE = 1249; // ~$15k per year / 12 months
+  const BASE_MONTHLY_LEASE = 2000;
   
   // Generator cost (monthly)
-  const GENERATOR_MONTHLY = 199;
+  const GENERATOR_MONTHLY = 1000;
   
   // Hardware options pricing (monthly)
   const NDAA_MONTHLY = 125;
@@ -107,21 +107,21 @@ function LVTConfigurator() {
     {
       id: 'detect-deter',
       name: 'Detect & Deter',
-      monthlyPrice: 249,
+      monthlyPrice: 320,
       description: 'AI-powered intrusion detection with automated deterrence (strobes, spotlights, audio warnings)',
       features: ['Real-time threat detection', 'Automated audio warnings', 'Strobe & spotlight activation', 'Custom alert rules']
     },
     {
       id: 'alert-management',
       name: 'Alert Management',
-      monthlyPrice: 149,
+      monthlyPrice: 160,
       description: 'Advanced alert routing and response workflow management',
       features: ['Multi-channel alerts (SMS, email, push)', 'Alert escalation workflows', 'Response tracking', 'Integration with security teams']
     },
     {
       id: 'enterprise',
       name: 'Enterprise Management',
-      monthlyPrice: 399,
+      monthlyPrice: 160,
       description: 'Fleet-wide management and analytics for multiple units',
       features: ['Centralized dashboard', 'Multi-site management', 'Advanced analytics & reporting', 'Custom user permissions', 'API access']
     }
@@ -947,39 +947,6 @@ function LVTConfigurator() {
                 + Add Another Unit
               </button>
 
-              {/* Continue Button */}
-              <button
-                onClick={handleZipCodeSubmit}
-                disabled={!canProceed()}
-                style={{
-                  width: '100%',
-                  padding: '16px',
-                  background: canProceed() ? '#56d3cc' : 'rgba(86, 211, 204, 0.2)',
-                  color: canProceed() ? '#1b1e23' : 'rgba(255,255,255,0.4)',
-                  border: 'none',
-                  borderRadius: '10px',
-                  fontSize: '16px',
-                  fontWeight: '800',
-                  cursor: canProceed() ? 'pointer' : 'not-allowed',
-                  transition: 'all 0.3s ease',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px'
-                }}
-                onMouseOver={(e) => {
-                  if (canProceed()) {
-                    e.target.style.background = '#00a19a';
-                    e.target.style.transform = 'scale(1.01)';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (canProceed()) {
-                    e.target.style.background = '#56d3cc';
-                    e.target.style.transform = 'scale(1)';
-                  }
-                }}
-              >
-                Continue to Hardware Options →
-              </button>
             </div>
           </div>
         )}
