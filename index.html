@@ -7,36 +7,6 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-    @keyframes slideUp { 
-      from { opacity: 0; transform: translateY(30px); } 
-      to { opacity: 1; transform: translateY(0); } 
-    }
-    @keyframes glow { 
-      0%, 100% { box-shadow: 0 0 20px rgba(86, 211, 204, 0.3); } 
-      50% { box-shadow: 0 0 30px rgba(86, 211, 204, 0.5); } 
-    }
-    .option-card { 
-      animation: slideUp 0.6s ease-out forwards;
-      animation-fill-mode: forwards;
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
-    }
-    .selected-card { 
-      animation: glow 2s ease-in-out infinite; 
-    }
-    .gradient-text { 
-      background: linear-gradient(135deg, #56d3cc, #7de8e0); 
-      -webkit-background-clip: text; 
-      -webkit-text-fill-color: transparent; 
-      background-clip: text; 
-      display: inline-block; 
-    }
-    ::-webkit-scrollbar { width: 10px; }
-    ::-webkit-scrollbar-track { background: #1b1e23; }
-    ::-webkit-scrollbar-thumb { background: rgba(86, 211, 204, 0.3); border-radius: 5px; }
-  </style>
 </head>
 <body>
   <div id="root"></div>
@@ -481,6 +451,19 @@ function LVTConfigurator() {
           -webkit-text-fill-color: transparent;
           background-clip: text;
         }
+
+        ::-webkit-scrollbar {
+          width: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+          background: #1b1e23;
+        }
+
+        ::-webkit-scrollbar-thumb {
+          background: rgba(86, 211, 204, 0.3);
+          border-radius: 5px;
+        }
         
         .noise-bg {
           position: fixed;
@@ -712,7 +695,7 @@ function LVTConfigurator() {
               <div style={{
                 display: 'flex',
                 justifyContent: 'center',
-                alignItems: 'center'
+                alignItems: 'flex-start'
               }}>
                 <img 
                   src="https://cdn.prod.website-files.com/674d649ddd92d4cd09236107/68c180ba911caf0351e75fde_81d8df77eec8c23c496c2124ef88fd43_liveunit2%201%402x.avif"
@@ -720,6 +703,7 @@ function LVTConfigurator() {
                   style={{
                     width: '100%',
                     maxWidth: '605px',
+                    maxHeight: '360px',
                     height: 'auto',
                     objectFit: 'contain'
                   }}
