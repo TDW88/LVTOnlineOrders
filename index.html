@@ -94,9 +94,8 @@ function LVTConfigurator() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [config, setConfig] = useState({
-    unitType: 'mobile',
     units: [
-      { id: 1, zipCode: '', needsGenerator: false, quantity: 1 }
+      { id: 1, unitType: 'mobile', zipCode: '', needsGenerator: false, quantity: 1 }
     ],
     ndaaCompliant: false,
     nightVision: false,
@@ -115,7 +114,7 @@ function LVTConfigurator() {
     }
   });
 
-  const selectedUnitType = UNIT_TYPES.find(type => type.id === config.unitType) || UNIT_TYPES[0];
+  const getUnitType = (unitTypeId) => UNIT_TYPES.find(type => type.id === unitTypeId) || UNIT_TYPES[0];
   
   // Generator cost (monthly)
   const GENERATOR_MONTHLY = 1000;
@@ -207,14 +206,21 @@ function LVTConfigurator() {
   }, [uniqueLocationZips.join('|')]);
 
   useEffect(() => {
-    if (selectedUnitType.generatorEligible) {
-      return;
-    }
-    setConfig(prev => ({
-      ...prev,
-      units: prev.units.map(unit => ({ ...unit, needsGenerator: false }))
-    }));
-  }, [selectedUnitType.generatorEligible]);
+    setConfig(prev => {
+      const nextUnits = prev.units.map(unit => {
+        const unitType = getUnitType(unit.unitType);
+        if (unitType.generatorEligible) {
+          return unit;
+        }
+        return { ...unit, needsGenerator: false };
+      });
+      const hasChanges = nextUnits.some((unit, idx) => unit.needsGenerator !== prev.units[idx].needsGenerator);
+      if (!hasChanges) {
+        return prev;
+      }
+      return { ...prev, units: nextUnits };
+    });
+  }, [config.units]);
 
   // Simulate zip code lookup for generator requirements
   // In production, this would call an API
@@ -239,7 +245,7 @@ function LVTConfigurator() {
     const newId = Math.max(...config.units.map(u => u.id)) + 1;
     setConfig(prev => ({
       ...prev,
-      units: [...prev.units, { id: newId, zipCode: '', needsGenerator: false, quantity: 1 }]
+      units: [...prev.units, { id: newId, unitType: 'mobile', zipCode: '', needsGenerator: false, quantity: 1 }]
     }));
   };
 
@@ -270,7 +276,38 @@ function LVTConfigurator() {
     }));
   };
 
+  const updateUnitType = (id, unitTypeId) => {
+    setConfig(prev => ({
+      ...prev,
+      units: prev.units.map(u => {
+        if (u.id !== id) {
+          return u;
+        }
+        const unitType = getUnitType(unitTypeId);
+        if (!unitType.generatorEligible) {
+          return { ...u, unitType: unitTypeId, needsGenerator: false };
+        }
+        const needsGenerator = u.zipCode.length === 5 ? checkGeneratorRequirement(u.zipCode) : u.needsGenerator;
+        return { ...u, unitType: unitTypeId, needsGenerator };
+      })
+    }));
+  };
+
   const checkGeneratorForUnit = (id, zip) => {
+    const unit = config.units.find(entry => entry.id === id);
+    if (!unit) {
+      return;
+    }
+    const unitType = getUnitType(unit.unitType);
+    if (!unitType.generatorEligible) {
+      setConfig(prev => ({
+        ...prev,
+        units: prev.units.map(u => 
+          u.id === id ? { ...u, needsGenerator: false } : u
+        )
+      }));
+      return;
+    }
     const needsGen = checkGeneratorRequirement(zip);
     setConfig(prev => ({
       ...prev,
@@ -283,17 +320,10 @@ function LVTConfigurator() {
   const handleZipCodeSubmit = () => {
     const allZipsValid = config.units.every(u => u.zipCode.length === 5 && u.quantity > 0);
     if (allZipsValid) {
-      if (selectedUnitType.generatorEligible) {
-        // Check generator requirements for all units
-        config.units.forEach(unit => {
-          checkGeneratorForUnit(unit.id, unit.zipCode);
-        });
-      } else {
-        setConfig(prev => ({
-          ...prev,
-          units: prev.units.map(unit => ({ ...unit, needsGenerator: false }))
-        }));
-      }
+      // Check generator requirements for mobile units only
+      config.units.forEach(unit => {
+        checkGeneratorForUnit(unit.id, unit.zipCode);
+      });
       setCurrentStep(1);
     }
   };
@@ -301,8 +331,11 @@ function LVTConfigurator() {
   const calculateMonthlyTotal = () => {
     const unitCount = totalUnits;
     
-    // Base cost per unit (monthly)
-    let perUnitMonthly = selectedUnitType.baseMonthly;
+    const baseMonthlyTotal = config.units.reduce((sum, unit) => {
+      const unitType = getUnitType(unit.unitType);
+      return sum + (unitType.baseMonthly * (unit.quantity || 0));
+    }, 0);
+    let perUnitMonthly = 0;
     
     // Add hardware options (applied to all units)
     if (config.ndaaCompliant) {
@@ -313,15 +346,13 @@ function LVTConfigurator() {
     }
     
     // Calculate base cost for all units
-    let monthlyTotal = perUnitMonthly * unitCount;
+    let monthlyTotal = baseMonthlyTotal + (perUnitMonthly * unitCount);
     
     // Add generators (varies by unit location)
-    if (selectedUnitType.generatorEligible) {
-      const generatorCount = config.units
-        .filter(u => u.needsGenerator)
-        .reduce((sum, unit) => sum + (unit.quantity || 0), 0);
-      monthlyTotal += generatorCount * GENERATOR_MONTHLY;
-    }
+    const generatorCount = config.units
+      .filter(u => getUnitType(u.unitType).generatorEligible && u.needsGenerator)
+      .reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+    monthlyTotal += generatorCount * GENERATOR_MONTHLY;
     
     // Add software packages (per unit)
     config.softwarePackages.forEach(id => {
@@ -344,8 +375,11 @@ function LVTConfigurator() {
   const calculateMonthlyForTerm = (termMonths) => {
     const unitCount = totalUnits;
     
-    // Base cost per unit (monthly)
-    let perUnitMonthly = selectedUnitType.baseMonthly;
+    const baseMonthlyTotal = config.units.reduce((sum, unit) => {
+      const unitType = getUnitType(unit.unitType);
+      return sum + (unitType.baseMonthly * (unit.quantity || 0));
+    }, 0);
+    let perUnitMonthly = 0;
     
     // Add hardware options (applied to all units)
     if (config.ndaaCompliant) {
@@ -356,15 +390,13 @@ function LVTConfigurator() {
     }
     
     // Calculate base cost for all units
-    let monthlyTotal = perUnitMonthly * unitCount;
+    let monthlyTotal = baseMonthlyTotal + (perUnitMonthly * unitCount);
     
     // Add generators (varies by unit location)
-    if (selectedUnitType.generatorEligible) {
-      const generatorCount = config.units
-        .filter(u => u.needsGenerator)
-        .reduce((sum, unit) => sum + (unit.quantity || 0), 0);
-      monthlyTotal += generatorCount * GENERATOR_MONTHLY;
-    }
+    const generatorCount = config.units
+      .filter(u => getUnitType(u.unitType).generatorEligible && u.needsGenerator)
+      .reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+    monthlyTotal += generatorCount * GENERATOR_MONTHLY;
     
     // Add software packages (per unit)
     config.softwarePackages.forEach(id => {
@@ -459,6 +491,13 @@ function LVTConfigurator() {
     return true;
   };
 
+  const generatorUnits = config.units.filter(unit => getUnitType(unit.unitType).generatorEligible && unit.needsGenerator);
+  const generatorUnitCount = generatorUnits.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+  const baseMonthlyTotal = config.units.reduce((sum, unit) => {
+    const unitType = getUnitType(unit.unitType);
+    return sum + (unitType.baseMonthly * (unit.quantity || 0));
+  }, 0);
+
   return (
     <div className="app-shell">
       <div className="noise-bg"></div>
@@ -527,120 +566,23 @@ function LVTConfigurator() {
               Meet LVT's lineup of intelligent security solutions, each leveraging AI to deter crime automatically. Rapidly-deployable as mobile units, wall mounts, or pole mounts, every unit is expertly configured to match your specific security needs.
             </p>
 
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-              gap: '20px',
-              marginBottom: '40px'
-            }}>
-              {UNIT_TYPES.map((unit, idx) => {
-                const isSelected = config.unitType === unit.id;
-                return (
-                  <div
-                    key={unit.id}
-                    className={`option-card ${isSelected ? 'selected-card' : ''}`}
-                    onClick={() => setConfig(prev => ({ ...prev, unitType: unit.id }))}
-                    style={{
-                      animationDelay: `${idx * 0.1}s`,
-                      background: isSelected
-                        ? 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))'
-                        : 'rgba(255,255,255,0.04)',
-                      border: isSelected
-                        ? '2px solid #56d3cc'
-                        : '2px solid rgba(255,255,255,0.1)',
-                      borderRadius: '16px',
-                      padding: '20px',
-                      cursor: 'pointer',
-                      transition: 'all 0.3s ease'
-                    }}
-                  >
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: '12px'
-                    }}>
-                      <div style={{
-                        fontSize: '12px',
-                        fontWeight: '700',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px',
-                        color: 'rgba(255,255,255,0.6)'
-                      }}>
-                        Unit Type
-                      </div>
-                      {isSelected && (
-                        <CheckCircle style={{ width: '22px', height: '22px', color: '#56d3cc' }} />
-                      )}
-                    </div>
-                    <div style={{
-                      fontSize: '18px',
-                      fontWeight: '800',
-                      marginBottom: '10px'
-                    }}>
-                      {unit.name}
-                    </div>
-                    <div style={{
-                      fontSize: '24px',
-                      fontWeight: '900',
-                      color: '#56d3cc',
-                      marginBottom: '12px'
-                    }}>
-                      ${unit.baseMonthly.toLocaleString()}
-                      <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginLeft: '6px' }}>/mo</span>
-                    </div>
-                    <div style={{
-                      width: '100%',
-                      background: 'rgba(27, 30, 35, 0.6)',
-                      borderRadius: '12px',
-                      padding: '12px',
-                      marginBottom: '12px',
-                      display: 'flex',
-                      justifyContent: 'center'
-                    }}>
-                      <img
-                        src={unit.image}
-                        alt={unit.imageAlt}
-                        style={{
-                          width: '100%',
-                          maxWidth: '220px',
-                          height: '120px',
-                          objectFit: 'contain'
-                        }}
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                        }}
-                      />
-                    </div>
-                    <p style={{
-                      fontSize: '13px',
-                      color: 'rgba(255,255,255,0.65)',
-                      lineHeight: '1.5'
-                    }}>
-                      {unit.description}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-
             <div className="hero-grid">
               {/* Product Details */}
               <div className="product-details">
                 <h3 className="product-title">
-                  {selectedUnitType.pluralName}
+                  Security Unit Lineup
                 </h3>
                 
                 <p className="product-copy">
-                  {selectedUnitType.description}
+                  Select the right unit type for each deployment location below. Mobile units support generator backup; wall and pole mounts do not require a generator.
                 </p>
 
                 <p className="needs-title">
-                  For those who need:
+                  Available unit types:
                 </p>
 
                 <ul className="needs-list">
-                  {selectedUnitType.needs.map((feature, idx) => (
+                  {UNIT_TYPES.map((unit, idx) => (
                     <li key={idx} style={{
                       display: 'flex',
                       alignItems: 'flex-start',
@@ -658,13 +600,15 @@ function LVTConfigurator() {
                         marginTop: '7px',
                         minWidth: '6px'
                       }}></span>
-                      <span>{feature}</span>
+                      <span>
+                        {unit.name} • ${unit.baseMonthly.toLocaleString()}/mo
+                      </span>
                     </li>
                   ))}
                 </ul>
 
                 <div className="price-amount">
-                  ${selectedUnitType.baseMonthly.toLocaleString()}
+                  Starting at $1,500
                   <span style={{ fontSize: '18px', color: 'rgba(255,255,255,0.6)', fontWeight: '600', marginLeft: '8px' }}>/month</span>
                 </div>
                 <p className="price-caption">
@@ -674,20 +618,41 @@ function LVTConfigurator() {
 
               {/* Product Image */}
               <div className="product-image">
-                <img 
-                  src={selectedUnitType.image}
-                  alt={selectedUnitType.imageAlt}
-                  style={{
-                    width: '100%',
-                    maxWidth: '605px',
-                    maxHeight: '360px',
-                    height: 'auto',
-                    objectFit: 'contain'
-                  }}
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                  }}
-                />
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                  gap: '16px',
+                  width: '100%'
+                }}>
+                  {UNIT_TYPES.map(unit => (
+                    <div key={unit.id} style={{
+                      background: 'rgba(27, 30, 35, 0.6)',
+                      borderRadius: '14px',
+                      padding: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '10px'
+                    }}>
+                      <img
+                        src={unit.image}
+                        alt={unit.imageAlt}
+                        style={{
+                          width: '100%',
+                          maxWidth: '200px',
+                          height: '140px',
+                          objectFit: 'contain'
+                        }}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                      <div style={{ fontSize: '13px', fontWeight: '700', color: 'rgba(255,255,255,0.75)' }}>
+                        {unit.name}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -762,7 +727,7 @@ function LVTConfigurator() {
                       Location {index + 1}
                     </div>
                     
-                    <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px' }}>
+                    <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1.5fr 2fr', gap: '16px' }}>
                       <div>
                         <label style={{
                           display: 'block',
@@ -804,6 +769,49 @@ function LVTConfigurator() {
                             e.target.style.background = 'rgba(39, 42, 47, 0.6)';
                           }}
                         />
+                      </div>
+                      <div>
+                        <label style={{
+                          display: 'block',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          marginBottom: '8px',
+                          color: 'rgba(255,255,255,0.7)'
+                        }}>
+                          Unit type
+                        </label>
+                        <select
+                          value={unit.unitType}
+                          onChange={(e) => updateUnitType(unit.id, e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '12px 16px',
+                            background: 'rgba(39, 42, 47, 0.6)',
+                            border: '2px solid rgba(255,255,255,0.15)',
+                            borderRadius: '8px',
+                            color: '#fff',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            outline: 'none',
+                            transition: 'all 0.3s ease'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.border = '2px solid #56d3cc';
+                            e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                          }}
+                          onBlur={(e) => {
+                            e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                            e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                          }}
+                        >
+                          {UNIT_TYPES.map(option => (
+                            <option key={option.id} value={option.id}>
+                              {option.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                       <div>
                         <label style={{
@@ -930,7 +938,7 @@ function LVTConfigurator() {
               fontWeight: '400',
               maxWidth: '800px'
             }}>
-              Customize your {selectedUnitType.pluralName} with specialized hardware options for enhanced capabilities
+              Customize your security units with specialized hardware options for enhanced capabilities
             </p>
 
             {/* Unit Count Summary */}
@@ -958,7 +966,7 @@ function LVTConfigurator() {
             </div>
 
             {/* Generator Recommendations */}
-            {selectedUnitType.generatorEligible && config.units.some(u => u.needsGenerator) && (
+            {generatorUnits.length > 0 && (
               <div style={{
                 background: 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))',
                 border: '2px solid #56d3cc',
@@ -987,14 +995,14 @@ function LVTConfigurator() {
                       lineHeight: '1.6',
                       marginBottom: '16px'
                     }}>
-                      Based on your deployment locations, {config.units.filter(u => u.needsGenerator).reduce((sum, unit) => sum + (unit.quantity || 0), 0)} of your {totalUnits} {totalUnits === 1 ? 'unit requires' : 'units require'} smart generator backup for optimal uptime:
+                      Based on your deployment locations, {generatorUnitCount} of your {totalUnits} {totalUnits === 1 ? 'unit requires' : 'units require'} smart generator backup for optimal uptime:
                     </p>
                     <div style={{
                       display: 'flex',
                       flexWrap: 'wrap',
                       gap: '12px'
                     }}>
-                      {config.units.filter(u => u.needsGenerator).map((unit, idx) => (
+                      {generatorUnits.map((unit, idx) => (
                         <div key={unit.id} style={{
                           background: 'rgba(86, 211, 204, 0.15)',
                           padding: '8px 16px',
@@ -1017,14 +1025,14 @@ function LVTConfigurator() {
                       color: '#56d3cc',
                       whiteSpace: 'nowrap'
                     }}>
-                      +${(GENERATOR_MONTHLY * config.units.filter(u => u.needsGenerator).reduce((sum, unit) => sum + (unit.quantity || 0), 0)).toLocaleString()}
+                      +${(GENERATOR_MONTHLY * generatorUnitCount).toLocaleString()}
                     </div>
                     <div style={{
                       fontSize: '11px',
                       color: 'rgba(255,255,255,0.6)',
                       marginTop: '4px'
                     }}>
-                      {config.units.filter(u => u.needsGenerator).reduce((sum, unit) => sum + (unit.quantity || 0), 0)} {config.units.filter(u => u.needsGenerator).reduce((sum, unit) => sum + (unit.quantity || 0), 0) === 1 ? 'generator' : 'generators'}
+                      {generatorUnitCount} {generatorUnitCount === 1 ? 'generator' : 'generators'}
                     </div>
                   </div>
                 </div>
@@ -1269,7 +1277,7 @@ function LVTConfigurator() {
               fontWeight: '400',
               maxWidth: '800px'
             }}>
-              Enhance your {selectedUnitType.pluralName} with advanced software capabilities for detection, alerting, and fleet management
+              Enhance your security units with advanced software capabilities for detection, alerting, and fleet management
             </p>
 
             <div style={{
@@ -1930,7 +1938,7 @@ function LVTConfigurator() {
               letterSpacing: '-1px',
               lineHeight: '1.1'
             }}>
-              Your Custom <span className="gradient-text">{selectedUnitType.pluralName}</span>
+              Your Custom <span className="gradient-text">Security Units</span>
             </h2>
             <p style={{
               fontSize: '18px',
@@ -1985,9 +1993,9 @@ function LVTConfigurator() {
                     alignItems: 'center',
                     marginBottom: '16px'
                   }}>
-                    <span>{totalUnits} × {selectedUnitType.name}{totalUnits === 1 ? '' : 's'}</span>
+                    <span>{totalUnits} × Security Units</span>
                     <span style={{ color: '#56d3cc' }}>
-                      ${(selectedUnitType.baseMonthly * totalUnits).toLocaleString()}
+                      ${baseMonthlyTotal.toLocaleString()}
                     </span>
                   </div>
                   
@@ -2012,7 +2020,7 @@ function LVTConfigurator() {
                           background: 'rgba(255,255,255,0.4)',
                           borderRadius: '50%'
                         }}></div>
-                        <span>Location {idx + 1}: {unit.quantity} {unit.quantity === 1 ? 'Unit' : 'Units'} • {unit.zipCode}</span>
+                        <span>Location {idx + 1}: {unit.quantity} {unit.quantity === 1 ? 'Unit' : 'Units'} • {getUnitType(unit.unitType).name} • {unit.zipCode}</span>
                         {unit.needsGenerator && (
                           <span style={{
                             background: 'rgba(86, 211, 204, 0.2)',
@@ -2031,7 +2039,7 @@ function LVTConfigurator() {
                 </div>
 
                 {/* Generators */}
-                    {selectedUnitType.generatorEligible && config.units.some(u => u.needsGenerator) && (
+                    {generatorUnits.length > 0 && (
                       <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                         <div style={{
                           fontSize: '11px',
@@ -2050,9 +2058,9 @@ function LVTConfigurator() {
                       justifyContent: 'space-between',
                       alignItems: 'center'
                     }}>
-                      <span>{config.units.filter(u => u.needsGenerator).reduce((sum, unit) => sum + (unit.quantity || 0), 0)} × Smart Generator Backup</span>
+                      <span>{generatorUnitCount} × Smart Generator Backup</span>
                       <span style={{ color: '#56d3cc' }}>
-                        +${(GENERATOR_MONTHLY * config.units.filter(u => u.needsGenerator).reduce((sum, unit) => sum + (unit.quantity || 0), 0)).toLocaleString()}/mo
+                        +${(GENERATOR_MONTHLY * generatorUnitCount).toLocaleString()}/mo
                       </span>
                     </div>
                     <div style={{
@@ -2158,7 +2166,7 @@ function LVTConfigurator() {
                   </div>
                 )}
 
-                {!config.units.some(u => u.needsGenerator) && !config.ndaaCompliant && !config.nightVision && config.softwarePackages.length === 0 && (
+                {generatorUnits.length === 0 && !config.ndaaCompliant && !config.nightVision && config.softwarePackages.length === 0 && (
                   <div style={{
                     padding: '24px',
                     background: 'rgba(255,255,255,0.02)',
@@ -2288,15 +2296,21 @@ function LVTConfigurator() {
                       orderId: `LVT-${Date.now()}`,
                       
                       // Configuration Summary
-                      unitType: selectedUnitType.name,
-                      baseMonthlyRate: selectedUnitType.baseMonthly,
                       unitCount: totalUnits,
+                      baseMonthlyTotal,
                       deploymentZips: config.units.map(u => u.zipCode).join(', '),
                       deploymentDetails: config.units.map((u, idx) => 
-                        `Location ${idx + 1}: ${u.quantity} ${u.quantity === 1 ? 'Unit' : 'Units'} • Zip ${u.zipCode}${u.needsGenerator ? ' (+ Generator)' : ''}`
+                        `Location ${idx + 1}: ${u.quantity} ${u.quantity === 1 ? 'Unit' : 'Units'} • ${getUnitType(u.unitType).name} • Zip ${u.zipCode}${u.needsGenerator ? ' (+ Generator)' : ''}`
                       ).join(' | '),
+                      unitBreakdown: config.units.map((u, idx) => ({
+                        location: idx + 1,
+                        unitType: getUnitType(u.unitType).name,
+                        quantity: u.quantity || 0,
+                        zipCode: u.zipCode,
+                        needsGenerator: u.needsGenerator ? 'Yes' : 'No'
+                      })),
                       generatorsNeeded: config.units
-                        .filter(u => u.needsGenerator)
+                        .filter(u => getUnitType(u.unitType).generatorEligible && u.needsGenerator)
                         .reduce((sum, unit) => sum + (unit.quantity || 0), 0),
                       
                       // Hardware Options
@@ -2359,7 +2373,7 @@ function LVTConfigurator() {
                         const verificationNote = verified
                           ? ''
                           : '\n\nNote: The request was sent, but the browser could not verify a response due to cross-origin restrictions.';
-                        alert(`Thank you for your lease request!\n\n${totalUnits} ${selectedUnitType.name}${totalUnits === 1 ? '' : 's'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${verificationNote}`);
+                        alert(`Thank you for your lease request!\n\n${totalUnits} Security ${totalUnits === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${verificationNote}`);
                         
                         // Optional: Reset form or redirect
                         // setCurrentStep(0);
