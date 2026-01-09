@@ -94,8 +94,14 @@ function LVTConfigurator() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [config, setConfig] = useState({
-    units: [
-      { id: 1, unitType: 'mobile', zipCode: '', needsGenerator: false, quantity: 1 }
+    locations: [
+      {
+        id: 1,
+        zipCode: '',
+        units: [
+          { id: 1, unitType: 'mobile', needsGenerator: false, quantity: 1 }
+        ]
+      }
     ],
     ndaaCompliant: false,
     nightVision: false,
@@ -157,15 +163,19 @@ function LVTConfigurator() {
 
   const steps = ['Location', 'Hardware', 'Software', 'Lease Term', 'Contact Info', 'Review'];
 
-  const totalUnits = config.units.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+  const totalUnits = config.locations.reduce((sum, location) => {
+    const locationTotal = location.units.reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
+    return sum + locationTotal;
+  }, 0);
 
   const uniqueLocationZips = [
-    ...new Set(config.units.map(unit => unit.zipCode).filter(zip => zip.length === 5))
+    ...new Set(config.locations.map(location => location.zipCode).filter(zip => zip.length === 5))
   ];
 
-  const unitsByZip = config.units.reduce((acc, unit) => {
-    if (unit.zipCode.length === 5) {
-      acc[unit.zipCode] = (acc[unit.zipCode] || 0) + (unit.quantity || 0);
+  const unitsByZip = config.locations.reduce((acc, location) => {
+    if (location.zipCode.length === 5) {
+      const locationTotal = location.units.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+      acc[location.zipCode] = (acc[location.zipCode] || 0) + locationTotal;
     }
     return acc;
   }, {});
@@ -207,20 +217,25 @@ function LVTConfigurator() {
 
   useEffect(() => {
     setConfig(prev => {
-      const nextUnits = prev.units.map(unit => {
-        const unitType = getUnitType(unit.unitType);
-        if (unitType.generatorEligible) {
-          return unit;
-        }
-        return { ...unit, needsGenerator: false };
-      });
-      const hasChanges = nextUnits.some((unit, idx) => unit.needsGenerator !== prev.units[idx].needsGenerator);
+      const nextLocations = prev.locations.map(location => ({
+        ...location,
+        units: location.units.map(unit => {
+          const unitType = getUnitType(unit.unitType);
+          if (unitType.generatorEligible) {
+            return unit;
+          }
+          return { ...unit, needsGenerator: false };
+        })
+      }));
+      const hasChanges = nextLocations.some((location, idx) =>
+        location.units.some((unit, unitIdx) => unit.needsGenerator !== prev.locations[idx].units[unitIdx].needsGenerator)
+      );
       if (!hasChanges) {
         return prev;
       }
-      return { ...prev, units: nextUnits };
+      return { ...prev, locations: nextLocations };
     });
-  }, [config.units]);
+  }, [config.locations]);
 
   // Simulate zip code lookup for generator requirements
   // In production, this would call an API
@@ -241,60 +256,123 @@ function LVTConfigurator() {
 
 
 
-  const addUnit = () => {
-    const newId = Math.max(...config.units.map(u => u.id)) + 1;
+  const addLocation = () => {
+    const newId = Math.max(...config.locations.map(location => location.id)) + 1;
     setConfig(prev => ({
       ...prev,
-      units: [...prev.units, { id: newId, unitType: 'mobile', zipCode: '', needsGenerator: false, quantity: 1 }]
+      locations: [
+        ...prev.locations,
+        {
+          id: newId,
+          zipCode: '',
+          units: [{ id: 1, unitType: 'mobile', needsGenerator: false, quantity: 1 }]
+        }
+      ]
     }));
   };
 
-  const removeUnit = (id) => {
-    if (config.units.length > 1) {
+  const removeLocation = (locationId) => {
+    if (config.locations.length > 1) {
       setConfig(prev => ({
         ...prev,
-        units: prev.units.filter(u => u.id !== id)
+        locations: prev.locations.filter(location => location.id !== locationId)
       }));
     }
   };
 
-  const updateUnitZipCode = (id, zipCode) => {
+  const updateLocationZipCode = (locationId, zipCode) => {
     setConfig(prev => ({
       ...prev,
-      units: prev.units.map(u => 
-        u.id === id ? { ...u, zipCode } : u
+      locations: prev.locations.map(location =>
+        location.id === locationId ? { ...location, zipCode } : location
       )
     }));
   };
 
-  const updateUnitQuantity = (id, quantity) => {
+  const addUnitToLocation = (locationId) => {
     setConfig(prev => ({
       ...prev,
-      units: prev.units.map(u =>
-        u.id === id ? { ...u, quantity } : u
-      )
-    }));
-  };
-
-  const updateUnitType = (id, unitTypeId) => {
-    setConfig(prev => ({
-      ...prev,
-      units: prev.units.map(u => {
-        if (u.id !== id) {
-          return u;
+      locations: prev.locations.map(location => {
+        if (location.id !== locationId) {
+          return location;
         }
-        const unitType = getUnitType(unitTypeId);
-        if (!unitType.generatorEligible) {
-          return { ...u, unitType: unitTypeId, needsGenerator: false };
-        }
-        const needsGenerator = u.zipCode.length === 5 ? checkGeneratorRequirement(u.zipCode) : u.needsGenerator;
-        return { ...u, unitType: unitTypeId, needsGenerator };
+        const nextId = Math.max(...location.units.map(unit => unit.id)) + 1;
+        return {
+          ...location,
+          units: [...location.units, { id: nextId, unitType: 'mobile', needsGenerator: false, quantity: 1 }]
+        };
       })
     }));
   };
 
-  const checkGeneratorForUnit = (id, zip) => {
-    const unit = config.units.find(entry => entry.id === id);
+  const removeUnitFromLocation = (locationId, unitId) => {
+    setConfig(prev => ({
+      ...prev,
+      locations: prev.locations.map(location => {
+        if (location.id !== locationId) {
+          return location;
+        }
+        if (location.units.length === 1) {
+          return location;
+        }
+        return {
+          ...location,
+          units: location.units.filter(unit => unit.id !== unitId)
+        };
+      })
+    }));
+  };
+
+  const updateUnitQuantity = (locationId, unitId, quantity) => {
+    setConfig(prev => ({
+      ...prev,
+      locations: prev.locations.map(location => {
+        if (location.id !== locationId) {
+          return location;
+        }
+        return {
+          ...location,
+          units: location.units.map(unit =>
+            unit.id === unitId ? { ...unit, quantity } : unit
+          )
+        };
+      })
+    }));
+  };
+
+  const updateUnitType = (locationId, unitId, unitTypeId) => {
+    setConfig(prev => ({
+      ...prev,
+      locations: prev.locations.map(location => {
+        if (location.id !== locationId) {
+          return location;
+        }
+        return {
+          ...location,
+          units: location.units.map(unit => {
+            if (unit.id !== unitId) {
+              return unit;
+            }
+            const unitType = getUnitType(unitTypeId);
+            if (!unitType.generatorEligible) {
+              return { ...unit, unitType: unitTypeId, needsGenerator: false };
+            }
+            const needsGenerator = location.zipCode.length === 5
+              ? checkGeneratorRequirement(location.zipCode)
+              : unit.needsGenerator;
+            return { ...unit, unitType: unitTypeId, needsGenerator };
+          })
+        };
+      })
+    }));
+  };
+
+  const checkGeneratorForUnit = (locationId, unitId, zip) => {
+    const location = config.locations.find(entry => entry.id === locationId);
+    if (!location) {
+      return;
+    }
+    const unit = location.units.find(entry => entry.id === unitId);
     if (!unit) {
       return;
     }
@@ -302,27 +380,47 @@ function LVTConfigurator() {
     if (!unitType.generatorEligible) {
       setConfig(prev => ({
         ...prev,
-        units: prev.units.map(u => 
-          u.id === id ? { ...u, needsGenerator: false } : u
-        )
+        locations: prev.locations.map(loc => {
+          if (loc.id !== locationId) {
+            return loc;
+          }
+          return {
+            ...loc,
+            units: loc.units.map(line =>
+              line.id === unitId ? { ...line, needsGenerator: false } : line
+            )
+          };
+        })
       }));
       return;
     }
     const needsGen = checkGeneratorRequirement(zip);
     setConfig(prev => ({
       ...prev,
-      units: prev.units.map(u => 
-        u.id === id ? { ...u, needsGenerator: needsGen } : u
-      )
+      locations: prev.locations.map(loc => {
+        if (loc.id !== locationId) {
+          return loc;
+        }
+        return {
+          ...loc,
+          units: loc.units.map(line =>
+            line.id === unitId ? { ...line, needsGenerator: needsGen } : line
+          )
+        };
+      })
     }));
   };
 
   const handleZipCodeSubmit = () => {
-    const allZipsValid = config.units.every(u => u.zipCode.length === 5 && u.quantity > 0);
+    const allZipsValid = config.locations.every(location =>
+      location.zipCode.length === 5 && location.units.every(unit => unit.quantity > 0)
+    );
     if (allZipsValid) {
       // Check generator requirements for mobile units only
-      config.units.forEach(unit => {
-        checkGeneratorForUnit(unit.id, unit.zipCode);
+      config.locations.forEach(location => {
+        location.units.forEach(unit => {
+          checkGeneratorForUnit(location.id, unit.id, location.zipCode);
+        });
       });
       setCurrentStep(1);
     }
@@ -331,9 +429,12 @@ function LVTConfigurator() {
   const calculateMonthlyTotal = () => {
     const unitCount = totalUnits;
     
-    const baseMonthlyTotal = config.units.reduce((sum, unit) => {
-      const unitType = getUnitType(unit.unitType);
-      return sum + (unitType.baseMonthly * (unit.quantity || 0));
+    const baseMonthlyTotal = config.locations.reduce((sum, location) => {
+      const locationTotal = location.units.reduce((unitSum, unit) => {
+        const unitType = getUnitType(unit.unitType);
+        return unitSum + (unitType.baseMonthly * (unit.quantity || 0));
+      }, 0);
+      return sum + locationTotal;
     }, 0);
     let perUnitMonthly = 0;
     
@@ -349,9 +450,12 @@ function LVTConfigurator() {
     let monthlyTotal = baseMonthlyTotal + (perUnitMonthly * unitCount);
     
     // Add generators (varies by unit location)
-    const generatorCount = config.units
-      .filter(u => getUnitType(u.unitType).generatorEligible && u.needsGenerator)
-      .reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+    const generatorCount = config.locations.reduce((sum, location) => {
+      const locationGenerators = location.units
+        .filter(unit => getUnitType(unit.unitType).generatorEligible && unit.needsGenerator)
+        .reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
+      return sum + locationGenerators;
+    }, 0);
     monthlyTotal += generatorCount * GENERATOR_MONTHLY;
     
     // Add software packages (per unit)
@@ -375,9 +479,12 @@ function LVTConfigurator() {
   const calculateMonthlyForTerm = (termMonths) => {
     const unitCount = totalUnits;
     
-    const baseMonthlyTotal = config.units.reduce((sum, unit) => {
-      const unitType = getUnitType(unit.unitType);
-      return sum + (unitType.baseMonthly * (unit.quantity || 0));
+    const baseMonthlyTotal = config.locations.reduce((sum, location) => {
+      const locationTotal = location.units.reduce((unitSum, unit) => {
+        const unitType = getUnitType(unit.unitType);
+        return unitSum + (unitType.baseMonthly * (unit.quantity || 0));
+      }, 0);
+      return sum + locationTotal;
     }, 0);
     let perUnitMonthly = 0;
     
@@ -393,9 +500,12 @@ function LVTConfigurator() {
     let monthlyTotal = baseMonthlyTotal + (perUnitMonthly * unitCount);
     
     // Add generators (varies by unit location)
-    const generatorCount = config.units
-      .filter(u => getUnitType(u.unitType).generatorEligible && u.needsGenerator)
-      .reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+    const generatorCount = config.locations.reduce((sum, location) => {
+      const locationGenerators = location.units
+        .filter(unit => getUnitType(unit.unitType).generatorEligible && unit.needsGenerator)
+        .reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
+      return sum + locationGenerators;
+    }, 0);
     monthlyTotal += generatorCount * GENERATOR_MONTHLY;
     
     // Add software packages (per unit)
@@ -468,7 +578,9 @@ function LVTConfigurator() {
 
   const canProceed = () => {
     if (currentStep === 0) {
-      return config.units.every(u => u.zipCode.length === 5 && u.quantity > 0);
+      return config.locations.every(location =>
+        location.zipCode.length === 5 && location.units.every(unit => unit.quantity > 0)
+      );
     }
     if (currentStep === 1) return true; // Hardware options are optional
     if (currentStep === 2) return true; // Software packages are optional
@@ -491,11 +603,18 @@ function LVTConfigurator() {
     return true;
   };
 
-  const generatorUnits = config.units.filter(unit => getUnitType(unit.unitType).generatorEligible && unit.needsGenerator);
+  const generatorUnits = config.locations.flatMap(location =>
+    location.units
+      .filter(unit => getUnitType(unit.unitType).generatorEligible && unit.needsGenerator)
+      .map(unit => ({ ...unit, locationId: location.id, locationZip: location.zipCode }))
+  );
   const generatorUnitCount = generatorUnits.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
-  const baseMonthlyTotal = config.units.reduce((sum, unit) => {
-    const unitType = getUnitType(unit.unitType);
-    return sum + (unitType.baseMonthly * (unit.quantity || 0));
+  const baseMonthlyTotal = config.locations.reduce((sum, location) => {
+    const locationTotal = location.units.reduce((unitSum, unit) => {
+      const unitType = getUnitType(unit.unitType);
+      return unitSum + (unitType.baseMonthly * (unit.quantity || 0));
+    }, 0);
+    return sum + locationTotal;
   }, 0);
 
   return (
@@ -708,111 +827,59 @@ function LVTConfigurator() {
                 gap: '16px',
                 marginBottom: '24px'
               }}>
-                {config.units.map((unit, index) => (
-                  <div key={unit.id} style={{
+                {config.locations.map((location, locationIndex) => (
+                  <div key={location.id} style={{
                     background: 'rgba(255,255,255,0.05)',
                     border: '1px solid rgba(255,255,255,0.1)',
                     borderRadius: '12px',
                     padding: '20px',
                     display: 'flex',
-                    gap: '16px',
-                    alignItems: 'center'
+                    flexDirection: 'column',
+                    gap: '16px'
                   }}>
                     <div style={{
-                      fontSize: '18px',
-                      fontWeight: '800',
-                      color: '#56d3cc',
-                      minWidth: '80px'
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '16px',
+                      flexWrap: 'wrap'
                     }}>
-                      Location {index + 1}
-                    </div>
-                    
-                    <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1.5fr 2fr', gap: '16px' }}>
-                      <div>
-                        <label style={{
-                          display: 'block',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px',
-                          marginBottom: '8px',
-                          color: 'rgba(255,255,255,0.7)'
-                        }}>
-                          Units at location
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={unit.quantity}
-                          onChange={(e) => {
-                            const nextValue = Math.max(1, parseInt(e.target.value || '1', 10));
-                            updateUnitQuantity(unit.id, nextValue);
-                          }}
-                          style={{
-                            width: '100%',
-                            padding: '12px 16px',
-                            background: 'rgba(39, 42, 47, 0.6)',
-                            border: '2px solid rgba(255,255,255,0.15)',
-                            borderRadius: '8px',
-                            color: '#fff',
-                            fontSize: '16px',
-                            fontWeight: '600',
-                            outline: 'none',
-                            transition: 'all 0.3s ease'
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.border = '2px solid #56d3cc';
-                            e.target.style.background = 'rgba(86, 211, 204, 0.08)';
-                          }}
-                          onBlur={(e) => {
-                            e.target.style.border = '2px solid rgba(255,255,255,0.15)';
-                            e.target.style.background = 'rgba(39, 42, 47, 0.6)';
-                          }}
-                        />
+                      <div style={{
+                        fontSize: '18px',
+                        fontWeight: '800',
+                        color: '#56d3cc'
+                      }}>
+                        Location {locationIndex + 1}
                       </div>
-                      <div>
-                        <label style={{
-                          display: 'block',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px',
-                          marginBottom: '8px',
-                          color: 'rgba(255,255,255,0.7)'
-                        }}>
-                          Unit type
-                        </label>
-                        <select
-                          value={unit.unitType}
-                          onChange={(e) => updateUnitType(unit.id, e.target.value)}
+                      {config.locations.length > 1 && (
+                        <button
+                          onClick={() => removeLocation(location.id)}
                           style={{
-                            width: '100%',
-                            padding: '12px 16px',
-                            background: 'rgba(39, 42, 47, 0.6)',
-                            border: '2px solid rgba(255,255,255,0.15)',
+                            padding: '10px 14px',
+                            background: 'rgba(255, 50, 50, 0.15)',
+                            border: '1px solid rgba(255, 50, 50, 0.3)',
                             borderRadius: '8px',
-                            color: '#fff',
-                            fontSize: '14px',
-                            fontWeight: '600',
-                            outline: 'none',
-                            transition: 'all 0.3s ease'
+                            color: '#ff6b6b',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px'
                           }}
-                          onFocus={(e) => {
-                            e.target.style.border = '2px solid #56d3cc';
-                            e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                          onMouseOver={(e) => {
+                            e.target.style.background = 'rgba(255, 50, 50, 0.25)';
                           }}
-                          onBlur={(e) => {
-                            e.target.style.border = '2px solid rgba(255,255,255,0.15)';
-                            e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                          onMouseOut={(e) => {
+                            e.target.style.background = 'rgba(255, 50, 50, 0.15)';
                           }}
                         >
-                          {UNIT_TYPES.map(option => (
-                            <option key={option.id} value={option.id}>
-                              {option.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                          Remove Location
+                        </button>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: '16px' }}>
                       <div>
                         <label style={{
                           display: 'block',
@@ -828,10 +895,10 @@ function LVTConfigurator() {
                         <input
                           type="text"
                           maxLength="5"
-                          value={unit.zipCode}
+                          value={location.zipCode}
                           onChange={(e) => {
                             const value = e.target.value.replace(/\D/g, '');
-                            updateUnitZipCode(unit.id, value);
+                            updateLocationZipCode(location.id, value);
                           }}
                           placeholder="Enter 5-digit zip"
                           style={{
@@ -858,37 +925,171 @@ function LVTConfigurator() {
                       </div>
                     </div>
 
-                    {config.units.length > 1 && (
-                      <button
-                        onClick={() => removeUnit(unit.id)}
-                        style={{
-                          padding: '12px',
-                          background: 'rgba(255, 50, 50, 0.15)',
-                          border: '1px solid rgba(255, 50, 50, 0.3)',
-                          borderRadius: '8px',
-                          color: '#ff6b6b',
-                          cursor: 'pointer',
-                          transition: 'all 0.3s ease',
-                          fontSize: '14px',
-                          fontWeight: '700'
-                        }}
-                        onMouseOver={(e) => {
-                          e.target.style.background = 'rgba(255, 50, 50, 0.25)';
-                        }}
-                        onMouseOut={(e) => {
-                          e.target.style.background = 'rgba(255, 50, 50, 0.15)';
-                        }}
-                      >
-                        Remove
-                      </button>
-                    )}
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px'
+                    }}>
+                      {location.units.map((unit) => (
+                        <div key={unit.id} style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1.5fr auto',
+                          gap: '16px',
+                          alignItems: 'center',
+                          background: 'rgba(255,255,255,0.04)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: '10px',
+                          padding: '16px'
+                        }}>
+                          <div>
+                            <label style={{
+                              display: 'block',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.5px',
+                              marginBottom: '8px',
+                              color: 'rgba(255,255,255,0.7)'
+                            }}>
+                              Units at location
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={unit.quantity}
+                              onChange={(e) => {
+                                const nextValue = Math.max(1, parseInt(e.target.value || '1', 10));
+                                updateUnitQuantity(location.id, unit.id, nextValue);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                background: 'rgba(39, 42, 47, 0.6)',
+                                border: '2px solid rgba(255,255,255,0.15)',
+                                borderRadius: '8px',
+                                color: '#fff',
+                                fontSize: '16px',
+                                fontWeight: '600',
+                                outline: 'none',
+                                transition: 'all 0.3s ease'
+                              }}
+                              onFocus={(e) => {
+                                e.target.style.border = '2px solid #56d3cc';
+                                e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                              }}
+                              onBlur={(e) => {
+                                e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                                e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{
+                              display: 'block',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.5px',
+                              marginBottom: '8px',
+                              color: 'rgba(255,255,255,0.7)'
+                            }}>
+                              Unit type
+                            </label>
+                            <select
+                              value={unit.unitType}
+                              onChange={(e) => updateUnitType(location.id, unit.id, e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                background: 'rgba(39, 42, 47, 0.6)',
+                                border: '2px solid rgba(255,255,255,0.15)',
+                                borderRadius: '8px',
+                                color: '#fff',
+                                fontSize: '14px',
+                                fontWeight: '600',
+                                outline: 'none',
+                                transition: 'all 0.3s ease'
+                              }}
+                              onFocus={(e) => {
+                                e.target.style.border = '2px solid #56d3cc';
+                                e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                              }}
+                              onBlur={(e) => {
+                                e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                                e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                              }}
+                            >
+                              {UNIT_TYPES.map(option => (
+                                <option key={option.id} value={option.id}>
+                                  {option.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          {location.units.length > 1 && (
+                            <button
+                              onClick={() => removeUnitFromLocation(location.id, unit.id)}
+                              style={{
+                                padding: '10px',
+                                background: 'rgba(255, 50, 50, 0.15)',
+                                border: '1px solid rgba(255, 50, 50, 0.3)',
+                                borderRadius: '8px',
+                                color: '#ff6b6b',
+                                cursor: 'pointer',
+                                transition: 'all 0.3s ease',
+                                fontSize: '12px',
+                                fontWeight: '700',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.5px'
+                              }}
+                              onMouseOver={(e) => {
+                                e.target.style.background = 'rgba(255, 50, 50, 0.25)';
+                              }}
+                              onMouseOut={(e) => {
+                                e.target.style.background = 'rgba(255, 50, 50, 0.15)';
+                              }}
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={() => addUnitToLocation(location.id)}
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        background: 'rgba(255,255,255,0.08)',
+                        border: '2px dashed rgba(255,255,255,0.2)',
+                        borderRadius: '10px',
+                        color: '#fff',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}
+                      onMouseOver={(e) => {
+                        e.target.style.background = 'rgba(86, 211, 204, 0.15)';
+                        e.target.style.borderColor = '#56d3cc';
+                      }}
+                      onMouseOut={(e) => {
+                        e.target.style.background = 'rgba(255,255,255,0.08)';
+                        e.target.style.borderColor = 'rgba(255,255,255,0.2)';
+                      }}
+                    >
+                      + Add Another Unit Type
+                    </button>
                   </div>
                 ))}
               </div>
 
-              {/* Add Unit Button */}
+              {/* Add Location Button */}
               <button
-                onClick={addUnit}
+                onClick={addLocation}
                 style={{
                   width: '100%',
                   padding: '14px',
@@ -913,7 +1114,7 @@ function LVTConfigurator() {
                   e.target.style.borderColor = 'rgba(255,255,255,0.2)';
                 }}
               >
-                + Add Another Unit
+                + Add Another Location
               </button>
 
             </div>
@@ -1003,7 +1204,7 @@ function LVTConfigurator() {
                       gap: '12px'
                     }}>
                       {generatorUnits.map((unit, idx) => (
-                        <div key={unit.id} style={{
+                        <div key={`${unit.locationId}-${unit.id}`} style={{
                           background: 'rgba(86, 211, 204, 0.15)',
                           padding: '8px 16px',
                           borderRadius: '8px',
@@ -1011,7 +1212,7 @@ function LVTConfigurator() {
                           fontWeight: '700',
                           color: '#fff'
                         }}>
-                          Location {config.units.indexOf(unit) + 1}: {unit.quantity} {unit.quantity === 1 ? 'Unit' : 'Units'} • {unit.zipCode}
+                          Location {config.locations.findIndex(location => location.id === unit.locationId) + 1}: {unit.quantity} {unit.quantity === 1 ? 'Unit' : 'Units'} • {unit.locationZip}
                         </div>
                       ))}
                     </div>
@@ -2006,8 +2207,14 @@ function LVTConfigurator() {
                     gap: '8px',
                     marginTop: '12px'
                   }}>
-                    {config.units.map((unit, idx) => (
-                      <div key={unit.id} style={{
+                    {config.locations.flatMap(location =>
+                      location.units.map(unit => ({
+                        locationId: location.id,
+                        locationZip: location.zipCode,
+                        unit
+                      }))
+                    ).map((entry, idx) => (
+                      <div key={`${entry.locationId}-${entry.unit.id}`} style={{
                         fontSize: '13px',
                         color: 'rgba(255,255,255,0.6)',
                         display: 'flex',
@@ -2020,8 +2227,8 @@ function LVTConfigurator() {
                           background: 'rgba(255,255,255,0.4)',
                           borderRadius: '50%'
                         }}></div>
-                        <span>Location {idx + 1}: {unit.quantity} {unit.quantity === 1 ? 'Unit' : 'Units'} • {getUnitType(unit.unitType).name} • {unit.zipCode}</span>
-                        {unit.needsGenerator && (
+                        <span>Location {config.locations.findIndex(location => location.id === entry.locationId) + 1}: {entry.unit.quantity} {entry.unit.quantity === 1 ? 'Unit' : 'Units'} • {getUnitType(entry.unit.unitType).name} • {entry.locationZip}</span>
+                        {entry.unit.needsGenerator && (
                           <span style={{
                             background: 'rgba(86, 211, 204, 0.2)',
                             padding: '2px 8px',
@@ -2034,7 +2241,7 @@ function LVTConfigurator() {
                           </span>
                         )}
                       </div>
-                    ))}
+                    )))}
                   </div>
                 </div>
 
@@ -2298,20 +2505,27 @@ function LVTConfigurator() {
                       // Configuration Summary
                       unitCount: totalUnits,
                       baseMonthlyTotal,
-                      deploymentZips: config.units.map(u => u.zipCode).join(', '),
-                      deploymentDetails: config.units.map((u, idx) => 
-                        `Location ${idx + 1}: ${u.quantity} ${u.quantity === 1 ? 'Unit' : 'Units'} • ${getUnitType(u.unitType).name} • Zip ${u.zipCode}${u.needsGenerator ? ' (+ Generator)' : ''}`
+                      deploymentZips: config.locations.map(location => location.zipCode).join(', '),
+                      deploymentDetails: config.locations.flatMap((location, locationIdx) =>
+                        location.units.map(unit =>
+                          `Location ${locationIdx + 1}: ${unit.quantity} ${unit.quantity === 1 ? 'Unit' : 'Units'} • ${getUnitType(unit.unitType).name} • Zip ${location.zipCode}${unit.needsGenerator ? ' (+ Generator)' : ''}`
+                        )
                       ).join(' | '),
-                      unitBreakdown: config.units.map((u, idx) => ({
-                        location: idx + 1,
-                        unitType: getUnitType(u.unitType).name,
-                        quantity: u.quantity || 0,
-                        zipCode: u.zipCode,
-                        needsGenerator: u.needsGenerator ? 'Yes' : 'No'
-                      })),
-                      generatorsNeeded: config.units
-                        .filter(u => getUnitType(u.unitType).generatorEligible && u.needsGenerator)
-                        .reduce((sum, unit) => sum + (unit.quantity || 0), 0),
+                      unitBreakdown: config.locations.flatMap((location, locationIdx) =>
+                        location.units.map(unit => ({
+                          location: locationIdx + 1,
+                          unitType: getUnitType(unit.unitType).name,
+                          quantity: unit.quantity || 0,
+                          zipCode: location.zipCode,
+                          needsGenerator: unit.needsGenerator ? 'Yes' : 'No'
+                        }))
+                      ),
+                      generatorsNeeded: config.locations.reduce((sum, location) => {
+                        const locationGenerators = location.units
+                          .filter(unit => getUnitType(unit.unitType).generatorEligible && unit.needsGenerator)
+                          .reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
+                        return sum + locationGenerators;
+                      }, 0),
                       
                       // Hardware Options
                       ndaaCompliant: config.ndaaCompliant ? 'Yes' : 'No',
