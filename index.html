@@ -73,7 +73,7 @@ function LVTConfigurator() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [config, setConfig] = useState({
     units: [
-      { id: 1, zipCode: '', needsGenerator: false }
+      { id: 1, zipCode: '', needsGenerator: false, quantity: 1 }
     ],
     ndaaCompliant: false,
     nightVision: false,
@@ -136,9 +136,18 @@ function LVTConfigurator() {
 
   const steps = ['Location', 'Hardware', 'Software', 'Lease Term', 'Contact Info', 'Review'];
 
+  const totalUnits = config.units.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+
   const uniqueLocationZips = [
     ...new Set(config.units.map(unit => unit.zipCode).filter(zip => zip.length === 5))
   ];
+
+  const unitsByZip = config.units.reduce((acc, unit) => {
+    if (unit.zipCode.length === 5) {
+      acc[unit.zipCode] = (acc[unit.zipCode] || 0) + (unit.quantity || 0);
+    }
+    return acc;
+  }, {});
 
   useEffect(() => {
     setConfig(prev => {
@@ -198,7 +207,7 @@ function LVTConfigurator() {
     const newId = Math.max(...config.units.map(u => u.id)) + 1;
     setConfig(prev => ({
       ...prev,
-      units: [...prev.units, { id: newId, zipCode: '', needsGenerator: false }]
+      units: [...prev.units, { id: newId, zipCode: '', needsGenerator: false, quantity: 1 }]
     }));
   };
 
@@ -220,6 +229,15 @@ function LVTConfigurator() {
     }));
   };
 
+  const updateUnitQuantity = (id, quantity) => {
+    setConfig(prev => ({
+      ...prev,
+      units: prev.units.map(u =>
+        u.id === id ? { ...u, quantity } : u
+      )
+    }));
+  };
+
   const checkGeneratorForUnit = (id, zip) => {
     const needsGen = checkGeneratorRequirement(zip);
     setConfig(prev => ({
@@ -231,7 +249,7 @@ function LVTConfigurator() {
   };
 
   const handleZipCodeSubmit = () => {
-    const allZipsValid = config.units.every(u => u.zipCode.length === 5);
+    const allZipsValid = config.units.every(u => u.zipCode.length === 5 && u.quantity > 0);
     if (allZipsValid) {
       // Check generator requirements for all units
       config.units.forEach(unit => {
@@ -242,7 +260,7 @@ function LVTConfigurator() {
   };
 
   const calculateMonthlyTotal = () => {
-    const unitCount = config.units.length;
+    const unitCount = totalUnits;
     
     // Base cost per unit (monthly)
     let perUnitMonthly = BASE_MONTHLY_LEASE;
@@ -259,7 +277,9 @@ function LVTConfigurator() {
     let monthlyTotal = perUnitMonthly * unitCount;
     
     // Add generators (varies by unit location)
-    const generatorCount = config.units.filter(u => u.needsGenerator).length;
+    const generatorCount = config.units
+      .filter(u => u.needsGenerator)
+      .reduce((sum, unit) => sum + (unit.quantity || 0), 0);
     monthlyTotal += generatorCount * GENERATOR_MONTHLY;
     
     // Add software packages (per unit)
@@ -281,7 +301,7 @@ function LVTConfigurator() {
 
   // Helper to calculate monthly total for a specific term (for lease term cards)
   const calculateMonthlyForTerm = (termMonths) => {
-    const unitCount = config.units.length;
+    const unitCount = totalUnits;
     
     // Base cost per unit (monthly)
     let perUnitMonthly = BASE_MONTHLY_LEASE;
@@ -298,7 +318,9 @@ function LVTConfigurator() {
     let monthlyTotal = perUnitMonthly * unitCount;
     
     // Add generators (varies by unit location)
-    const generatorCount = config.units.filter(u => u.needsGenerator).length;
+    const generatorCount = config.units
+      .filter(u => u.needsGenerator)
+      .reduce((sum, unit) => sum + (unit.quantity || 0), 0);
     monthlyTotal += generatorCount * GENERATOR_MONTHLY;
     
     // Add software packages (per unit)
@@ -371,7 +393,7 @@ function LVTConfigurator() {
 
   const canProceed = () => {
     if (currentStep === 0) {
-      return config.units.every(u => u.zipCode.length === 5);
+      return config.units.every(u => u.zipCode.length === 5 && u.quantity > 0);
     }
     if (currentStep === 1) return true; // Hardware options are optional
     if (currentStep === 2) return true; // Software packages are optional
@@ -749,7 +771,7 @@ function LVTConfigurator() {
                   padding: '8px 16px',
                   borderRadius: '8px'
                 }}>
-                  {config.units.length} {config.units.length === 1 ? 'Unit' : 'Units'}
+                  {totalUnits} {totalUnits === 1 ? 'Unit' : 'Units'}
                 </div>
               </div>
 
@@ -776,10 +798,10 @@ function LVTConfigurator() {
                       color: '#56d3cc',
                       minWidth: '80px'
                     }}>
-                      Unit {index + 1}
+                      Location {index + 1}
                     </div>
                     
-                    <div style={{ flex: 1 }}>
+                    <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px' }}>
                       <label style={{
                         display: 'block',
                         fontSize: '11px',
@@ -791,36 +813,80 @@ function LVTConfigurator() {
                       }}>
                         Deployment Zip Code
                       </label>
-                      <input
-                        type="text"
-                        maxLength="5"
-                        value={unit.zipCode}
-                        onChange={(e) => {
-                          const value = e.target.value.replace(/\D/g, '');
-                          updateUnitZipCode(unit.id, value);
-                        }}
-                        placeholder="Enter 5-digit zip"
-                        style={{
-                          width: '100%',
-                          padding: '12px 16px',
-                          background: 'rgba(39, 42, 47, 0.6)',
-                          border: '2px solid rgba(255,255,255,0.15)',
-                          borderRadius: '8px',
-                          color: '#fff',
-                          fontSize: '16px',
-                          fontWeight: '600',
-                          outline: 'none',
-                          transition: 'all 0.3s ease'
-                        }}
-                        onFocus={(e) => {
-                          e.target.style.border = '2px solid #56d3cc';
-                          e.target.style.background = 'rgba(86, 211, 204, 0.08)';
-                        }}
-                        onBlur={(e) => {
-                          e.target.style.border = '2px solid rgba(255,255,255,0.15)';
-                          e.target.style.background = 'rgba(39, 42, 47, 0.6)';
-                        }}
-                      />
+                      <div>
+                        <input
+                          type="text"
+                          maxLength="5"
+                          value={unit.zipCode}
+                          onChange={(e) => {
+                            const value = e.target.value.replace(/\D/g, '');
+                            updateUnitZipCode(unit.id, value);
+                          }}
+                          placeholder="Enter 5-digit zip"
+                          style={{
+                            width: '100%',
+                            padding: '12px 16px',
+                            background: 'rgba(39, 42, 47, 0.6)',
+                            border: '2px solid rgba(255,255,255,0.15)',
+                            borderRadius: '8px',
+                            color: '#fff',
+                            fontSize: '16px',
+                            fontWeight: '600',
+                            outline: 'none',
+                            transition: 'all 0.3s ease'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.border = '2px solid #56d3cc';
+                            e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                          }}
+                          onBlur={(e) => {
+                            e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                            e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{
+                          display: 'block',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          marginBottom: '8px',
+                          color: 'rgba(255,255,255,0.7)'
+                        }}>
+                          Units at location
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={unit.quantity}
+                          onChange={(e) => {
+                            const nextValue = Math.max(1, parseInt(e.target.value || '1', 10));
+                            updateUnitQuantity(unit.id, nextValue);
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '12px 16px',
+                            background: 'rgba(39, 42, 47, 0.6)',
+                            border: '2px solid rgba(255,255,255,0.15)',
+                            borderRadius: '8px',
+                            color: '#fff',
+                            fontSize: '16px',
+                            fontWeight: '600',
+                            outline: 'none',
+                            transition: 'all 0.3s ease'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.border = '2px solid #56d3cc';
+                            e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                          }}
+                          onBlur={(e) => {
+                            e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                            e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                          }}
+                        />
+                      </div>
                     </div>
 
                     {config.units.length > 1 && (
@@ -955,7 +1021,7 @@ function LVTConfigurator() {
                   Configuring
                 </div>
                 <div style={{ fontSize: '24px', fontWeight: '800', color: '#56d3cc' }}>
-                  {config.units.length} {config.units.length === 1 ? 'Unit' : 'Units'}
+                  {totalUnits} {totalUnits === 1 ? 'Unit' : 'Units'}
                 </div>
               </div>
               <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', textAlign: 'right' }}>
@@ -993,7 +1059,7 @@ function LVTConfigurator() {
                       lineHeight: '1.6',
                       marginBottom: '16px'
                     }}>
-                      Based on your deployment locations, {config.units.filter(u => u.needsGenerator).length} of your {config.units.length} {config.units.length === 1 ? 'unit requires' : 'units require'} smart generator backup for optimal uptime:
+                      Based on your deployment locations, {config.units.filter(u => u.needsGenerator).reduce((sum, unit) => sum + (unit.quantity || 0), 0)} of your {totalUnits} {totalUnits === 1 ? 'unit requires' : 'units require'} smart generator backup for optimal uptime:
                     </p>
                     <div style={{
                       display: 'flex',
@@ -1009,7 +1075,7 @@ function LVTConfigurator() {
                           fontWeight: '700',
                           color: '#fff'
                         }}>
-                          Unit {config.units.indexOf(unit) + 1}: {unit.zipCode}
+                          Location {config.units.indexOf(unit) + 1}: {unit.quantity} {unit.quantity === 1 ? 'Unit' : 'Units'} • {unit.zipCode}
                         </div>
                       ))}
                     </div>
@@ -1023,14 +1089,14 @@ function LVTConfigurator() {
                       color: '#56d3cc',
                       whiteSpace: 'nowrap'
                     }}>
-                      +${(GENERATOR_MONTHLY * config.units.filter(u => u.needsGenerator).length).toLocaleString()}
+                      +${(GENERATOR_MONTHLY * config.units.filter(u => u.needsGenerator).reduce((sum, unit) => sum + (unit.quantity || 0), 0)).toLocaleString()}
                     </div>
                     <div style={{
                       fontSize: '11px',
                       color: 'rgba(255,255,255,0.6)',
                       marginTop: '4px'
                     }}>
-                      {config.units.filter(u => u.needsGenerator).length} {config.units.filter(u => u.needsGenerator).length === 1 ? 'generator' : 'generators'}
+                      {config.units.filter(u => u.needsGenerator).reduce((sum, unit) => sum + (unit.quantity || 0), 0)} {config.units.filter(u => u.needsGenerator).reduce((sum, unit) => sum + (unit.quantity || 0), 0) === 1 ? 'generator' : 'generators'}
                     </div>
                   </div>
                 </div>
@@ -1991,9 +2057,9 @@ function LVTConfigurator() {
                     alignItems: 'center',
                     marginBottom: '16px'
                   }}>
-                    <span>{config.units.length} × D3 Mobile Security {config.units.length === 1 ? 'Unit' : 'Units'}</span>
+                    <span>{totalUnits} × D3 Mobile Security {totalUnits === 1 ? 'Unit' : 'Units'}</span>
                     <span style={{ color: '#56d3cc' }}>
-                      ${(BASE_MONTHLY_LEASE * config.units.length).toLocaleString()}
+                      ${(BASE_MONTHLY_LEASE * totalUnits).toLocaleString()}
                     </span>
                   </div>
                   
@@ -2018,7 +2084,7 @@ function LVTConfigurator() {
                           background: 'rgba(255,255,255,0.4)',
                           borderRadius: '50%'
                         }}></div>
-                        <span>Unit {idx + 1}: {unit.zipCode}</span>
+                        <span>Location {idx + 1}: {unit.quantity} {unit.quantity === 1 ? 'Unit' : 'Units'} • {unit.zipCode}</span>
                         {unit.needsGenerator && (
                           <span style={{
                             background: 'rgba(86, 211, 204, 0.2)',
@@ -2037,10 +2103,10 @@ function LVTConfigurator() {
                 </div>
 
                 {/* Generators */}
-                {config.units.some(u => u.needsGenerator) && (
-                  <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                    <div style={{
-                      fontSize: '11px',
+                    {config.units.some(u => u.needsGenerator) && (
+                      <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                        <div style={{
+                          fontSize: '11px',
                       textTransform: 'uppercase',
                       color: 'rgba(255,255,255,0.5)',
                       letterSpacing: '1px',
@@ -2056,9 +2122,9 @@ function LVTConfigurator() {
                       justifyContent: 'space-between',
                       alignItems: 'center'
                     }}>
-                      <span>{config.units.filter(u => u.needsGenerator).length} × Smart Generator Backup</span>
+                      <span>{config.units.filter(u => u.needsGenerator).reduce((sum, unit) => sum + (unit.quantity || 0), 0)} × Smart Generator Backup</span>
                       <span style={{ color: '#56d3cc' }}>
-                        +${(GENERATOR_MONTHLY * config.units.filter(u => u.needsGenerator).length).toLocaleString()}/mo
+                        +${(GENERATOR_MONTHLY * config.units.filter(u => u.needsGenerator).reduce((sum, unit) => sum + (unit.quantity || 0), 0)).toLocaleString()}/mo
                       </span>
                     </div>
                     <div style={{
@@ -2093,9 +2159,9 @@ function LVTConfigurator() {
                         alignItems: 'center',
                         marginBottom: '8px'
                       }}>
-                        <span>{config.units.length} × NDAA Compliant Cameras</span>
+                        <span>{totalUnits} × NDAA Compliant Cameras</span>
                         <span style={{ color: '#56d3cc' }}>
-                          +${(NDAA_MONTHLY * config.units.length).toLocaleString()}/mo
+                          +${(NDAA_MONTHLY * totalUnits).toLocaleString()}/mo
                         </span>
                       </div>
                     )}
@@ -2107,9 +2173,9 @@ function LVTConfigurator() {
                         justifyContent: 'space-between',
                         alignItems: 'center'
                       }}>
-                        <span>{config.units.length} × Long-Range Thermal</span>
+                        <span>{totalUnits} × Long-Range Thermal</span>
                         <span style={{ color: '#56d3cc' }}>
-                          +${(NIGHT_VISION_MONTHLY * config.units.length).toLocaleString()}/mo
+                          +${(NIGHT_VISION_MONTHLY * totalUnits).toLocaleString()}/mo
                         </span>
                       </div>
                     )}
@@ -2147,9 +2213,9 @@ function LVTConfigurator() {
                           alignItems: 'center',
                           marginBottom: '8px'
                         }}>
-                          <span>{config.units.length} × {pkg?.name}</span>
+                          <span>{totalUnits} × {pkg?.name}</span>
                           <span style={{ color: '#56d3cc' }}>
-                            +${(pkg?.monthlyPrice * config.units.length).toLocaleString()}/mo
+                            +${(pkg?.monthlyPrice * totalUnits).toLocaleString()}/mo
                           </span>
                         </div>
                       );
@@ -2278,6 +2344,7 @@ function LVTConfigurator() {
                         : address;
                       return {
                         locationZip: address.zipCode,
+                        unitCount: unitsByZip[address.zipCode] || 0,
                         sameAsBilling: address.sameAsBilling ? 'Yes' : 'No',
                         street: source.street,
                         city: source.city,
@@ -2293,12 +2360,14 @@ function LVTConfigurator() {
                       orderId: `LVT-${Date.now()}`,
                       
                       // Configuration Summary
-                      unitCount: config.units.length,
+                      unitCount: totalUnits,
                       deploymentZips: config.units.map(u => u.zipCode).join(', '),
                       deploymentDetails: config.units.map((u, idx) => 
-                        `Unit ${idx + 1}: Zip ${u.zipCode}${u.needsGenerator ? ' (+ Generator)' : ''}`
+                        `Location ${idx + 1}: ${u.quantity} ${u.quantity === 1 ? 'Unit' : 'Units'} • Zip ${u.zipCode}${u.needsGenerator ? ' (+ Generator)' : ''}`
                       ).join(' | '),
-                      generatorsNeeded: config.units.filter(u => u.needsGenerator).length,
+                      generatorsNeeded: config.units
+                        .filter(u => u.needsGenerator)
+                        .reduce((sum, unit) => sum + (unit.quantity || 0), 0),
                       
                       // Hardware Options
                       ndaaCompliant: config.ndaaCompliant ? 'Yes' : 'No',
@@ -2360,7 +2429,7 @@ function LVTConfigurator() {
                         const verificationNote = verified
                           ? ''
                           : '\n\nNote: The request was sent, but the browser could not verify a response due to cross-origin restrictions.';
-                        alert(`Thank you for your lease request!\n\n${config.units.length} LVT D3 Mobile ${config.units.length === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${verificationNote}`);
+                        alert(`Thank you for your lease request!\n\n${totalUnits} LVT D3 Mobile ${totalUnits === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${verificationNote}`);
                         
                         // Optional: Reset form or redirect
                         // setCurrentStep(0);
