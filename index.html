@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LVT Mobile Security Unit Configurator</title>
+  <link rel="stylesheet" href="style.css">
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -387,114 +388,13 @@ function LVTConfigurator() {
   };
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #1b1e23 0%, #272a2f 50%, #1b1e23 100%)',
-      color: '#ffffff',
-      fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      overflow: 'hidden'
-    }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800;900&display=swap');
-        
-        * {
-          margin: 0;
-          padding: 0;
-          box-sizing: border-box;
-        }
-        
-        @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(30px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        
-        @keyframes glow {
-          0%, 100% {
-            box-shadow: 0 0 20px rgba(86, 211, 204, 0.4);
-          }
-          50% {
-            box-shadow: 0 0 40px rgba(86, 211, 204, 0.7);
-          }
-        }
-        
-        .option-card {
-          animation: slideUp 0.6s ease-out forwards;
-          animation-fill-mode: forwards;
-          transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
-        }
-        
-        .option-card:hover {
-          transform: translateY(-4px);
-        }
-        
-        .selected-card {
-          animation: glow 2s ease-in-out infinite;
-        }
-        
-        .step-indicator {
-          transition: all 0.3s ease;
-        }
-        
-        .step-indicator.active {
-          transform: scale(1.1);
-        }
-        
-        .gradient-text {
-          background: linear-gradient(135deg, #56d3cc, #7de8e0);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-        }
-
-        ::-webkit-scrollbar {
-          width: 10px;
-        }
-
-        ::-webkit-scrollbar-track {
-          background: #1b1e23;
-        }
-
-        ::-webkit-scrollbar-thumb {
-          background: rgba(86, 211, 204, 0.3);
-          border-radius: 5px;
-        }
-        
-        .noise-bg {
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          opacity: 0.03;
-          z-index: 0;
-          pointer-events: none;
-          background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-        }
-      `}</style>
-
+    <div className="app-shell">
       <div className="noise-bg"></div>
 
       {/* Header */}
-      <header style={{
-        padding: '20px 48px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        borderBottom: '1px solid rgba(255,255,255,0.12)',
-        backdropFilter: 'blur(10px)',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100,
-        background: 'rgba(39, 42, 47, 0.95)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <header className="app-header">
+        <div className="header-left">
+          <div className="header-brand">
             <svg 
               xmlns="http://www.w3.org/2000/svg" 
               width="60" 
@@ -520,31 +420,12 @@ function LVTConfigurator() {
               </div>
             </div>
           </div>
-          <div style={{ 
-            height: '40px', 
-            width: '1px', 
-            background: 'rgba(255,255,255,0.2)',
-            margin: '0 8px'
-          }}></div>
-          <div style={{
-            fontSize: '11px',
-            fontWeight: '600',
-            letterSpacing: '0.5px',
-            color: 'rgba(255,255,255,0.7)',
-            textTransform: 'uppercase',
-            maxWidth: '200px',
-            lineHeight: '1.3'
-          }}>
+          <div className="header-divider"></div>
+          <div className="header-subtitle">
             Configure Your Security System
           </div>
         </div>
-        <div style={{ 
-          display: 'flex', 
-          gap: '32px',
-          fontSize: '13px',
-          fontWeight: '600',
-          letterSpacing: '0.5px'
-        }}>
+        <div className="steps-nav">
           {steps.map((step, idx) => (
             <div
               key={step}
@@ -562,88 +443,34 @@ function LVTConfigurator() {
       </header>
 
       {/* Main Content */}
-      <main style={{
-        maxWidth: '1400px',
-        margin: '0 auto',
-        padding: '80px 48px',
-        position: 'relative',
-        zIndex: 1
-      }}>
+      <main className="main-content">
         
         {/* Step 0: Location */}
         {currentStep === 0 && (
           <div>
-            <h2 style={{
-              fontSize: '48px',
-              fontWeight: '700',
-              marginBottom: '16px',
-              letterSpacing: '-1px',
-              lineHeight: '1.1'
-            }}>
+            <h2 className="hero-title">
               Surveillance, Deterrence, <br />and Versatility
             </h2>
-            <p style={{
-              fontSize: '18px',
-              color: 'rgba(255,255,255,0.8)',
-              marginBottom: '40px',
-              fontWeight: '400',
-              maxWidth: '600px',
-              lineHeight: '1.6'
-            }}>
+            <p className="hero-intro">
               Meet LVT's lineup of intelligent security solutions, each leveraging AI to deter crime automatically. Rapidly-deployable as mobile units, wall mounts, or pole mounts, every unit is expertly configured to match your specific security needs.
             </p>
 
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '5fr 7fr',
-              gap: '48px',
-              marginBottom: '64px',
-              alignItems: 'center'
-            }}>
+            <div className="hero-grid">
               {/* Product Details */}
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column'
-              }}>
-                <h3 style={{
-                  fontSize: '14px',
-                  fontWeight: '800',
-                  textTransform: 'uppercase',
-                  letterSpacing: '1px',
-                  marginBottom: '24px',
-                  color: 'rgba(255,255,255,0.9)'
-                }}>
+              <div className="product-details">
+                <h3 className="product-title">
                   Mobile Security Units
                 </h3>
                 
-                <p style={{
-                  fontSize: '16px',
-                  color: 'rgba(255,255,255,0.8)',
-                  marginBottom: '24px',
-                  lineHeight: '1.6',
-                  maxWidth: '500px'
-                }}>
+                <p className="product-copy">
                   LVT's mobile units are a versatile, rapidly deployable solution to a wide range of security needs. Each self-contained unit includes solar panels, cellular connectivity, powerful lighting, a loud speaker, and a configurable selection of high-end cameras.
                 </p>
 
-                <p style={{
-                  fontSize: '15px',
-                  fontWeight: '600',
-                  color: 'rgba(255,255,255,0.9)',
-                  marginBottom: '12px'
-                }}>
+                <p className="needs-title">
                   For those who need:
                 </p>
 
-                <ul style={{
-                  listStyle: 'none',
-                  padding: 0,
-                  margin: 0,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '10px',
-                  marginBottom: '32px'
-                }}>
+                <ul className="needs-list">
                   {[
                     'Extremely rapid deployment',
                     'On- or off-grid connectivity',
@@ -672,31 +499,17 @@ function LVTConfigurator() {
                   ))}
                 </ul>
 
-                <div style={{
-                  fontSize: '42px',
-                  fontWeight: '900',
-                  marginBottom: '8px',
-                  color: '#56d3cc',
-                  letterSpacing: '-1.5px'
-                }}>
+                <div className="price-amount">
                   ${BASE_MONTHLY_LEASE.toLocaleString()}
                   <span style={{ fontSize: '18px', color: 'rgba(255,255,255,0.6)', fontWeight: '600', marginLeft: '8px' }}>/month</span>
                 </div>
-                <p style={{
-                  fontSize: '13px',
-                  color: 'rgba(255,255,255,0.5)',
-                  fontWeight: '500'
-                }}>
+                <p className="price-caption">
                   Base monthly lease per unit
                 </p>
               </div>
 
               {/* Product Image */}
-              <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'flex-start'
-              }}>
+              <div className="product-image">
                 <img 
                   src="https://cdn.prod.website-files.com/674d649ddd92d4cd09236107/68c180ba911caf0351e75fde_81d8df77eec8c23c496c2124ef88fd43_liveunit2%201%402x.avif"
                   alt="LVT Mobile Security Unit with solar panel and camera mast"
