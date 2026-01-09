@@ -2496,6 +2496,10 @@ function LVTConfigurator() {
                         addressFull: `${source.street}, ${source.city}, ${source.state} ${source.zip}`
                       };
                     });
+                    const shippingByZip = resolvedShippingAddresses.reduce((acc, address) => {
+                      acc[address.locationZip] = address;
+                      return acc;
+                    }, {});
 
                     const orderData = {
                       // Order Info
@@ -2511,15 +2515,17 @@ function LVTConfigurator() {
                           `Location ${locationIdx + 1}: ${unit.quantity} ${unit.quantity === 1 ? 'Unit' : 'Units'} • ${getUnitType(unit.unitType).name} • Zip ${location.zipCode}${unit.needsGenerator ? ' (+ Generator)' : ''}`
                         )
                       ).join(' | '),
-                      unitBreakdown: config.locations.flatMap((location, locationIdx) =>
-                        location.units.map(unit => ({
+                      unitBreakdown: config.locations.flatMap((location, locationIdx) => {
+                        const shippingAddress = shippingByZip[location.zipCode] || null;
+                        return location.units.map(unit => ({
                           location: locationIdx + 1,
                           unitType: getUnitType(unit.unitType).name,
                           quantity: unit.quantity || 0,
                           zipCode: location.zipCode,
-                          needsGenerator: unit.needsGenerator ? 'Yes' : 'No'
-                        }))
-                      ),
+                          needsGenerator: unit.needsGenerator ? 'Yes' : 'No',
+                          shippingAddress
+                        }));
+                      }),
                       generatorsNeeded: config.locations.reduce((sum, location) => {
                         const locationGenerators = location.units
                           .filter(unit => getUnitType(unit.unitType).generatorEligible && unit.needsGenerator)
