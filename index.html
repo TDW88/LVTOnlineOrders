@@ -739,7 +739,14 @@ function LVTConfigurator() {
 
               {/* Product Image */}
               <div className="product-image">
-                <div className="unit-image-grid">
+                <div
+                  className="unit-image-grid"
+                  style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                  gap: '16px',
+                  width: '100%'
+                }}>
                   {UNIT_TYPES.map(unit => (
                     <div key={unit.id} style={{
                       background: 'rgba(27, 30, 35, 0.6)',
@@ -880,7 +887,10 @@ function LVTConfigurator() {
                       )}
                     </div>
 
-                    <div className="location-zip-grid">
+                    <div
+                      className="location-zip-grid"
+                      style={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: '16px' }}
+                    >
                       <div>
                         <label style={{
                           display: 'block',
@@ -936,6 +946,10 @@ function LVTConfigurator() {
                           key={unit.id}
                           className="unit-row"
                           style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1.5fr auto',
+                          gap: '16px',
+                          alignItems: 'center',
                           background: 'rgba(255,255,255,0.04)',
                           border: '1px solid rgba(255,255,255,0.08)',
                           borderRadius: '10px',
@@ -1239,7 +1253,13 @@ function LVTConfigurator() {
               </div>
             )}
 
-            <div className="options-grid">
+            <div
+              className="options-grid"
+              style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, 1fr)',
+              gap: '24px'
+            }}>
               {/* NDAA Compliant Toggle */}
               <div
                 className={`option-card ${config.ndaaCompliant ? 'selected-card' : ''}`}
@@ -1475,7 +1495,14 @@ function LVTConfigurator() {
               Enhance your security units with advanced software capabilities for detection, alerting, and fleet management
             </p>
 
-            <div className="software-grid">
+            <div
+              className="software-grid"
+              style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1.1fr',
+              gap: '40px',
+              alignItems: 'start'
+            }}>
               <div style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -1637,6 +1664,9 @@ function LVTConfigurator() {
             <div
               className="lease-grid"
               style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '24px',
               maxWidth: '1000px',
               margin: '0 auto'
             }}>
@@ -1788,7 +1818,10 @@ function LVTConfigurator() {
                   Contact Information
                 </h3>
                 
-                <div className="contact-grid">
+                <div
+                  className="contact-grid"
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}
+                >
                   <div>
                     <label style={{
                       display: 'block',
@@ -1986,7 +2019,10 @@ function LVTConfigurator() {
                     }}
                   />
 
-                  <div className="address-grid">
+                  <div
+                    className="address-grid"
+                    style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '16px' }}
+                  >
                     <input
                       type="text"
                       value={config.contactInfo.billingAddress.city}
@@ -2138,7 +2174,10 @@ function LVTConfigurator() {
                             }}
                           />
 
-                          <div className="address-grid">
+                          <div
+                            className="address-grid"
+                            style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '16px' }}
+                          >
                             <input
                               type="text"
                               value={address?.city || ''}
@@ -2221,7 +2260,13 @@ function LVTConfigurator() {
               Review your lease configuration and connect with an LVT specialist to finalize your deployment
             </p>
             
-            <div className="review-grid">
+            <div
+              className="review-grid"
+              style={{
+              display: 'grid',
+              gridTemplateColumns: '2fr 1fr',
+              gap: '28px'
+            }}>
               <div style={{
                 background: 'rgba(255,255,255,0.04)',
                 border: '1px solid rgba(255,255,255,0.1)',

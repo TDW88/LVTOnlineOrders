@@ -221,67 +221,6 @@ body {
   align-items: flex-start;
 }
 
-.main-content h2 {
-  font-size: clamp(30px, 5vw, 48px);
-}
-
-.unit-image-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 16px;
-  width: 100%;
-}
-
-.location-zip-grid {
-  display: grid;
-  grid-template-columns: 2fr 3fr;
-  gap: 16px;
-}
-
-.unit-row {
-  display: grid;
-  grid-template-columns: 1fr 1.5fr auto;
-  gap: 16px;
-  align-items: center;
-}
-
-.options-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 24px;
-}
-
-.software-grid {
-  display: grid;
-  grid-template-columns: 1fr 1.1fr;
-  gap: 40px;
-  align-items: start;
-}
-
-.lease-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-}
-
-.contact-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.address-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
-  gap: 16px;
-}
-
-.review-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 28px;
-}
-
 @media (max-width: 960px) {
   .app-header {
     flex-direction: column;
@@ -336,6 +275,18 @@ body {
     padding: 32px 16px;
   }
 
+  .hero-title {
+    font-size: 34px;
+  }
+
+  .hero-intro {
+    font-size: 16px;
+  }
+
+  .main-content h2 {
+    font-size: 32px !important;
+  }
+
   .price-amount {
     font-size: 32px;
   }
@@ -363,17 +314,6 @@ body {
   .address-grid,
   .review-grid {
     grid-template-columns: 1fr !important;
-  }
-
-  .steps-nav {
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    gap: 12px;
-    padding-bottom: 8px;
-  }
-
-  .step-indicator {
-    white-space: nowrap;
   }
 
   .unit-row {
