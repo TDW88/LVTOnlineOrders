@@ -499,6 +499,13 @@ function LVTConfigurator() {
                   src="https://cdn.prod.website-files.com/674d649ddd92d4cd09236107/68c180ba911caf0351e75fde_81d8df77eec8c23c496c2124ef88fd43_liveunit2%201%402x.avif"
                   alt="LVT Mobile Security Unit with solar panel and camera mast"
                   className="location-image"
+                  style={{
+                    width: '100%',
+                    maxWidth: '605px',
+                    maxHeight: '360px',
+                    height: 'auto',
+                    objectFit: 'contain'
+                  }}
                   onError={(e) => {
                     e.target.style.display = 'none';
                   }}
@@ -528,6 +535,14 @@ function LVTConfigurator() {
                 </div>
                 
                 <div className="location-summary">
+                <div style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.6)',
+                  fontWeight: '600',
+                  background: 'rgba(86, 211, 204, 0.15)',
+                  padding: '8px 16px',
+                  borderRadius: '8px'
+                }}>
                   {totalUnits} {totalUnits === 1 ? 'Unit' : 'Units'}
                 </div>
               </div>
@@ -543,6 +558,35 @@ function LVTConfigurator() {
                     <div className="location-grid">
                       <div>
                         <label className="location-label">
+                  <div key={unit.id} style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    display: 'flex',
+                    gap: '16px',
+                    alignItems: 'center'
+                  }}>
+                    <div style={{
+                      fontSize: '18px',
+                      fontWeight: '800',
+                      color: '#56d3cc',
+                      minWidth: '80px'
+                    }}>
+                      Location {index + 1}
+                    </div>
+                    
+                    <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px' }}>
+                      <div>
+                        <label style={{
+                          display: 'block',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          marginBottom: '8px',
+                          color: 'rgba(255,255,255,0.7)'
+                        }}>
                           Units at location
                         </label>
                         <input
@@ -577,6 +621,15 @@ function LVTConfigurator() {
                       </div>
                       <div>
                         <label className="location-label">
+                        <label style={{
+                          display: 'block',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          marginBottom: '8px',
+                          color: 'rgba(255,255,255,0.7)'
+                        }}>
                           Deployment Zip Code
                         </label>
                         <input
