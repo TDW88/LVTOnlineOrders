@@ -138,7 +138,7 @@ body {
 }
 
 .hero-title {
-  font-size: 48px;
+  font-size: clamp(32px, 5vw, 48px);
   font-weight: 700;
   margin-bottom: 16px;
   letter-spacing: -1px;
@@ -146,7 +146,7 @@ body {
 }
 
 .hero-intro {
-  font-size: 18px;
+  font-size: clamp(16px, 2.2vw, 18px);
   color: rgba(255, 255, 255, 0.8);
   margin-bottom: 40px;
   font-weight: 400;
@@ -221,117 +221,19 @@ body {
   align-items: flex-start;
 }
 
-.location-config {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  padding: 40px;
-  max-width: 900px;
-  margin: 0 auto;
-}
-
-.location-config-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 32px;
-  gap: 16px;
-}
-
-.location-summary {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.6);
-  font-weight: 600;
-  background: rgba(86, 211, 204, 0.15);
-  padding: 8px 16px;
-  border-radius: 8px;
-}
-
-.location-inputs {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-.location-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 20px;
-  display: flex;
-  gap: 16px;
-  align-items: center;
-}
-
-.location-title {
-  font-size: 18px;
-  font-weight: 800;
-  color: #56d3cc;
-  min-width: 80px;
-}
-
-.location-grid {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 1fr 2fr;
-  gap: 16px;
-}
-
-.location-label {
-  display: block;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 8px;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.hero-feature {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  font-size: 15px;
-  color: rgba(255, 255, 255, 0.8);
-  font-weight: 400;
-  padding-left: 4px;
-}
-
-.hero-feature-dot {
-  width: 6px;
-  height: 6px;
-  background: #56d3cc;
-  border-radius: 50%;
-  margin-top: 7px;
-  min-width: 6px;
-}
-
-.price-unit {
-  font-size: 18px;
-  color: rgba(255, 255, 255, 0.6);
-  font-weight: 600;
-  margin-left: 8px;
-}
-
-.location-image {
-  width: 100%;
-  max-width: 605px;
-  max-height: 360px;
-  height: auto;
-  object-fit: contain;
-}
-
-@media (max-width: 1024px) {
+@media (max-width: 960px) {
   .app-header {
-    padding: 16px 24px;
     flex-direction: column;
+    align-items: flex-start;
     gap: 16px;
+    padding: 16px 24px;
   }
 
   .steps-nav {
+    width: 100%;
     flex-wrap: wrap;
-    justify-content: center;
+    gap: 16px;
+    justify-content: flex-start;
   }
 
   .main-content {
@@ -340,95 +242,95 @@ body {
 
   .hero-grid {
     grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 768px) {
-  .app-header {
-    align-items: flex-start;
-  }
-
-  .steps-nav {
-    justify-content: flex-start;
-    gap: 16px;
-    font-size: 12px;
-  }
-
-  .header-subtitle {
-    max-width: none;
-  }
-
-  .main-content {
-    padding: 32px 20px 80px;
-  }
-
-  .hero-title {
-    font-size: 36px;
-  }
-
-  .hero-intro {
-    font-size: 16px;
-  }
-
-  .hero-grid {
     gap: 32px;
   }
 
-  .location-config {
-    padding: 24px;
-  }
-
-  .location-config-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .location-card {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .location-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .location-title {
-    min-width: unset;
+  .product-details,
+  .product-image {
+    width: 100%;
   }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 640px) {
   .app-header {
     padding: 16px;
   }
 
-  .steps-nav {
-    display: none;
+  .header-left {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
   }
 
   .header-divider {
     display: none;
   }
 
-  .header-left {
-    gap: 12px;
+  .header-subtitle {
+    max-width: none;
+    font-size: 10px;
+  }
+
+  .main-content {
+    padding: 32px 16px;
   }
 
   .hero-title {
-    font-size: 32px;
+    font-size: 34px;
+  }
+
+  .hero-intro {
+    font-size: 16px;
+  }
+
+  .main-content h2 {
+    font-size: 32px !important;
   }
 
   .price-amount {
     font-size: 32px;
   }
 
-  .price-unit {
-    font-size: 16px;
+  .unit-image-grid {
+    grid-template-columns: 1fr !important;
   }
 
-  .location-summary {
+  .units-config-card {
+    padding: 24px !important;
+  }
+
+  .units-config-header {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 16px;
+  }
+
+  .location-zip-grid,
+  .unit-row,
+  .options-grid,
+  .software-grid,
+  .lease-grid,
+  .contact-grid,
+  .address-grid,
+  .review-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .unit-row {
+    align-items: stretch !important;
+  }
+
+  .unit-row button {
     width: 100%;
-    text-align: center;
+  }
+
+  .option-card {
+    padding: 24px;
+  }
+
+  .review-summary-card {
+    position: static !important;
+    top: auto !important;
   }
 }
 

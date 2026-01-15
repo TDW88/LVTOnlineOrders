@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LVT Mobile Security Unit Configurator</title>
+  <title>LVT Security Unit Configurator</title>
   <link rel="stylesheet" href="style.css">
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -39,12 +39,69 @@
       </svg>
     );
 
+const UNIT_TYPES = [
+  {
+    id: 'mobile',
+    name: 'Mobile Security Unit',
+    pluralName: 'Mobile Security Units',
+    baseMonthly: 2000,
+    image: 'https://cdn.prod.website-files.com/674d649ddd92d4cd09236107/68c180ba911caf0351e75fde_81d8df77eec8c23c496c2124ef88fd43_liveunit2%201%402x.avif',
+    imageAlt: 'LVT Mobile Security Unit with solar panel and camera mast',
+    description: "LVT's mobile units are a versatile, rapidly deployable solution to a wide range of security needs. Each self-contained unit includes solar panels, cellular connectivity, powerful lighting, a loud speaker, and a configurable selection of high-end cameras.",
+    needs: [
+      'Extremely rapid deployment',
+      'On- or off-grid connectivity',
+      'Adjustable, mobile coverage',
+      'Automatic detection and deterrence'
+    ],
+    generatorEligible: true
+  },
+  {
+    id: 'wall',
+    name: 'Wall Mount Unit',
+    pluralName: 'Wall Mount Units',
+    baseMonthly: 1500,
+    image: 'https://cdn.prod.website-files.com/674d649ddd92d4cd09236107/6838e36d3efe8b49f00fbc74_Wall-Mount.avif',
+    imageAlt: 'LVT Wall Mount security unit',
+    description: 'Wall mount units deliver fixed-position surveillance with a compact footprint, ideal for permanent coverage of entryways, loading zones, and building perimeters.',
+    needs: [
+      'Permanent coverage for fixed locations',
+      'Compact installation footprint',
+      'Consistent power availability',
+      'Full-time deterrence at entry points'
+    ],
+    generatorEligible: false
+  },
+  {
+    id: 'pole',
+    name: 'Pole Mount Unit',
+    pluralName: 'Pole Mount Units',
+    baseMonthly: 1500,
+    image: 'https://cdn.prod.website-files.com/674d649ddd92d4cd09236107/6838e69664a5f147d98afd9f_Pole-Mount.avif',
+    imageAlt: 'LVT Pole Mount security unit',
+    description: 'Pole mount units bring elevated coverage for lots, campuses, and large perimeters, delivering robust deterrence with a streamlined installation.',
+    needs: [
+      'Elevated coverage over wide areas',
+      'Minimal on-site footprint',
+      'Always-on monitoring for lots or campuses',
+      'Deterrence with long-range visibility'
+    ],
+    generatorEligible: false
+  }
+];
+
 function LVTConfigurator() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [config, setConfig] = useState({
-    units: [
-      { id: 1, zipCode: '', needsGenerator: false, quantity: 1 }
+    locations: [
+      {
+        id: 1,
+        zipCode: '',
+        units: [
+          { id: 1, unitType: 'mobile', needsGenerator: false, quantity: 1 }
+        ]
+      }
     ],
     ndaaCompliant: false,
     nightVision: false,
@@ -53,6 +110,8 @@ function LVTConfigurator() {
     contactInfo: {
       email: '',
       phone: '',
+      companyName: '',
+      fullName: '',
       billingAddress: {
         street: '',
         city: '',
@@ -63,8 +122,7 @@ function LVTConfigurator() {
     }
   });
 
-  // Base price for D3 Mobile Unit (monthly lease)
-  const BASE_MONTHLY_LEASE = 2000;
+  const getUnitType = (unitTypeId) => UNIT_TYPES.find(type => type.id === unitTypeId) || UNIT_TYPES[0];
   
   // Generator cost (monthly)
   const GENERATOR_MONTHLY = 1000;
@@ -107,15 +165,19 @@ function LVTConfigurator() {
 
   const steps = ['Location', 'Hardware', 'Software', 'Lease Term', 'Contact Info', 'Review'];
 
-  const totalUnits = config.units.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+  const totalUnits = config.locations.reduce((sum, location) => {
+    const locationTotal = location.units.reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
+    return sum + locationTotal;
+  }, 0);
 
   const uniqueLocationZips = [
-    ...new Set(config.units.map(unit => unit.zipCode).filter(zip => zip.length === 5))
+    ...new Set(config.locations.map(location => location.zipCode).filter(zip => zip.length === 5))
   ];
 
-  const unitsByZip = config.units.reduce((acc, unit) => {
-    if (unit.zipCode.length === 5) {
-      acc[unit.zipCode] = (acc[unit.zipCode] || 0) + (unit.quantity || 0);
+  const unitsByZip = config.locations.reduce((acc, location) => {
+    if (location.zipCode.length === 5) {
+      const locationTotal = location.units.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+      acc[location.zipCode] = (acc[location.zipCode] || 0) + locationTotal;
     }
     return acc;
   }, {});
@@ -155,6 +217,28 @@ function LVTConfigurator() {
     });
   }, [uniqueLocationZips.join('|')]);
 
+  useEffect(() => {
+    setConfig(prev => {
+      const nextLocations = prev.locations.map(location => ({
+        ...location,
+        units: location.units.map(unit => {
+          const unitType = getUnitType(unit.unitType);
+          if (unitType.generatorEligible) {
+            return unit;
+          }
+          return { ...unit, needsGenerator: false };
+        })
+      }));
+      const hasChanges = nextLocations.some((location, idx) =>
+        location.units.some((unit, unitIdx) => unit.needsGenerator !== prev.locations[idx].units[unitIdx].needsGenerator)
+      );
+      if (!hasChanges) {
+        return prev;
+      }
+      return { ...prev, locations: nextLocations };
+    });
+  }, [config.locations]);
+
   // Simulate zip code lookup for generator requirements
   // In production, this would call an API
   const checkGeneratorRequirement = (zip) => {
@@ -174,57 +258,171 @@ function LVTConfigurator() {
 
 
 
-  const addUnit = () => {
-    const newId = Math.max(...config.units.map(u => u.id)) + 1;
+  const addLocation = () => {
+    const newId = Math.max(...config.locations.map(location => location.id)) + 1;
     setConfig(prev => ({
       ...prev,
-      units: [...prev.units, { id: newId, zipCode: '', needsGenerator: false, quantity: 1 }]
+      locations: [
+        ...prev.locations,
+        {
+          id: newId,
+          zipCode: '',
+          units: [{ id: 1, unitType: 'mobile', needsGenerator: false, quantity: 1 }]
+        }
+      ]
     }));
   };
 
-  const removeUnit = (id) => {
-    if (config.units.length > 1) {
+  const removeLocation = (locationId) => {
+    if (config.locations.length > 1) {
       setConfig(prev => ({
         ...prev,
-        units: prev.units.filter(u => u.id !== id)
+        locations: prev.locations.filter(location => location.id !== locationId)
       }));
     }
   };
 
-  const updateUnitZipCode = (id, zipCode) => {
+  const updateLocationZipCode = (locationId, zipCode) => {
     setConfig(prev => ({
       ...prev,
-      units: prev.units.map(u => 
-        u.id === id ? { ...u, zipCode } : u
+      locations: prev.locations.map(location =>
+        location.id === locationId ? { ...location, zipCode } : location
       )
     }));
   };
 
-  const updateUnitQuantity = (id, quantity) => {
+  const addUnitToLocation = (locationId) => {
     setConfig(prev => ({
       ...prev,
-      units: prev.units.map(u =>
-        u.id === id ? { ...u, quantity } : u
-      )
+      locations: prev.locations.map(location => {
+        if (location.id !== locationId) {
+          return location;
+        }
+        const nextId = Math.max(...location.units.map(unit => unit.id)) + 1;
+        return {
+          ...location,
+          units: [...location.units, { id: nextId, unitType: 'mobile', needsGenerator: false, quantity: 1 }]
+        };
+      })
     }));
   };
 
-  const checkGeneratorForUnit = (id, zip) => {
+  const removeUnitFromLocation = (locationId, unitId) => {
+    setConfig(prev => ({
+      ...prev,
+      locations: prev.locations.map(location => {
+        if (location.id !== locationId) {
+          return location;
+        }
+        if (location.units.length === 1) {
+          return location;
+        }
+        return {
+          ...location,
+          units: location.units.filter(unit => unit.id !== unitId)
+        };
+      })
+    }));
+  };
+
+  const updateUnitQuantity = (locationId, unitId, quantity) => {
+    setConfig(prev => ({
+      ...prev,
+      locations: prev.locations.map(location => {
+        if (location.id !== locationId) {
+          return location;
+        }
+        return {
+          ...location,
+          units: location.units.map(unit =>
+            unit.id === unitId ? { ...unit, quantity } : unit
+          )
+        };
+      })
+    }));
+  };
+
+  const updateUnitType = (locationId, unitId, unitTypeId) => {
+    setConfig(prev => ({
+      ...prev,
+      locations: prev.locations.map(location => {
+        if (location.id !== locationId) {
+          return location;
+        }
+        return {
+          ...location,
+          units: location.units.map(unit => {
+            if (unit.id !== unitId) {
+              return unit;
+            }
+            const unitType = getUnitType(unitTypeId);
+            if (!unitType.generatorEligible) {
+              return { ...unit, unitType: unitTypeId, needsGenerator: false };
+            }
+            const needsGenerator = location.zipCode.length === 5
+              ? checkGeneratorRequirement(location.zipCode)
+              : unit.needsGenerator;
+            return { ...unit, unitType: unitTypeId, needsGenerator };
+          })
+        };
+      })
+    }));
+  };
+
+  const checkGeneratorForUnit = (locationId, unitId, zip) => {
+    const location = config.locations.find(entry => entry.id === locationId);
+    if (!location) {
+      return;
+    }
+    const unit = location.units.find(entry => entry.id === unitId);
+    if (!unit) {
+      return;
+    }
+    const unitType = getUnitType(unit.unitType);
+    if (!unitType.generatorEligible) {
+      setConfig(prev => ({
+        ...prev,
+        locations: prev.locations.map(loc => {
+          if (loc.id !== locationId) {
+            return loc;
+          }
+          return {
+            ...loc,
+            units: loc.units.map(line =>
+              line.id === unitId ? { ...line, needsGenerator: false } : line
+            )
+          };
+        })
+      }));
+      return;
+    }
     const needsGen = checkGeneratorRequirement(zip);
     setConfig(prev => ({
       ...prev,
-      units: prev.units.map(u => 
-        u.id === id ? { ...u, needsGenerator: needsGen } : u
-      )
+      locations: prev.locations.map(loc => {
+        if (loc.id !== locationId) {
+          return loc;
+        }
+        return {
+          ...loc,
+          units: loc.units.map(line =>
+            line.id === unitId ? { ...line, needsGenerator: needsGen } : line
+          )
+        };
+      })
     }));
   };
 
   const handleZipCodeSubmit = () => {
-    const allZipsValid = config.units.every(u => u.zipCode.length === 5 && u.quantity > 0);
+    const allZipsValid = config.locations.every(location =>
+      location.zipCode.length === 5 && location.units.every(unit => unit.quantity > 0)
+    );
     if (allZipsValid) {
-      // Check generator requirements for all units
-      config.units.forEach(unit => {
-        checkGeneratorForUnit(unit.id, unit.zipCode);
+      // Check generator requirements for mobile units only
+      config.locations.forEach(location => {
+        location.units.forEach(unit => {
+          checkGeneratorForUnit(location.id, unit.id, location.zipCode);
+        });
       });
       setCurrentStep(1);
     }
@@ -233,8 +431,14 @@ function LVTConfigurator() {
   const calculateMonthlyTotal = () => {
     const unitCount = totalUnits;
     
-    // Base cost per unit (monthly)
-    let perUnitMonthly = BASE_MONTHLY_LEASE;
+    const baseMonthlyTotal = config.locations.reduce((sum, location) => {
+      const locationTotal = location.units.reduce((unitSum, unit) => {
+        const unitType = getUnitType(unit.unitType);
+        return unitSum + (unitType.baseMonthly * (unit.quantity || 0));
+      }, 0);
+      return sum + locationTotal;
+    }, 0);
+    let perUnitMonthly = 0;
     
     // Add hardware options (applied to all units)
     if (config.ndaaCompliant) {
@@ -245,12 +449,15 @@ function LVTConfigurator() {
     }
     
     // Calculate base cost for all units
-    let monthlyTotal = perUnitMonthly * unitCount;
+    let monthlyTotal = baseMonthlyTotal + (perUnitMonthly * unitCount);
     
     // Add generators (varies by unit location)
-    const generatorCount = config.units
-      .filter(u => u.needsGenerator)
-      .reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+    const generatorCount = config.locations.reduce((sum, location) => {
+      const locationGenerators = location.units
+        .filter(unit => getUnitType(unit.unitType).generatorEligible && unit.needsGenerator)
+        .reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
+      return sum + locationGenerators;
+    }, 0);
     monthlyTotal += generatorCount * GENERATOR_MONTHLY;
     
     // Add software packages (per unit)
@@ -274,8 +481,14 @@ function LVTConfigurator() {
   const calculateMonthlyForTerm = (termMonths) => {
     const unitCount = totalUnits;
     
-    // Base cost per unit (monthly)
-    let perUnitMonthly = BASE_MONTHLY_LEASE;
+    const baseMonthlyTotal = config.locations.reduce((sum, location) => {
+      const locationTotal = location.units.reduce((unitSum, unit) => {
+        const unitType = getUnitType(unit.unitType);
+        return unitSum + (unitType.baseMonthly * (unit.quantity || 0));
+      }, 0);
+      return sum + locationTotal;
+    }, 0);
+    let perUnitMonthly = 0;
     
     // Add hardware options (applied to all units)
     if (config.ndaaCompliant) {
@@ -286,12 +499,15 @@ function LVTConfigurator() {
     }
     
     // Calculate base cost for all units
-    let monthlyTotal = perUnitMonthly * unitCount;
+    let monthlyTotal = baseMonthlyTotal + (perUnitMonthly * unitCount);
     
     // Add generators (varies by unit location)
-    const generatorCount = config.units
-      .filter(u => u.needsGenerator)
-      .reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+    const generatorCount = config.locations.reduce((sum, location) => {
+      const locationGenerators = location.units
+        .filter(unit => getUnitType(unit.unitType).generatorEligible && unit.needsGenerator)
+        .reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
+      return sum + locationGenerators;
+    }, 0);
     monthlyTotal += generatorCount * GENERATOR_MONTHLY;
     
     // Add software packages (per unit)
@@ -364,14 +580,16 @@ function LVTConfigurator() {
 
   const canProceed = () => {
     if (currentStep === 0) {
-      return config.units.every(u => u.zipCode.length === 5 && u.quantity > 0);
+      return config.locations.every(location =>
+        location.zipCode.length === 5 && location.units.every(unit => unit.quantity > 0)
+      );
     }
     if (currentStep === 1) return true; // Hardware options are optional
     if (currentStep === 2) return true; // Software packages are optional
     if (currentStep === 3) return config.leaseTerm !== null; // Lease term required
     if (currentStep === 4) {
       // Contact info required
-      const { email, phone, billingAddress, shippingAddresses } = config.contactInfo;
+      const { email, phone, companyName, fullName, billingAddress, shippingAddresses } = config.contactInfo;
       const billingValid = billingAddress.street && billingAddress.city && 
                           billingAddress.state && billingAddress.zip;
       const shippingValid = uniqueLocationZips.length > 0
@@ -382,10 +600,24 @@ function LVTConfigurator() {
           return address.street && address.city && address.state && address.zip;
         })
         : false;
-      return email && phone && billingValid && shippingValid;
+      return email && phone && companyName && fullName && billingValid && shippingValid;
     }
     return true;
   };
+
+  const generatorUnits = config.locations.flatMap(location =>
+    location.units
+      .filter(unit => getUnitType(unit.unitType).generatorEligible && unit.needsGenerator)
+      .map(unit => ({ ...unit, locationId: location.id, locationZip: location.zipCode }))
+  );
+  const generatorUnitCount = generatorUnits.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+  const baseMonthlyTotal = config.locations.reduce((sum, location) => {
+    const locationTotal = location.units.reduce((unitSum, unit) => {
+      const unitType = getUnitType(unit.unitType);
+      return unitSum + (unitType.baseMonthly * (unit.quantity || 0));
+    }, 0);
+    return sum + locationTotal;
+  }, 0);
 
   return (
     <div className="app-shell">
@@ -459,34 +691,46 @@ function LVTConfigurator() {
               {/* Product Details */}
               <div className="product-details">
                 <h3 className="product-title">
-                  Mobile Security Units
+                  Security Unit Lineup
                 </h3>
                 
                 <p className="product-copy">
-                  LVT's mobile units are a versatile, rapidly deployable solution to a wide range of security needs. Each self-contained unit includes solar panels, cellular connectivity, powerful lighting, a loud speaker, and a configurable selection of high-end cameras.
+                  Select the right unit type for each deployment location below. Mobile units support generator backup; wall and pole mounts do not require a generator.
                 </p>
 
                 <p className="needs-title">
-                  For those who need:
+                  Available unit types:
                 </p>
 
                 <ul className="needs-list">
-                  {[
-                    'Extremely rapid deployment',
-                    'On- or off-grid connectivity',
-                    'Adjustable, mobile coverage',
-                    'Automatic detection and deterrence'
-                  ].map((feature, idx) => (
-                    <li key={idx} className="hero-feature">
-                      <span className="hero-feature-dot"></span>
-                      <span>{feature}</span>
+                  {UNIT_TYPES.map((unit, idx) => (
+                    <li key={idx} style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '12px',
+                      fontSize: '15px',
+                      color: 'rgba(255,255,255,0.8)',
+                      fontWeight: '400',
+                      paddingLeft: '4px'
+                    }}>
+                      <span style={{
+                        width: '6px',
+                        height: '6px',
+                        background: '#56d3cc',
+                        borderRadius: '50%',
+                        marginTop: '7px',
+                        minWidth: '6px'
+                      }}></span>
+                      <span>
+                        {unit.name} • ${unit.baseMonthly.toLocaleString()}/mo
+                      </span>
                     </li>
                   ))}
                 </ul>
 
                 <div className="price-amount">
-                  ${BASE_MONTHLY_LEASE.toLocaleString()}
-                  <span className="price-unit">/month</span>
+                  Starting at $1,500
+                  <span style={{ fontSize: '18px', color: 'rgba(255,255,255,0.6)', fontWeight: '600', marginLeft: '8px' }}>/month</span>
                 </div>
                 <p className="price-caption">
                   Base monthly lease per unit
@@ -495,27 +739,65 @@ function LVTConfigurator() {
 
               {/* Product Image */}
               <div className="product-image">
-                <img 
-                  src="https://cdn.prod.website-files.com/674d649ddd92d4cd09236107/68c180ba911caf0351e75fde_81d8df77eec8c23c496c2124ef88fd43_liveunit2%201%402x.avif"
-                  alt="LVT Mobile Security Unit with solar panel and camera mast"
-                  className="location-image"
+                <div
+                  className="unit-image-grid"
                   style={{
-                    width: '100%',
-                    maxWidth: '605px',
-                    maxHeight: '360px',
-                    height: 'auto',
-                    objectFit: 'contain'
-                  }}
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                  }}
-                />
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                  gap: '16px',
+                  width: '100%'
+                }}>
+                  {UNIT_TYPES.map(unit => (
+                    <div key={unit.id} style={{
+                      background: 'rgba(27, 30, 35, 0.6)',
+                      borderRadius: '14px',
+                      padding: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '10px'
+                    }}>
+                      <img
+                        src={unit.image}
+                        alt={unit.imageAlt}
+                        style={{
+                          width: '100%',
+                          maxWidth: '200px',
+                          height: '140px',
+                          objectFit: 'contain'
+                        }}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                      <div style={{ fontSize: '13px', fontWeight: '700', color: 'rgba(255,255,255,0.75)' }}>
+                        {unit.name}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
             {/* Units Configuration Section */}
-            <div className="location-config">
-              <div className="location-config-header">
+            <div
+              className="units-config-card"
+              style={{
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: '16px',
+              padding: '40px',
+              maxWidth: '900px',
+              margin: '0 auto'
+            }}>
+              <div
+                className="units-config-header"
+                style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '32px'
+              }}>
                 <div>
                   <h3 style={{
                     fontSize: '24px',
@@ -530,7 +812,7 @@ function LVTConfigurator() {
                     color: 'rgba(255,255,255,0.7)',
                     lineHeight: '1.6'
                   }}>
-                    Configure unit quantities and deployment locations. Generator requirements will be determined for each location.
+                    Configure unit quantities and deployment locations. Generator requirements apply to mobile units only.
                   </p>
                 </div>
                 
@@ -564,61 +846,55 @@ function LVTConfigurator() {
                     borderRadius: '12px',
                     padding: '20px',
                     display: 'flex',
-                    gap: '16px',
-                    alignItems: 'center'
+                    flexDirection: 'column',
+                    gap: '16px'
                   }}>
                     <div style={{
-                      fontSize: '18px',
-                      fontWeight: '800',
-                      color: '#56d3cc',
-                      minWidth: '80px'
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '16px',
+                      flexWrap: 'wrap'
                     }}>
-                      Location {index + 1}
-                    </div>
-                    
-                    <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px' }}>
-                      <div>
-                        <label style={{
-                          display: 'block',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px',
-                          marginBottom: '8px',
-                          color: 'rgba(255,255,255,0.7)'
-                        }}>
-                          Units at location
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={unit.quantity}
-                          onChange={(e) => {
-                            const nextValue = Math.max(1, parseInt(e.target.value || '1', 10));
-                            updateUnitQuantity(unit.id, nextValue);
-                          }}
-                          style={{
-                            width: '100%',
-                            padding: '12px 16px',
-                            background: 'rgba(39, 42, 47, 0.6)',
-                            border: '2px solid rgba(255,255,255,0.15)',
-                            borderRadius: '8px',
-                            color: '#fff',
-                            fontSize: '16px',
-                            fontWeight: '600',
-                            outline: 'none',
-                            transition: 'all 0.3s ease'
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.border = '2px solid #56d3cc';
-                            e.target.style.background = 'rgba(86, 211, 204, 0.08)';
-                          }}
-                          onBlur={(e) => {
-                            e.target.style.border = '2px solid rgba(255,255,255,0.15)';
-                            e.target.style.background = 'rgba(39, 42, 47, 0.6)';
-                          }}
-                        />
+                      <div style={{
+                        fontSize: '18px',
+                        fontWeight: '800',
+                        color: '#56d3cc'
+                      }}>
+                        Location {locationIndex + 1}
                       </div>
+                      {config.locations.length > 1 && (
+                        <button
+                          onClick={() => removeLocation(location.id)}
+                          style={{
+                            padding: '10px 14px',
+                            background: 'rgba(255, 50, 50, 0.15)',
+                            border: '1px solid rgba(255, 50, 50, 0.3)',
+                            borderRadius: '8px',
+                            color: '#ff6b6b',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px'
+                          }}
+                          onMouseOver={(e) => {
+                            e.target.style.background = 'rgba(255, 50, 50, 0.25)';
+                          }}
+                          onMouseOut={(e) => {
+                            e.target.style.background = 'rgba(255, 50, 50, 0.15)';
+                          }}
+                        >
+                          Remove Location
+                        </button>
+                      )}
+                    </div>
+
+                    <div
+                      className="location-zip-grid"
+                      style={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: '16px' }}
+                    >
                       <div>
                         <label className="location-label">
                         <label style={{
@@ -635,10 +911,10 @@ function LVTConfigurator() {
                         <input
                           type="text"
                           maxLength="5"
-                          value={unit.zipCode}
+                          value={location.zipCode}
                           onChange={(e) => {
                             const value = e.target.value.replace(/\D/g, '');
-                            updateUnitZipCode(unit.id, value);
+                            updateLocationZipCode(location.id, value);
                           }}
                           placeholder="Enter 5-digit zip"
                           style={{
@@ -665,37 +941,174 @@ function LVTConfigurator() {
                       </div>
                     </div>
 
-                    {config.units.length > 1 && (
-                      <button
-                        onClick={() => removeUnit(unit.id)}
-                        style={{
-                          padding: '12px',
-                          background: 'rgba(255, 50, 50, 0.15)',
-                          border: '1px solid rgba(255, 50, 50, 0.3)',
-                          borderRadius: '8px',
-                          color: '#ff6b6b',
-                          cursor: 'pointer',
-                          transition: 'all 0.3s ease',
-                          fontSize: '14px',
-                          fontWeight: '700'
-                        }}
-                        onMouseOver={(e) => {
-                          e.target.style.background = 'rgba(255, 50, 50, 0.25)';
-                        }}
-                        onMouseOut={(e) => {
-                          e.target.style.background = 'rgba(255, 50, 50, 0.15)';
-                        }}
-                      >
-                        Remove
-                      </button>
-                    )}
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px'
+                    }}>
+                      {location.units.map((unit) => (
+                        <div
+                          key={unit.id}
+                          className="unit-row"
+                          style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1.5fr auto',
+                          gap: '16px',
+                          alignItems: 'center',
+                          background: 'rgba(255,255,255,0.04)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: '10px',
+                          padding: '16px'
+                        }}>
+                          <div>
+                            <label style={{
+                              display: 'block',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.5px',
+                              marginBottom: '8px',
+                              color: 'rgba(255,255,255,0.7)'
+                            }}>
+                              Units at location
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={unit.quantity}
+                              onChange={(e) => {
+                                const nextValue = Math.max(1, parseInt(e.target.value || '1', 10));
+                                updateUnitQuantity(location.id, unit.id, nextValue);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                background: 'rgba(39, 42, 47, 0.6)',
+                                border: '2px solid rgba(255,255,255,0.15)',
+                                borderRadius: '8px',
+                                color: '#fff',
+                                fontSize: '16px',
+                                fontWeight: '600',
+                                outline: 'none',
+                                transition: 'all 0.3s ease'
+                              }}
+                              onFocus={(e) => {
+                                e.target.style.border = '2px solid #56d3cc';
+                                e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                              }}
+                              onBlur={(e) => {
+                                e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                                e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{
+                              display: 'block',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.5px',
+                              marginBottom: '8px',
+                              color: 'rgba(255,255,255,0.7)'
+                            }}>
+                              Unit type
+                            </label>
+                            <select
+                              value={unit.unitType}
+                              onChange={(e) => updateUnitType(location.id, unit.id, e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                background: 'rgba(39, 42, 47, 0.6)',
+                                border: '2px solid rgba(255,255,255,0.15)',
+                                borderRadius: '8px',
+                                color: '#fff',
+                                fontSize: '14px',
+                                fontWeight: '600',
+                                outline: 'none',
+                                transition: 'all 0.3s ease'
+                              }}
+                              onFocus={(e) => {
+                                e.target.style.border = '2px solid #56d3cc';
+                                e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                              }}
+                              onBlur={(e) => {
+                                e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                                e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                              }}
+                            >
+                              {UNIT_TYPES.map(option => (
+                                <option key={option.id} value={option.id}>
+                                  {option.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          {location.units.length > 1 && (
+                            <button
+                              onClick={() => removeUnitFromLocation(location.id, unit.id)}
+                              style={{
+                                padding: '10px',
+                                background: 'rgba(255, 50, 50, 0.15)',
+                                border: '1px solid rgba(255, 50, 50, 0.3)',
+                                borderRadius: '8px',
+                                color: '#ff6b6b',
+                                cursor: 'pointer',
+                                transition: 'all 0.3s ease',
+                                fontSize: '12px',
+                                fontWeight: '700',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.5px'
+                              }}
+                              onMouseOver={(e) => {
+                                e.target.style.background = 'rgba(255, 50, 50, 0.25)';
+                              }}
+                              onMouseOut={(e) => {
+                                e.target.style.background = 'rgba(255, 50, 50, 0.15)';
+                              }}
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={() => addUnitToLocation(location.id)}
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        background: 'rgba(255,255,255,0.08)',
+                        border: '2px dashed rgba(255,255,255,0.2)',
+                        borderRadius: '10px',
+                        color: '#fff',
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}
+                      onMouseOver={(e) => {
+                        e.target.style.background = 'rgba(86, 211, 204, 0.15)';
+                        e.target.style.borderColor = '#56d3cc';
+                      }}
+                      onMouseOut={(e) => {
+                        e.target.style.background = 'rgba(255,255,255,0.08)';
+                        e.target.style.borderColor = 'rgba(255,255,255,0.2)';
+                      }}
+                    >
+                      + Add Another Unit Type
+                    </button>
                   </div>
                 ))}
               </div>
 
-              {/* Add Unit Button */}
+              {/* Add Location Button */}
               <button
-                onClick={addUnit}
+                onClick={addLocation}
                 style={{
                   width: '100%',
                   padding: '14px',
@@ -720,7 +1133,7 @@ function LVTConfigurator() {
                   e.target.style.borderColor = 'rgba(255,255,255,0.2)';
                 }}
               >
-                + Add Another Unit
+                + Add Another Location
               </button>
 
             </div>
@@ -731,7 +1144,6 @@ function LVTConfigurator() {
         {currentStep === 1 && (
           <div>
             <h2 style={{
-              fontSize: '48px',
               fontWeight: '900',
               marginBottom: '12px',
               letterSpacing: '-1.5px'
@@ -745,7 +1157,7 @@ function LVTConfigurator() {
               fontWeight: '400',
               maxWidth: '800px'
             }}>
-              Customize your D3 Mobile Units with specialized hardware options for enhanced capabilities
+              Customize your security units with specialized hardware options for enhanced capabilities
             </p>
 
             {/* Unit Count Summary */}
@@ -773,7 +1185,7 @@ function LVTConfigurator() {
             </div>
 
             {/* Generator Recommendations */}
-            {config.units.some(u => u.needsGenerator) && (
+            {generatorUnits.length > 0 && (
               <div style={{
                 background: 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))',
                 border: '2px solid #56d3cc',
@@ -802,15 +1214,15 @@ function LVTConfigurator() {
                       lineHeight: '1.6',
                       marginBottom: '16px'
                     }}>
-                      Based on your deployment locations, {config.units.filter(u => u.needsGenerator).reduce((sum, unit) => sum + (unit.quantity || 0), 0)} of your {totalUnits} {totalUnits === 1 ? 'unit requires' : 'units require'} smart generator backup for optimal uptime:
+                      Based on your deployment locations, {generatorUnitCount} of your {totalUnits} {totalUnits === 1 ? 'unit requires' : 'units require'} smart generator backup for optimal uptime:
                     </p>
                     <div style={{
                       display: 'flex',
                       flexWrap: 'wrap',
                       gap: '12px'
                     }}>
-                      {config.units.filter(u => u.needsGenerator).map((unit, idx) => (
-                        <div key={unit.id} style={{
+                      {generatorUnits.map((unit, idx) => (
+                        <div key={`${unit.locationId}-${unit.id}`} style={{
                           background: 'rgba(86, 211, 204, 0.15)',
                           padding: '8px 16px',
                           borderRadius: '8px',
@@ -818,7 +1230,7 @@ function LVTConfigurator() {
                           fontWeight: '700',
                           color: '#fff'
                         }}>
-                          Location {config.units.indexOf(unit) + 1}: {unit.quantity} {unit.quantity === 1 ? 'Unit' : 'Units'} • {unit.zipCode}
+                          Location {config.locations.findIndex(location => location.id === unit.locationId) + 1}: {unit.quantity} {unit.quantity === 1 ? 'Unit' : 'Units'} • {unit.locationZip}
                         </div>
                       ))}
                     </div>
@@ -832,21 +1244,23 @@ function LVTConfigurator() {
                       color: '#56d3cc',
                       whiteSpace: 'nowrap'
                     }}>
-                      +${(GENERATOR_MONTHLY * config.units.filter(u => u.needsGenerator).reduce((sum, unit) => sum + (unit.quantity || 0), 0)).toLocaleString()}
+                      +${(GENERATOR_MONTHLY * generatorUnitCount).toLocaleString()}
                     </div>
                     <div style={{
                       fontSize: '11px',
                       color: 'rgba(255,255,255,0.6)',
                       marginTop: '4px'
                     }}>
-                      {config.units.filter(u => u.needsGenerator).reduce((sum, unit) => sum + (unit.quantity || 0), 0)} {config.units.filter(u => u.needsGenerator).reduce((sum, unit) => sum + (unit.quantity || 0), 0) === 1 ? 'generator' : 'generators'}
+                      {generatorUnitCount} {generatorUnitCount === 1 ? 'generator' : 'generators'}
                     </div>
                   </div>
                 </div>
               </div>
             )}
 
-            <div style={{
+            <div
+              className="options-grid"
+              style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(2, 1fr)',
               gap: '24px'
@@ -1070,7 +1484,6 @@ function LVTConfigurator() {
         {currentStep === 2 && (
           <div>
             <h2 style={{
-              fontSize: '48px',
               fontWeight: '900',
               marginBottom: '12px',
               letterSpacing: '-1.5px'
@@ -1080,53 +1493,60 @@ function LVTConfigurator() {
             <p style={{
               fontSize: '18px',
               color: 'rgba(255,255,255,0.7)',
-              marginBottom: '56px',
+              marginBottom: '32px',
               fontWeight: '400',
               maxWidth: '800px'
             }}>
-              Enhance your D3 Mobile Unit with advanced software capabilities for detection, alerting, and fleet management
+              Enhance your security units with advanced software capabilities for detection, alerting, and fleet management
             </p>
 
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '24px'
+            <div
+              className="software-grid"
+              style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1.1fr',
+              gap: '40px',
+              alignItems: 'start'
             }}>
-              {softwarePackages.map((pkg, idx) => (
-                <div
-                  key={pkg.id}
-                  className={`option-card ${config.softwarePackages.includes(pkg.id) ? 'selected-card' : ''}`}
-                  onClick={() => toggleSoftwarePackage(pkg.id)}
-                  style={{
-                    animationDelay: `${idx * 0.1}s`,
-                    background: config.softwarePackages.includes(pkg.id)
-                      ? 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))'
-                      : 'rgba(255,255,255,0.04)',
-                    border: config.softwarePackages.includes(pkg.id)
-                      ? '2px solid #56d3cc'
-                      : '2px solid rgba(255,255,255,0.1)',
-                    borderRadius: '16px',
-                    padding: '32px',
-                    cursor: 'pointer',
-                    position: 'relative',
-                    transition: 'all 0.3s ease'
-                  }}
-                >
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr auto',
-                    gap: '32px',
-                    alignItems: 'flex-start'
-                  }}>
-                    <div>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '20px'
+              }}>
+                {softwarePackages.map((pkg, idx) => (
+                  <div
+                    key={pkg.id}
+                    className={`option-card ${config.softwarePackages.includes(pkg.id) ? 'selected-card' : ''}`}
+                    onClick={() => toggleSoftwarePackage(pkg.id)}
+                    style={{
+                      animationDelay: `${idx * 0.1}s`,
+                      background: config.softwarePackages.includes(pkg.id)
+                        ? 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))'
+                        : 'rgba(255,255,255,0.04)',
+                      border: config.softwarePackages.includes(pkg.id)
+                        ? '2px solid #56d3cc'
+                        : '2px solid rgba(255,255,255,0.1)',
+                      borderRadius: '16px',
+                      padding: '24px',
+                      cursor: 'pointer',
+                      position: 'relative',
+                      transition: 'all 0.3s ease'
+                    }}
+                  >
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '16px',
+                      marginBottom: '12px'
+                    }}>
                       <div style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '16px',
-                        marginBottom: '16px'
+                        gap: '12px'
                       }}>
                         <h3 style={{
-                          fontSize: '26px',
+                          fontSize: '22px',
                           fontWeight: '800',
                           letterSpacing: '-0.5px'
                         }}>
@@ -1135,92 +1555,91 @@ function LVTConfigurator() {
                         {config.softwarePackages.includes(pkg.id) && (
                           <CheckCircle style={{
                             color: '#56d3cc',
-                            width: '28px',
-                            height: '28px'
+                            width: '24px',
+                            height: '24px'
                           }} />
                         )}
                       </div>
-
-                      <p style={{
-                        fontSize: '15px',
-                        color: 'rgba(255,255,255,0.7)',
-                        marginBottom: '24px',
-                        lineHeight: '1.6'
-                      }}>
-                        {pkg.description}
-                      </p>
-
                       <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(2, 1fr)',
-                        gap: '12px'
-                      }}>
-                        {pkg.features.map((feature, fidx) => (
-                          <div key={fidx} style={{
-                            display: 'flex',
-                            alignItems: 'flex-start',
-                            gap: '8px',
-                            fontSize: '13px',
-                            color: 'rgba(255,255,255,0.8)',
-                            fontWeight: '500'
-                          }}>
-                            <div style={{
-                              width: '5px',
-                              height: '5px',
-                              background: config.softwarePackages.includes(pkg.id) ? '#56d3cc' : 'rgba(255,255,255,0.4)',
-                              borderRadius: '50%',
-                              marginTop: '6px',
-                              minWidth: '5px'
-                            }}></div>
-                            <span>{feature}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div style={{
-                      textAlign: 'right'
-                    }}>
-                      <div style={{
-                        fontSize: '36px',
+                        fontSize: '22px',
                         fontWeight: '900',
-                        color: config.softwarePackages.includes(pkg.id) ? '#56d3cc' : 'rgba(255,255,255,0.6)',
-                        letterSpacing: '-1px'
+                        color: config.softwarePackages.includes(pkg.id) ? '#56d3cc' : 'rgba(255,255,255,0.6)'
                       }}>
                         +${pkg.monthlyPrice.toLocaleString()}/mo
                       </div>
-                      <div style={{
-                        fontSize: '12px',
-                        color: 'rgba(255,255,255,0.5)',
-                        marginTop: '4px',
-                        fontWeight: '600'
-                      }}>
-                        per unit/month
-                      </div>
                     </div>
+                    <p style={{
+                      fontSize: '14px',
+                      color: 'rgba(255,255,255,0.7)',
+                      lineHeight: '1.6'
+                    }}>
+                      {pkg.description}
+                    </p>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
 
-            {config.softwarePackages.length === 0 && (
-              <div style={{
-                marginTop: '32px',
-                padding: '24px',
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: '12px',
-                textAlign: 'center'
-              }}>
-                <p style={{
-                  fontSize: '14px',
-                  color: 'rgba(255,255,255,0.6)',
-                  fontWeight: '500'
-                }}>
-                  Software packages are optional. You can add them now or upgrade later.
-                </p>
+                {config.softwarePackages.length === 0 && (
+                  <div style={{
+                    padding: '20px',
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '12px',
+                    textAlign: 'center'
+                  }}>
+                    <p style={{
+                      fontSize: '14px',
+                      color: 'rgba(255,255,255,0.6)',
+                      fontWeight: '500'
+                    }}>
+                      Software packages are optional. You can add them now or upgrade later.
+                    </p>
+                  </div>
+                )}
               </div>
-            )}
+
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '32px'
+              }}>
+                <div style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  borderRadius: '18px',
+                  padding: '28px',
+                  border: '1px solid rgba(255,255,255,0.08)'
+                }}>
+                  <img
+                    src="https://cdn.prod.website-files.com/674d649ddd92d4cd09236107/6851ead327e187b7b9e87552_Software-Lineup%203.avif"
+                    alt="Software lineup dashboard screens"
+                    style={{
+                      width: '100%',
+                      borderRadius: '16px',
+                      marginBottom: '20px',
+                      objectFit: 'cover'
+                    }}
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                  <h3 style={{
+                    fontSize: '24px',
+                    fontWeight: '800',
+                    marginBottom: '12px',
+                    letterSpacing: '-0.6px'
+                  }}>
+                    Monitor, Analyze, Respond: Smarter Security for 24/7 Protection
+                  </h3>
+                  <p style={{
+                    fontSize: '15px',
+                    color: 'rgba(255,255,255,0.7)',
+                    lineHeight: '1.7'
+                  }}>
+                    Long gone are the days of sorting through false alarms, monitoring a screen all day, and reacting only after damage has been done. With LVT’s cloud-based platform, you can take control in real time—stopping incidents before they happen, streamlining responses, and proactively protecting your site.
+                  </p>
+                </div>
+
+              </div>
+            </div>
           </div>
         )}
 
@@ -1229,7 +1648,6 @@ function LVTConfigurator() {
         {currentStep === 3 && (
           <div>
             <h2 style={{
-              fontSize: '48px',
               fontWeight: '700',
               marginBottom: '16px',
               letterSpacing: '-1px',
@@ -1248,7 +1666,9 @@ function LVTConfigurator() {
               Choose the lease duration that works best for your security needs. Longer terms offer greater savings.
             </p>
 
-            <div style={{
+            <div
+              className="lease-grid"
+              style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(3, 1fr)',
               gap: '24px',
@@ -1362,7 +1782,6 @@ function LVTConfigurator() {
         {currentStep === 4 && (
           <div>
             <h2 style={{
-              fontSize: '48px',
               fontWeight: '700',
               marginBottom: '16px',
               letterSpacing: '-1px',
@@ -1404,7 +1823,90 @@ function LVTConfigurator() {
                   Contact Information
                 </h3>
                 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div
+                  className="contact-grid"
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}
+                >
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                      marginBottom: '8px',
+                      color: 'rgba(255,255,255,0.7)'
+                    }}>
+                      Company Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={config.contactInfo.companyName}
+                      onChange={(e) => updateContactInfo('companyName', e.target.value)}
+                      placeholder="Company Name"
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        background: 'rgba(39, 42, 47, 0.6)',
+                        border: '2px solid rgba(255,255,255,0.15)',
+                        borderRadius: '8px',
+                        color: '#fff',
+                        fontSize: '16px',
+                        fontWeight: '500',
+                        outline: 'none',
+                        transition: 'all 0.3s ease'
+                      }}
+                      onFocus={(e) => {
+                        e.target.style.border = '2px solid #56d3cc';
+                        e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                        e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                      marginBottom: '8px',
+                      color: 'rgba(255,255,255,0.7)'
+                    }}>
+                      Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={config.contactInfo.fullName}
+                      onChange={(e) => updateContactInfo('fullName', e.target.value)}
+                      placeholder="Full Name"
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        background: 'rgba(39, 42, 47, 0.6)',
+                        border: '2px solid rgba(255,255,255,0.15)',
+                        borderRadius: '8px',
+                        color: '#fff',
+                        fontSize: '16px',
+                        fontWeight: '500',
+                        outline: 'none',
+                        transition: 'all 0.3s ease'
+                      }}
+                      onFocus={(e) => {
+                        e.target.style.border = '2px solid #56d3cc';
+                        e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                        e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                      }}
+                    />
+                  </div>
+
                   <div>
                     <label style={{
                       display: 'block',
@@ -1522,7 +2024,10 @@ function LVTConfigurator() {
                     }}
                   />
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '16px' }}>
+                  <div
+                    className="address-grid"
+                    style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '16px' }}
+                  >
                     <input
                       type="text"
                       value={config.contactInfo.billingAddress.city}
@@ -1674,7 +2179,10 @@ function LVTConfigurator() {
                             }}
                           />
 
-                          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '16px' }}>
+                          <div
+                            className="address-grid"
+                            style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '16px' }}
+                          >
                             <input
                               type="text"
                               value={address?.city || ''}
@@ -1739,13 +2247,12 @@ function LVTConfigurator() {
         {currentStep === 5 && (
           <div>
             <h2 style={{
-              fontSize: '48px',
               fontWeight: '700',
               marginBottom: '16px',
               letterSpacing: '-1px',
               lineHeight: '1.1'
             }}>
-              Your Custom <span className="gradient-text">D3 Mobile Units</span>
+              Your Custom <span className="gradient-text">Security Units</span>
             </h2>
             <p style={{
               fontSize: '18px',
@@ -1758,7 +2265,9 @@ function LVTConfigurator() {
               Review your lease configuration and connect with an LVT specialist to finalize your deployment
             </p>
             
-            <div style={{
+            <div
+              className="review-grid"
+              style={{
               display: 'grid',
               gridTemplateColumns: '2fr 1fr',
               gap: '28px'
@@ -1800,9 +2309,9 @@ function LVTConfigurator() {
                     alignItems: 'center',
                     marginBottom: '16px'
                   }}>
-                    <span>{totalUnits} × D3 Mobile Security {totalUnits === 1 ? 'Unit' : 'Units'}</span>
+                    <span>{totalUnits} × Security Units</span>
                     <span style={{ color: '#56d3cc' }}>
-                      ${(BASE_MONTHLY_LEASE * totalUnits).toLocaleString()}
+                      ${baseMonthlyTotal.toLocaleString()}
                     </span>
                   </div>
                   
@@ -1813,8 +2322,14 @@ function LVTConfigurator() {
                     gap: '8px',
                     marginTop: '12px'
                   }}>
-                    {config.units.map((unit, idx) => (
-                      <div key={unit.id} style={{
+                    {config.locations.flatMap(location =>
+                      location.units.map(unit => ({
+                        locationId: location.id,
+                        locationZip: location.zipCode,
+                        unit
+                      }))
+                    ).map((entry) => (
+                      <div key={`${entry.locationId}-${entry.unit.id}`} style={{
                         fontSize: '13px',
                         color: 'rgba(255,255,255,0.6)',
                         display: 'flex',
@@ -1827,8 +2342,8 @@ function LVTConfigurator() {
                           background: 'rgba(255,255,255,0.4)',
                           borderRadius: '50%'
                         }}></div>
-                        <span>Location {idx + 1}: {unit.quantity} {unit.quantity === 1 ? 'Unit' : 'Units'} • {unit.zipCode}</span>
-                        {unit.needsGenerator && (
+                        <span>Location {config.locations.findIndex(location => location.id === entry.locationId) + 1}: {entry.unit.quantity} {entry.unit.quantity === 1 ? 'Unit' : 'Units'} • {getUnitType(entry.unit.unitType).name} • {entry.locationZip}</span>
+                        {entry.unit.needsGenerator && (
                           <span style={{
                             background: 'rgba(86, 211, 204, 0.2)',
                             padding: '2px 8px',
@@ -1846,7 +2361,7 @@ function LVTConfigurator() {
                 </div>
 
                 {/* Generators */}
-                    {config.units.some(u => u.needsGenerator) && (
+                    {generatorUnits.length > 0 && (
                       <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                         <div style={{
                           fontSize: '11px',
@@ -1865,9 +2380,9 @@ function LVTConfigurator() {
                       justifyContent: 'space-between',
                       alignItems: 'center'
                     }}>
-                      <span>{config.units.filter(u => u.needsGenerator).reduce((sum, unit) => sum + (unit.quantity || 0), 0)} × Smart Generator Backup</span>
+                      <span>{generatorUnitCount} × Smart Generator Backup</span>
                       <span style={{ color: '#56d3cc' }}>
-                        +${(GENERATOR_MONTHLY * config.units.filter(u => u.needsGenerator).reduce((sum, unit) => sum + (unit.quantity || 0), 0)).toLocaleString()}/mo
+                        +${(GENERATOR_MONTHLY * generatorUnitCount).toLocaleString()}/mo
                       </span>
                     </div>
                     <div style={{
@@ -1973,7 +2488,7 @@ function LVTConfigurator() {
                   </div>
                 )}
 
-                {!config.units.some(u => u.needsGenerator) && !config.ndaaCompliant && !config.nightVision && config.softwarePackages.length === 0 && (
+                {generatorUnits.length === 0 && !config.ndaaCompliant && !config.nightVision && config.softwarePackages.length === 0 && (
                   <div style={{
                     padding: '24px',
                     background: 'rgba(255,255,255,0.02)',
@@ -1991,7 +2506,9 @@ function LVTConfigurator() {
                 )}
               </div>
               
-              <div style={{
+              <div
+                className="review-summary-card"
+                style={{
                 background: 'linear-gradient(135deg, rgba(86, 211, 204, 0.15), rgba(125, 232, 224, 0.08))',
                 border: '2px solid #56d3cc',
                 borderRadius: '16px',
@@ -2096,6 +2613,10 @@ function LVTConfigurator() {
                         addressFull: `${source.street}, ${source.city}, ${source.state} ${source.zip}`
                       };
                     });
+                    const shippingByZip = resolvedShippingAddresses.reduce((acc, address) => {
+                      acc[address.locationZip] = address;
+                      return acc;
+                    }, {});
 
                     const orderData = {
                       // Order Info
@@ -2104,13 +2625,30 @@ function LVTConfigurator() {
                       
                       // Configuration Summary
                       unitCount: totalUnits,
-                      deploymentZips: config.units.map(u => u.zipCode).join(', '),
-                      deploymentDetails: config.units.map((u, idx) => 
-                        `Location ${idx + 1}: ${u.quantity} ${u.quantity === 1 ? 'Unit' : 'Units'} • Zip ${u.zipCode}${u.needsGenerator ? ' (+ Generator)' : ''}`
+                      baseMonthlyTotal,
+                      deploymentZips: config.locations.map(location => location.zipCode).join(', '),
+                      deploymentDetails: config.locations.flatMap((location, locationIdx) =>
+                        location.units.map(unit =>
+                          `Location ${locationIdx + 1}: ${unit.quantity} ${unit.quantity === 1 ? 'Unit' : 'Units'} • ${getUnitType(unit.unitType).name} • Zip ${location.zipCode}${unit.needsGenerator ? ' (+ Generator)' : ''}`
+                        )
                       ).join(' | '),
-                      generatorsNeeded: config.units
-                        .filter(u => u.needsGenerator)
-                        .reduce((sum, unit) => sum + (unit.quantity || 0), 0),
+                      unitBreakdown: config.locations.flatMap((location, locationIdx) => {
+                        const shippingAddress = shippingByZip[location.zipCode] || null;
+                        return location.units.map(unit => ({
+                          location: locationIdx + 1,
+                          unitType: getUnitType(unit.unitType).name,
+                          quantity: unit.quantity || 0,
+                          zipCode: location.zipCode,
+                          needsGenerator: unit.needsGenerator ? 'Yes' : 'No',
+                          shippingAddress
+                        }));
+                      }),
+                      generatorsNeeded: config.locations.reduce((sum, location) => {
+                        const locationGenerators = location.units
+                          .filter(unit => getUnitType(unit.unitType).generatorEligible && unit.needsGenerator)
+                          .reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
+                        return sum + locationGenerators;
+                      }, 0),
                       
                       // Hardware Options
                       ndaaCompliant: config.ndaaCompliant ? 'Yes' : 'No',
@@ -2127,6 +2665,8 @@ function LVTConfigurator() {
                       totalContract: contractTotal,
                       
                       // Contact Information
+                      companyName: config.contactInfo.companyName,
+                      contactName: config.contactInfo.fullName,
                       email: config.contactInfo.email,
                       phone: config.contactInfo.phone,
                       
@@ -2172,7 +2712,7 @@ function LVTConfigurator() {
                         const verificationNote = verified
                           ? ''
                           : '\n\nNote: The request was sent, but the browser could not verify a response due to cross-origin restrictions.';
-                        alert(`Thank you for your lease request!\n\n${totalUnits} LVT D3 Mobile ${totalUnits === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${verificationNote}`);
+                        alert(`Thank you for your lease request!\n\n${totalUnits} Security ${totalUnits === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${verificationNote}`);
                         
                         // Optional: Reset form or redirect
                         // setCurrentStep(0);
