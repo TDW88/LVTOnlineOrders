@@ -816,6 +816,7 @@ function LVTConfigurator() {
                   </p>
                 </div>
                 
+                <div className="location-summary">
                 <div style={{
                   fontSize: '14px',
                   color: 'rgba(255,255,255,0.6)',
@@ -827,16 +828,19 @@ function LVTConfigurator() {
                   {totalUnits} {totalUnits === 1 ? 'Unit' : 'Units'}
                 </div>
               </div>
-
+              
               {/* Unit Inputs */}
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '16px',
-                marginBottom: '24px'
-              }}>
-                {config.locations.map((location, locationIndex) => (
-                  <div key={location.id} style={{
+              <div className="location-inputs">
+                {config.units.map((unit, index) => (
+                  <div key={unit.id} className="location-card">
+                    <div className="location-title">
+                      Location {index + 1}
+                    </div>
+                    
+                    <div className="location-grid">
+                      <div>
+                        <label className="location-label">
+                  <div key={unit.id} style={{
                     background: 'rgba(255,255,255,0.05)',
                     border: '1px solid rgba(255,255,255,0.1)',
                     borderRadius: '12px',
@@ -892,6 +896,7 @@ function LVTConfigurator() {
                       style={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: '16px' }}
                     >
                       <div>
+                        <label className="location-label">
                         <label style={{
                           display: 'block',
                           fontSize: '11px',
