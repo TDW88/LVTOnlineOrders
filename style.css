@@ -221,6 +221,119 @@ body {
   align-items: flex-start;
 }
 
+@media (max-width: 960px) {
+  .app-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 16px 24px;
+  }
+
+  .steps-nav {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: flex-start;
+  }
+
+  .main-content {
+    padding: 48px 24px;
+  }
+
+  .hero-grid {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .product-details,
+  .product-image {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-header {
+    padding: 16px;
+  }
+
+  .header-left {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .header-divider {
+    display: none;
+  }
+
+  .header-subtitle {
+    max-width: none;
+    font-size: 10px;
+  }
+
+  .main-content {
+    padding: 32px 16px;
+  }
+
+  .hero-title {
+    font-size: 34px;
+  }
+
+  .hero-intro {
+    font-size: 16px;
+  }
+
+  .main-content h2 {
+    font-size: 32px !important;
+  }
+
+  .price-amount {
+    font-size: 32px;
+  }
+
+  .unit-image-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .units-config-card {
+    padding: 24px !important;
+  }
+
+  .units-config-header {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 16px;
+  }
+
+  .location-zip-grid,
+  .unit-row,
+  .options-grid,
+  .software-grid,
+  .lease-grid,
+  .contact-grid,
+  .address-grid,
+  .review-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .unit-row {
+    align-items: stretch !important;
+  }
+
+  .unit-row button {
+    width: 100%;
+  }
+
+  .option-card {
+    padding: 24px;
+  }
+
+  .review-summary-card {
+    position: static !important;
+    top: auto !important;
+  }
+}
+
 ::-webkit-scrollbar {
   width: 10px;
 }
