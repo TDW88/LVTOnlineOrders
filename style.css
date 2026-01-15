@@ -138,7 +138,7 @@ body {
 }
 
 .hero-title {
-  font-size: 48px;
+  font-size: clamp(32px, 5vw, 48px);
   font-weight: 700;
   margin-bottom: 16px;
   letter-spacing: -1px;
@@ -146,7 +146,7 @@ body {
 }
 
 .hero-intro {
-  font-size: 18px;
+  font-size: clamp(16px, 2.2vw, 18px);
   color: rgba(255, 255, 255, 0.8);
   margin-bottom: 40px;
   font-weight: 400;
@@ -219,6 +219,179 @@ body {
   display: flex;
   justify-content: center;
   align-items: flex-start;
+}
+
+.main-content h2 {
+  font-size: clamp(30px, 5vw, 48px);
+}
+
+.unit-image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.location-zip-grid {
+  display: grid;
+  grid-template-columns: 2fr 3fr;
+  gap: 16px;
+}
+
+.unit-row {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr auto;
+  gap: 16px;
+  align-items: center;
+}
+
+.options-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+
+.software-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 40px;
+  align-items: start;
+}
+
+.lease-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.contact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.address-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 16px;
+}
+
+.review-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 28px;
+}
+
+@media (max-width: 960px) {
+  .app-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 16px 24px;
+  }
+
+  .steps-nav {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: flex-start;
+  }
+
+  .main-content {
+    padding: 48px 24px;
+  }
+
+  .hero-grid {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .product-details,
+  .product-image {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-header {
+    padding: 16px;
+  }
+
+  .header-left {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .header-divider {
+    display: none;
+  }
+
+  .header-subtitle {
+    max-width: none;
+    font-size: 10px;
+  }
+
+  .main-content {
+    padding: 32px 16px;
+  }
+
+  .price-amount {
+    font-size: 32px;
+  }
+
+  .unit-image-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .units-config-card {
+    padding: 24px !important;
+  }
+
+  .units-config-header {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 16px;
+  }
+
+  .location-zip-grid,
+  .unit-row,
+  .options-grid,
+  .software-grid,
+  .lease-grid,
+  .contact-grid,
+  .address-grid,
+  .review-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .steps-nav {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    gap: 12px;
+    padding-bottom: 8px;
+  }
+
+  .step-indicator {
+    white-space: nowrap;
+  }
+
+  .unit-row {
+    align-items: stretch !important;
+  }
+
+  .unit-row button {
+    width: 100%;
+  }
+
+  .option-card {
+    padding: 24px;
+  }
+
+  .review-summary-card {
+    position: static !important;
+    top: auto !important;
+  }
 }
 
 ::-webkit-scrollbar {

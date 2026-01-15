@@ -739,12 +739,7 @@ function LVTConfigurator() {
 
               {/* Product Image */}
               <div className="product-image">
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-                  gap: '16px',
-                  width: '100%'
-                }}>
+                <div className="unit-image-grid">
                   {UNIT_TYPES.map(unit => (
                     <div key={unit.id} style={{
                       background: 'rgba(27, 30, 35, 0.6)',
@@ -778,7 +773,9 @@ function LVTConfigurator() {
             </div>
 
             {/* Units Configuration Section */}
-            <div style={{
+            <div
+              className="units-config-card"
+              style={{
               background: 'rgba(255,255,255,0.03)',
               border: '1px solid rgba(255,255,255,0.12)',
               borderRadius: '16px',
@@ -786,7 +783,9 @@ function LVTConfigurator() {
               maxWidth: '900px',
               margin: '0 auto'
             }}>
-              <div style={{
+              <div
+                className="units-config-header"
+                style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
@@ -881,7 +880,7 @@ function LVTConfigurator() {
                       )}
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: '16px' }}>
+                    <div className="location-zip-grid">
                       <div>
                         <label style={{
                           display: 'block',
@@ -933,11 +932,10 @@ function LVTConfigurator() {
                       gap: '12px'
                     }}>
                       {location.units.map((unit) => (
-                        <div key={unit.id} style={{
-                          display: 'grid',
-                          gridTemplateColumns: '1fr 1.5fr auto',
-                          gap: '16px',
-                          alignItems: 'center',
+                        <div
+                          key={unit.id}
+                          className="unit-row"
+                          style={{
                           background: 'rgba(255,255,255,0.04)',
                           border: '1px solid rgba(255,255,255,0.08)',
                           borderRadius: '10px',
@@ -1127,7 +1125,6 @@ function LVTConfigurator() {
         {currentStep === 1 && (
           <div>
             <h2 style={{
-              fontSize: '48px',
               fontWeight: '900',
               marginBottom: '12px',
               letterSpacing: '-1.5px'
@@ -1242,11 +1239,7 @@ function LVTConfigurator() {
               </div>
             )}
 
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(2, 1fr)',
-              gap: '24px'
-            }}>
+            <div className="options-grid">
               {/* NDAA Compliant Toggle */}
               <div
                 className={`option-card ${config.ndaaCompliant ? 'selected-card' : ''}`}
@@ -1466,7 +1459,6 @@ function LVTConfigurator() {
         {currentStep === 2 && (
           <div>
             <h2 style={{
-              fontSize: '48px',
               fontWeight: '900',
               marginBottom: '12px',
               letterSpacing: '-1.5px'
@@ -1483,12 +1475,7 @@ function LVTConfigurator() {
               Enhance your security units with advanced software capabilities for detection, alerting, and fleet management
             </p>
 
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1.1fr',
-              gap: '40px',
-              alignItems: 'start'
-            }}>
+            <div className="software-grid">
               <div style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -1629,7 +1616,6 @@ function LVTConfigurator() {
         {currentStep === 3 && (
           <div>
             <h2 style={{
-              fontSize: '48px',
               fontWeight: '700',
               marginBottom: '16px',
               letterSpacing: '-1px',
@@ -1648,10 +1634,9 @@ function LVTConfigurator() {
               Choose the lease duration that works best for your security needs. Longer terms offer greater savings.
             </p>
 
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: '24px',
+            <div
+              className="lease-grid"
+              style={{
               maxWidth: '1000px',
               margin: '0 auto'
             }}>
@@ -1762,7 +1747,6 @@ function LVTConfigurator() {
         {currentStep === 4 && (
           <div>
             <h2 style={{
-              fontSize: '48px',
               fontWeight: '700',
               marginBottom: '16px',
               letterSpacing: '-1px',
@@ -1804,7 +1788,7 @@ function LVTConfigurator() {
                   Contact Information
                 </h3>
                 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="contact-grid">
                   <div>
                     <label style={{
                       display: 'block',
@@ -2002,7 +1986,7 @@ function LVTConfigurator() {
                     }}
                   />
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '16px' }}>
+                  <div className="address-grid">
                     <input
                       type="text"
                       value={config.contactInfo.billingAddress.city}
@@ -2154,7 +2138,7 @@ function LVTConfigurator() {
                             }}
                           />
 
-                          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '16px' }}>
+                          <div className="address-grid">
                             <input
                               type="text"
                               value={address?.city || ''}
@@ -2219,7 +2203,6 @@ function LVTConfigurator() {
         {currentStep === 5 && (
           <div>
             <h2 style={{
-              fontSize: '48px',
               fontWeight: '700',
               marginBottom: '16px',
               letterSpacing: '-1px',
@@ -2238,11 +2221,7 @@ function LVTConfigurator() {
               Review your lease configuration and connect with an LVT specialist to finalize your deployment
             </p>
             
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '2fr 1fr',
-              gap: '28px'
-            }}>
+            <div className="review-grid">
               <div style={{
                 background: 'rgba(255,255,255,0.04)',
                 border: '1px solid rgba(255,255,255,0.1)',
@@ -2477,7 +2456,9 @@ function LVTConfigurator() {
                 )}
               </div>
               
-              <div style={{
+              <div
+                className="review-summary-card"
+                style={{
                 background: 'linear-gradient(135deg, rgba(86, 211, 204, 0.15), rgba(125, 232, 224, 0.08))',
                 border: '2px solid #56d3cc',
                 borderRadius: '16px',
