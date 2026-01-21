@@ -90,13 +90,39 @@ const UNIT_TYPES = [
   }
 ];
 
+const EXISTING_LOCATIONS = [
+  {
+    id: 'denver-yard',
+    name: 'Denver Distribution Yard',
+    address: '4700 Franklin St, Denver, CO',
+    zip: '80216',
+    activeUnits: 6
+  },
+  {
+    id: 'phoenix-warehouse',
+    name: 'Phoenix Warehouse Campus',
+    address: '2250 N 35th Ave, Phoenix, AZ',
+    zip: '85009',
+    activeUnits: 4
+  },
+  {
+    id: 'austin-site',
+    name: 'Austin Construction Site',
+    address: '910 Bastrop Hwy, Austin, TX',
+    zip: '78742',
+    activeUnits: 3
+  }
+];
+
 function LVTConfigurator() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [customerType, setCustomerType] = useState('new');
   const [config, setConfig] = useState({
     locations: [
       {
         id: 1,
+        existingLocationId: null,
         zipCode: '',
         units: [
           { id: 1, unitType: 'mobile', needsGenerator: false, quantity: 1 }
@@ -182,6 +208,69 @@ function LVTConfigurator() {
     return acc;
   }, {});
 
+  const selectedExistingLocationIds = config.locations
+    .map(location => location.existingLocationId)
+    .filter(Boolean);
+
+  const remainingExistingLocations = EXISTING_LOCATIONS.filter(
+    location => !selectedExistingLocationIds.includes(location.id)
+  );
+
+  const getAvailableExistingLocations = (currentId) =>
+    EXISTING_LOCATIONS.filter(location =>
+      location.id === currentId || !selectedExistingLocationIds.includes(location.id)
+    );
+
+  const unitUpsellMessage = () => {
+    if (totalUnits <= 1) {
+      return {
+        title: 'Unlock multi-unit savings',
+        message: 'Add a second unit to qualify for a discounted rate on your next deployment.'
+      };
+    }
+    if (totalUnits <= 3) {
+      return {
+        title: 'Scale coverage efficiently',
+        message: 'Add 2+ additional units to reach preferred pricing tiers for existing customers.'
+      };
+    }
+    return {
+      title: 'Fleet expansion perk',
+      message: 'You qualify for fleet pricing—ask your rep about locking in your next multi-site bundle.'
+    };
+  };
+
+  const recommendedPackage = softwarePackages.find(pkg => pkg.id === 'detect-deter');
+
+  const handleCustomerTypeChange = (type) => {
+    setCustomerType(type);
+    setConfig(prev => {
+      if (type === 'existing') {
+        const firstLocation = EXISTING_LOCATIONS[0];
+        return {
+          ...prev,
+          locations: [
+            {
+              ...prev.locations[0],
+              existingLocationId: firstLocation.id,
+              zipCode: firstLocation.zip
+            }
+          ]
+        };
+      }
+      return {
+        ...prev,
+        locations: [
+          {
+            ...prev.locations[0],
+            existingLocationId: null,
+            zipCode: ''
+          }
+        ]
+      };
+    });
+  };
+
   useEffect(() => {
     setConfig(prev => {
       const existing = prev.contactInfo.shippingAddresses || [];
@@ -266,6 +355,7 @@ function LVTConfigurator() {
         ...prev.locations,
         {
           id: newId,
+          existingLocationId: null,
           zipCode: '',
           units: [{ id: 1, unitType: 'mobile', needsGenerator: false, quantity: 1 }]
         }
@@ -287,6 +377,25 @@ function LVTConfigurator() {
       ...prev,
       locations: prev.locations.map(location =>
         location.id === locationId ? { ...location, zipCode } : location
+      )
+    }));
+  };
+
+  const updateExistingLocation = (locationId, existingLocationId) => {
+    const selectedLocation = EXISTING_LOCATIONS.find(location => location.id === existingLocationId);
+    if (!selectedLocation) {
+      return;
+    }
+    setConfig(prev => ({
+      ...prev,
+      locations: prev.locations.map(location =>
+        location.id === locationId
+          ? {
+              ...location,
+              existingLocationId,
+              zipCode: selectedLocation.zip
+            }
+          : location
       )
     }));
   };
@@ -687,6 +796,51 @@ function LVTConfigurator() {
               Meet LVT's lineup of intelligent security solutions, each leveraging AI to deter crime automatically. Rapidly-deployable as mobile units, wall mounts, or pole mounts, every unit is expertly configured to match your specific security needs.
             </p>
 
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '16px',
+              marginBottom: '40px'
+            }}>
+              {[
+                { id: 'new', label: 'New Customer', description: 'Deploy security for a new site or greenfield project.' },
+                { id: 'existing', label: 'Existing Customer', description: 'Add coverage to an active LVT location.' }
+              ].map(option => (
+                <button
+                  key={option.id}
+                  onClick={() => handleCustomerTypeChange(option.id)}
+                  style={{
+                    flex: '1 1 240px',
+                    textAlign: 'left',
+                    padding: '18px 20px',
+                    borderRadius: '14px',
+                    border: customerType === option.id
+                      ? '2px solid #56d3cc'
+                      : '2px solid rgba(255,255,255,0.15)',
+                    background: customerType === option.id
+                      ? 'linear-gradient(135deg, rgba(86, 211, 204, 0.16), rgba(125, 232, 224, 0.06))'
+                      : 'rgba(255,255,255,0.04)',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease'
+                  }}
+                  onMouseOver={(e) => {
+                    e.target.style.borderColor = '#56d3cc';
+                  }}
+                  onMouseOut={(e) => {
+                    e.target.style.borderColor = customerType === option.id ? '#56d3cc' : 'rgba(255,255,255,0.15)';
+                  }}
+                >
+                  <div style={{ fontSize: '14px', fontWeight: '800', marginBottom: '6px' }}>
+                    {option.label}
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.5' }}>
+                    {option.description}
+                  </div>
+                </button>
+              ))}
+            </div>
+
             <div className="hero-grid">
               {/* Product Details */}
               <div className="product-details">
@@ -812,7 +966,9 @@ function LVTConfigurator() {
                     color: 'rgba(255,255,255,0.7)',
                     lineHeight: '1.6'
                   }}>
-                    Configure unit quantities and deployment locations. Generator requirements apply to mobile units only.
+                    {customerType === 'existing'
+                      ? 'Select the existing locations that need more coverage, then add the units you want to deploy.'
+                      : 'Configure unit quantities and deployment locations. Generator requirements apply to mobile units only.'}
                   </p>
                 </div>
                 
@@ -828,6 +984,77 @@ function LVTConfigurator() {
                 </div>
               </div>
 
+              {customerType === 'existing' && (
+                <div style={{
+                  marginBottom: '28px',
+                  padding: '20px 24px',
+                  borderRadius: '14px',
+                  border: '1px solid rgba(86, 211, 204, 0.25)',
+                  background: 'rgba(86, 211, 204, 0.08)',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '16px'
+                }}>
+                  <div style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    background: 'rgba(86, 211, 204, 0.2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: '800',
+                    color: '#56d3cc'
+                  }}>
+                    ↑
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '16px', fontWeight: '800', marginBottom: '6px' }}>
+                      {unitUpsellMessage().title}
+                    </div>
+                    <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)', marginBottom: '12px' }}>
+                      {unitUpsellMessage().message}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                      <button
+                        onClick={() => addUnitToLocation(config.locations[0].id)}
+                        style={{
+                          padding: '10px 16px',
+                          background: '#56d3cc',
+                          color: '#1b1e23',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          fontWeight: '800',
+                          cursor: 'pointer',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
+                        }}
+                      >
+                        Add a unit
+                      </button>
+                      <button
+                        onClick={addLocation}
+                        style={{
+                          padding: '10px 16px',
+                          background: 'rgba(255,255,255,0.08)',
+                          color: '#fff',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          borderRadius: '8px',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
+                        }}
+                      >
+                        Add another location
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Unit Inputs */}
               <div style={{
                 display: 'flex',
@@ -835,8 +1062,11 @@ function LVTConfigurator() {
                 gap: '16px',
                 marginBottom: '24px'
               }}>
-                {config.locations.map((location, locationIndex) => (
-                  <div key={location.id} style={{
+                {config.locations.map((location, locationIndex) => {
+                  const selectedLocation = EXISTING_LOCATIONS.find(entry => entry.id === location.existingLocationId);
+                  const availableLocations = getAvailableExistingLocations(location.existingLocationId);
+                  return (
+                    <div key={location.id} style={{
                     background: 'rgba(255,255,255,0.05)',
                     border: '1px solid rgba(255,255,255,0.1)',
                     borderRadius: '12px',
@@ -858,6 +1088,17 @@ function LVTConfigurator() {
                         color: '#56d3cc'
                       }}>
                         Location {locationIndex + 1}
+                        {customerType === 'existing' && selectedLocation && (
+                          <span style={{
+                            display: 'block',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            color: 'rgba(255,255,255,0.6)',
+                            marginTop: '4px'
+                          }}>
+                            {selectedLocation.name}
+                          </span>
+                        )}
                       </div>
                       {config.locations.length > 1 && (
                         <button
@@ -889,51 +1130,126 @@ function LVTConfigurator() {
 
                     <div
                       className="location-zip-grid"
-                      style={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: '16px' }}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: customerType === 'existing' ? '2fr 2fr' : '2fr 3fr',
+                        gap: '16px'
+                      }}
                     >
-                      <div>
-                        <label style={{
-                          display: 'block',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px',
-                          marginBottom: '8px',
-                          color: 'rgba(255,255,255,0.7)'
-                        }}>
-                          Deployment Zip Code
-                        </label>
-                        <input
-                          type="text"
-                          maxLength="5"
-                          value={location.zipCode}
-                          onChange={(e) => {
-                            const value = e.target.value.replace(/\D/g, '');
-                            updateLocationZipCode(location.id, value);
-                          }}
-                          placeholder="Enter 5-digit zip"
-                          style={{
-                            width: '100%',
+                      {customerType === 'existing' ? (
+                        <>
+                          <div>
+                            <label style={{
+                              display: 'block',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.5px',
+                              marginBottom: '8px',
+                              color: 'rgba(255,255,255,0.7)'
+                            }}>
+                              Existing Location
+                            </label>
+                            <select
+                              value={location.existingLocationId || ''}
+                              onChange={(e) => updateExistingLocation(location.id, e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                background: 'rgba(39, 42, 47, 0.6)',
+                                border: '2px solid rgba(255,255,255,0.15)',
+                                borderRadius: '8px',
+                                color: '#fff',
+                                fontSize: '14px',
+                                fontWeight: '600',
+                                outline: 'none',
+                                transition: 'all 0.3s ease'
+                              }}
+                              onFocus={(e) => {
+                                e.target.style.border = '2px solid #56d3cc';
+                                e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                              }}
+                              onBlur={(e) => {
+                                e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                                e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                              }}
+                            >
+                              <option value="" disabled>Select a location</option>
+                              {availableLocations.map(option => (
+                                <option key={option.id} value={option.id}>
+                                  {option.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div style={{
                             padding: '12px 16px',
-                            background: 'rgba(39, 42, 47, 0.6)',
-                            border: '2px solid rgba(255,255,255,0.15)',
+                            background: 'rgba(39, 42, 47, 0.4)',
                             borderRadius: '8px',
-                            color: '#fff',
-                            fontSize: '16px',
-                            fontWeight: '600',
-                            outline: 'none',
-                            transition: 'all 0.3s ease'
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.border = '2px solid #56d3cc';
-                            e.target.style.background = 'rgba(86, 211, 204, 0.08)';
-                          }}
-                          onBlur={(e) => {
-                            e.target.style.border = '2px solid rgba(255,255,255,0.15)';
-                            e.target.style.background = 'rgba(39, 42, 47, 0.6)';
-                          }}
-                        />
-                      </div>
+                            border: '1px solid rgba(255,255,255,0.08)'
+                          }}>
+                            <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', marginBottom: '6px', fontWeight: '700' }}>
+                              Location details
+                            </div>
+                            {selectedLocation ? (
+                              <>
+                                <div style={{ fontSize: '14px', fontWeight: '700', color: '#fff' }}>{selectedLocation.address}</div>
+                                <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)', marginTop: '4px' }}>
+                                  Zip {selectedLocation.zip} • {selectedLocation.activeUnits} active units
+                                </div>
+                              </>
+                            ) : (
+                              <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>
+                                Choose a location to view details.
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <div>
+                          <label style={{
+                            display: 'block',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px',
+                            marginBottom: '8px',
+                            color: 'rgba(255,255,255,0.7)'
+                          }}>
+                            Deployment Zip Code
+                          </label>
+                          <input
+                            type="text"
+                            maxLength="5"
+                            value={location.zipCode}
+                            onChange={(e) => {
+                              const value = e.target.value.replace(/\D/g, '');
+                              updateLocationZipCode(location.id, value);
+                            }}
+                            placeholder="Enter 5-digit zip"
+                            style={{
+                              width: '100%',
+                              padding: '12px 16px',
+                              background: 'rgba(39, 42, 47, 0.6)',
+                              border: '2px solid rgba(255,255,255,0.15)',
+                              borderRadius: '8px',
+                              color: '#fff',
+                              fontSize: '16px',
+                              fontWeight: '600',
+                              outline: 'none',
+                              transition: 'all 0.3s ease'
+                            }}
+                            onFocus={(e) => {
+                              e.target.style.border = '2px solid #56d3cc';
+                              e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                            }}
+                            onBlur={(e) => {
+                              e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                              e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <div style={{
@@ -1098,37 +1414,55 @@ function LVTConfigurator() {
                       + Add Another Unit Type
                     </button>
                   </div>
-                ))}
+                );
+                })}
               </div>
 
               {/* Add Location Button */}
               <button
                 onClick={addLocation}
+                disabled={customerType === 'existing' && remainingExistingLocations.length === 0}
                 style={{
                   width: '100%',
                   padding: '14px',
-                  background: 'rgba(255,255,255,0.08)',
-                  border: '2px dashed rgba(255,255,255,0.2)',
+                  background: customerType === 'existing' && remainingExistingLocations.length === 0
+                    ? 'rgba(255,255,255,0.03)'
+                    : 'rgba(255,255,255,0.08)',
+                  border: customerType === 'existing' && remainingExistingLocations.length === 0
+                    ? '2px dashed rgba(255,255,255,0.08)'
+                    : '2px dashed rgba(255,255,255,0.2)',
                   borderRadius: '10px',
-                  color: '#fff',
+                  color: customerType === 'existing' && remainingExistingLocations.length === 0
+                    ? 'rgba(255,255,255,0.35)'
+                    : '#fff',
                   fontSize: '14px',
                   fontWeight: '700',
-                  cursor: 'pointer',
+                  cursor: customerType === 'existing' && remainingExistingLocations.length === 0
+                    ? 'not-allowed'
+                    : 'pointer',
                   transition: 'all 0.3s ease',
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
                   marginBottom: '24px'
                 }}
                 onMouseOver={(e) => {
+                  if (customerType === 'existing' && remainingExistingLocations.length === 0) {
+                    return;
+                  }
                   e.target.style.background = 'rgba(86, 211, 204, 0.15)';
                   e.target.style.borderColor = '#56d3cc';
                 }}
                 onMouseOut={(e) => {
+                  if (customerType === 'existing' && remainingExistingLocations.length === 0) {
+                    return;
+                  }
                   e.target.style.background = 'rgba(255,255,255,0.08)';
                   e.target.style.borderColor = 'rgba(255,255,255,0.2)';
                 }}
               >
-                + Add Another Location
+                {customerType === 'existing' && remainingExistingLocations.length === 0
+                  ? 'All existing locations selected'
+                  : '+ Add Another Location'}
               </button>
 
             </div>
@@ -1494,6 +1828,52 @@ function LVTConfigurator() {
             }}>
               Enhance your security units with advanced software capabilities for detection, alerting, and fleet management
             </p>
+
+            {customerType === 'existing' && recommendedPackage && (
+              <div style={{
+                marginBottom: '32px',
+                padding: '22px 26px',
+                borderRadius: '16px',
+                border: '1px solid rgba(86, 211, 204, 0.25)',
+                background: 'rgba(86, 211, 204, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '20px',
+                flexWrap: 'wrap'
+              }}>
+                <div>
+                  <div style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.6px', color: 'rgba(255,255,255,0.6)', marginBottom: '6px', fontWeight: '700' }}>
+                    Recommended for existing sites
+                  </div>
+                  <div style={{ fontSize: '18px', fontWeight: '800', marginBottom: '4px' }}>
+                    Add {recommendedPackage.name} for faster deterrence
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)' }}>
+                    Most existing customers bundle this package to reduce false alarms and automate incident response.
+                  </div>
+                </div>
+                <button
+                  onClick={() => toggleSoftwarePackage(recommendedPackage.id)}
+                  style={{
+                    padding: '12px 18px',
+                    background: config.softwarePackages.includes(recommendedPackage.id) ? 'rgba(255,255,255,0.08)' : '#56d3cc',
+                    color: config.softwarePackages.includes(recommendedPackage.id) ? '#fff' : '#1b1e23',
+                    border: config.softwarePackages.includes(recommendedPackage.id)
+                      ? '1px solid rgba(255,255,255,0.2)'
+                      : 'none',
+                    borderRadius: '10px',
+                    fontSize: '12px',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px'
+                  }}
+                >
+                  {config.softwarePackages.includes(recommendedPackage.id) ? 'Added' : 'Add package'}
+                </button>
+              </div>
+            )}
 
             <div
               className="software-grid"
