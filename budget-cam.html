@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LVT Budget Cam — Order Your Solar Camera</title>
+  <link rel="stylesheet" href="style.css">
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.22.0/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+    const { useState } = React;
+
+    // ---------- Inline icons ----------
+    const CheckCircle = (props) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={props.width || 24} height={props.height || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={props.style}>
+        <circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>
+      </svg>
+    );
+    const Camera = (props) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={props.width || 24} height={props.height || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={props.style}>
+        <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>
+      </svg>
+    );
+    const Sun = (props) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={props.width || 24} height={props.height || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={props.style}>
+        <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+      </svg>
+    );
+    const Signal = (props) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={props.width || 24} height={props.height || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={props.style}>
+        <path d="M2 20h.01M7 20v-4M12 20v-8M17 20V8M22 4v16"/>
+      </svg>
+    );
+    const Truck = (props) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={props.width || 24} height={props.height || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={props.style}>
+        <path d="M14 18V6a2 2 0 0 0-2-2H2v14M14 9h5l3 3v6h-8"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>
+      </svg>
+    );
+    const CreditCard = (props) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={props.width || 24} height={props.height || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={props.style}>
+        <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>
+      </svg>
+    );
+    const FileText = (props) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={props.width || 24} height={props.height || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={props.style}>
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
+      </svg>
+    );
+    const Shield = (props) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={props.width || 24} height={props.height || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={props.style}>
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+    );
+    const ArrowRight = (props) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={props.width || 24} height={props.height || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={props.style}>
+        <path d="M5 12h14M12 5l7 7-7 7"/>
+      </svg>
+    );
+
+    // ---------- Product config (edit pricing here) ----------
+    // Deck base case: $1,000 hardware + $100/mo. Deck range: $500-1,000 hw / $50-100 mo.
+    const HARDWARE_PRICE = 895;      // one-time, per camera
+    const CAMERA_IMAGE = 'images/NewUnitCamera1.jpg';          // clean product shot (hero)
+    const CAMERA_LIFESTYLE = 'images/2024_05_VKX_3.jpg';        // deployed on-site (residential)
+
+    const PLANS = [
+      {
+        id: 'essentials',
+        name: 'Essentials',
+        monthly: 59,
+        tagline: 'Everything you need to keep eyes on a site.',
+        features: [
+          'Live 24/7 view in the LVT app',
+          '14-day cloud recording',
+          'People & vehicle detection',
+          'Solar + 4G/LTE — no wiring, no WiFi'
+        ]
+      },
+      {
+        id: 'pro',
+        name: 'Pro',
+        monthly: 99,
+        badge: 'Most Popular',
+        tagline: 'Detection plus real-time alerts and team access.',
+        features: [
+          'Everything in Essentials',
+          'Real-time push, SMS & email alerts',
+          '30-day cloud recording',
+          'Alert management & multi-user access'
+        ]
+      }
+    ];
+
+    const ADDONS = [
+      {
+        id: 'mount',
+        name: 'Rapid-Deploy Pole & Mount Kit',
+        price: 149, unit: 'one-time',
+        icon: 'truck',
+        description: 'Free-standing pole and no-tools mount. Pull it out of the truck and be live in minutes — no fixed structure required.'
+      },
+      {
+        id: 'ndaa',
+        name: 'NDAA-Compliant Camera',
+        price: 15, unit: 'mo',
+        icon: 'shield',
+        description: 'Section 889-compliant hardware for government, utilities, and critical-infrastructure sites.'
+      },
+      {
+        id: 'storage',
+        name: 'Extended Cloud Storage (90-day)',
+        price: 20, unit: 'mo',
+        icon: 'camera',
+        description: 'Extend cloud retention to 90 days for longer look-back on active job sites.'
+      }
+    ];
+
+    const USE_CASES = ['Construction sites', 'Oil & gas', 'Remote / temporary sites', 'Parking & fleet yards', 'Vacant land'];
+
+    // ---------- Card input helpers (cosmetic only) ----------
+    const formatCardNumber = (v) => v.replace(/\D/g, '').slice(0, 16).replace(/(.{4})/g, '$1 ').trim();
+    const formatExp = (v) => { const d = v.replace(/\D/g, '').slice(0, 4); return d.length >= 3 ? d.slice(0, 2) + '/' + d.slice(2) : d; };
+    const cardBrand = (num) => {
+      const n = (num || '').replace(/\D/g, '');
+      if (/^4/.test(n)) return 'VISA';
+      if (/^5[1-5]/.test(n) || /^2[2-7]/.test(n)) return 'Mastercard';
+      if (/^3[47]/.test(n)) return 'Amex';
+      if (/^6/.test(n)) return 'Discover';
+      return '';
+    };
+
+    const STEPS = ['Camera', 'Plan', 'Add-ons', 'Shipping', 'Checkout', 'Confirm'];
+
+    function BudgetCamOrder() {
+      const [currentStep, setCurrentStep] = useState(0);
+      const [isSubmitting, setIsSubmitting] = useState(false);
+      const [orderId, setOrderId] = useState(null);
+      const [payStage, setPayStage] = useState(null); // null | 'processing' | 'approved'
+      const [payText, setPayText] = useState('');
+      const [config, setConfig] = useState({
+        quantity: 1,
+        planId: 'pro',
+        addons: [],
+        paymentMethod: 'card', // 'card' | 'invoice'
+        contact: {
+          fullName: '', companyName: '', email: '', phone: '',
+          shipStreet: '', shipCity: '', shipState: '', shipZip: ''
+        },
+        card: { number: '', name: '', exp: '', cvc: '' },
+        invoice: { poNumber: '', billingEmail: '', notes: '' }
+      });
+
+      const plan = PLANS.find(p => p.id === config.planId) || PLANS[0];
+
+      // ---------- Pricing ----------
+      const oneTimeAddons = ADDONS.filter(a => a.unit === 'one-time' && config.addons.includes(a.id));
+      const monthlyAddons = ADDONS.filter(a => a.unit === 'mo' && config.addons.includes(a.id));
+
+      const hardwareTotal = HARDWARE_PRICE * config.quantity;
+      const oneTimeAddonTotal = oneTimeAddons.reduce((s, a) => s + a.price, 0) * config.quantity;
+      const dueToday = hardwareTotal + oneTimeAddonTotal; // shipping free; billed monthly starts at activation
+      const monthlyTotal = (plan.monthly + monthlyAddons.reduce((s, a) => s + a.price, 0)) * config.quantity;
+
+      const fmt = (n) => '$' + n.toLocaleString();
+
+      // ---------- Updaters ----------
+      const setQuantity = (q) => setConfig(prev => ({ ...prev, quantity: Math.max(1, Math.min(999, q)) }));
+      const toggleAddon = (id) => setConfig(prev => ({
+        ...prev,
+        addons: prev.addons.includes(id) ? prev.addons.filter(a => a !== id) : [...prev.addons, id]
+      }));
+      const setContact = (field, val) => setConfig(prev => ({ ...prev, contact: { ...prev.contact, [field]: val } }));
+      const setCard = (field, val) => setConfig(prev => ({ ...prev, card: { ...prev.card, [field]: val } }));
+      const setInvoice = (field, val) => setConfig(prev => ({ ...prev, invoice: { ...prev.invoice, [field]: val } }));
+
+      const loadReturningCustomer = () => setConfig(prev => ({
+        ...prev,
+        contact: {
+          fullName: 'Jordan Pearce',
+          companyName: 'Summit Ridge Construction',
+          email: 'jordan@summitridge.co',
+          phone: '(801) 555-0142',
+          shipStreet: '4820 W Industrial Pkwy',
+          shipCity: 'West Valley City',
+          shipState: 'UT',
+          shipZip: '84120'
+        }
+      }));
+
+      // ---------- Validation ----------
+      const canProceed = () => {
+        if (currentStep === 0) return config.quantity >= 1;
+        if (currentStep === 1) return !!config.planId;
+        if (currentStep === 2) return true; // add-ons optional
+        if (currentStep === 3) {
+          const c = config.contact;
+          return c.fullName && c.email && c.phone && c.shipStreet && c.shipCity && c.shipState && c.shipZip;
+        }
+        if (currentStep === 4) {
+          if (config.paymentMethod === 'card') {
+            const cd = config.card;
+            return cd.number && cd.name && cd.exp && cd.cvc;
+          }
+          return !!config.invoice.billingEmail; // invoice path only needs a billing email
+        }
+        return true;
+      };
+
+      const isInvoice = config.paymentMethod === 'invoice';
+
+      // ---------- Submit ----------
+      const submitOrder = async () => {
+        if (isSubmitting) return;
+        setIsSubmitting(true);
+        const newOrderId = `BC-${Date.now()}`;
+        const webhookUrl = 'https://webhooks.workato.com/webhooks/rest/6a7e39d0-1da9-4e30-8ab7-b7c732cbcb0f/order';
+
+        const orderData = {
+          timestamp: new Date().toISOString(),
+          orderId: newOrderId,
+          productLine: 'budget-cam',
+          orderType: isInvoice ? 'Invoice / PO (quote request)' : 'Credit card (paid)',
+          quantity: config.quantity,
+          plan: plan.name,
+          planMonthly: plan.monthly,
+          addons: config.addons.length ? config.addons.join(', ') : 'None',
+          hardwareTotal,
+          dueToday,
+          monthlyTotal,
+          // contact + ship-to
+          contactName: config.contact.fullName,
+          companyName: config.contact.companyName,
+          email: config.contact.email,
+          phone: config.contact.phone,
+          shippingAddressFull: `${config.contact.shipStreet}, ${config.contact.shipCity}, ${config.contact.shipState} ${config.contact.shipZip}`,
+          // payment
+          paymentMethod: config.paymentMethod,
+          poNumber: isInvoice ? config.invoice.poNumber : '',
+          billingEmail: isInvoice ? config.invoice.billingEmail : config.contact.email
+        };
+
+        const payload = JSON.stringify(orderData);
+        const wait = (ms) => new Promise(r => setTimeout(r, ms));
+
+        // Fire the webhook in the background — the staged UI drives the timing.
+        const post = fetch(webhookUrl, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, credentials: 'omit'
+        }).catch(() => fetch(webhookUrl, {
+          method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body: payload
+        })).catch((e) => console.error('Submission error:', e));
+
+        if (isInvoice) {
+          setPayStage('processing');
+          setPayText('Generating your quote…');
+          await wait(1500);
+        } else {
+          setPayStage('processing');
+          setPayText('Securely contacting your bank…');
+          await wait(1300);
+          setPayText(`Authorizing ${fmt(dueToday)}…`);
+          await wait(1400);
+          setPayStage('approved');
+          setPayText('Payment approved');
+          await wait(1100);
+        }
+
+        await post;
+        setOrderId(newOrderId);
+        setPayStage(null);
+        setCurrentStep(5);
+        setIsSubmitting(false);
+      };
+
+      const addonIcon = (icon) => {
+        const style = { width: '28px', height: '28px' };
+        if (icon === 'truck') return <Truck style={style} />;
+        if (icon === 'shield') return <Shield style={style} />;
+        return <Camera style={style} />;
+      };
+
+      // Reusable input style
+      const inputStyle = {
+        width: '100%', padding: '12px 16px', background: 'rgba(39, 42, 47, 0.6)',
+        border: '2px solid rgba(255,255,255,0.15)', borderRadius: '8px', color: '#fff',
+        fontSize: '16px', fontWeight: '500', outline: 'none', transition: 'all 0.3s ease'
+      };
+      const labelStyle = {
+        display: 'block', fontSize: '12px', fontWeight: '700', textTransform: 'uppercase',
+        letterSpacing: '0.5px', marginBottom: '8px', color: 'rgba(255,255,255,0.7)'
+      };
+      const onFocus = (e) => { e.target.style.border = '2px solid #56d3cc'; e.target.style.background = 'rgba(86, 211, 204, 0.08)'; };
+      const onBlur = (e) => { e.target.style.border = '2px solid rgba(255,255,255,0.15)'; e.target.style.background = 'rgba(39, 42, 47, 0.6)'; };
+
+      return (
+        <div className="app-shell">
+          <div className="noise-bg"></div>
+
+          {/* Header */}
+          <header className="app-header">
+            <div className="header-left">
+              <div className="header-brand">
+                <svg xmlns="http://www.w3.org/2000/svg" width="60" height="28" viewBox="0 0 76 36" fill="none" className="logo" style={{ color: '#ffffff' }}>
+                  <path d="M14.1675 0.521484L29.4019 35.5215H29.4528H39.1845L23.9501 0.521484H14.1675Z" fill="currentColor"></path>
+                  <path d="M9.45465 27.2862V0.521484H0.5V35.5215H24.6763L21.097 27.2862H9.45465Z" fill="currentColor"></path>
+                  <path d="M44.6873 0.521484L36.6753 18.9222L41.5666 30.1557L50.8779 8.75678H55.5654V35.5215H64.5201V8.75678H71.9207L75.5 0.521484H44.6873Z" fill="currentColor"></path>
+                </svg>
+                <div>
+                  <div style={{ fontSize: '9px', fontWeight: '600', letterSpacing: '0.5px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>
+                    LiveView Technologies
+                  </div>
+                </div>
+              </div>
+              <div className="header-divider"></div>
+              <div className="header-subtitle">Budget Cam · Order Online</div>
+            </div>
+            <div className="steps-nav">
+              {STEPS.map((step, idx) => (
+                <div key={step} className={`step-indicator ${idx === currentStep ? 'active' : ''}`}
+                  style={{ opacity: idx === currentStep ? 1 : 0.4, color: idx <= currentStep ? '#56d3cc' : '#fff', textTransform: 'uppercase' }}>
+                  {step}
+                </div>
+              ))}
+            </div>
+          </header>
+
+          <main className="main-content">
+
+            {/* ===== Step 0: Camera / What is it ===== */}
+            {currentStep === 0 && (
+              <div>
+                <div className="reorder-banner">
+                  <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)' }}>
+                    <strong style={{ color: '#56d3cc' }}>Already run Budget Cams?</strong> Reorder for a site in seconds — we'll prefill your details.
+                  </div>
+                  <button onClick={loadReturningCustomer}
+                    style={{ padding: '10px 18px', background: 'rgba(86,211,204,0.15)', border: '1px solid rgba(86,211,204,0.4)', borderRadius: '8px', color: '#56d3cc', fontWeight: '700', fontSize: '13px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Reorder as returning customer
+                  </button>
+                </div>
+
+                <h2 className="hero-title">Eyes on your site<br />in hours, not weeks.</h2>
+                <p className="hero-intro">
+                  Budget Cam is a low-cost, solar-powered, cell-connected camera you order online, we ship to your door, and you set up yourself — no trencher, no electrician, no install crew. Live situational awareness for the sites that just need coverage, fast.
+                </p>
+
+                <div className="usecase-chips">
+                  {USE_CASES.map(u => <span key={u} className="usecase-chip">{u}</span>)}
+                </div>
+
+                <div className="hero-grid">
+                  <div className="product-details">
+                    <h3 className="product-title">The Budget Cam</h3>
+                    <p className="product-copy">
+                      A single solar panel and camera on a pole. It records 24/7, detects people and vehicles, and streams straight into the LVT app. Small enough and cheap enough to pull out of a truck and deploy anywhere the sun reaches.
+                    </p>
+                    <p className="needs-title">What's included:</p>
+                    <ul className="needs-list">
+                      {[
+                        'Solar + 4G/LTE — works fully off-grid',
+                        '24/7 recording with people & vehicle detection',
+                        'Ships ready to self-install — no technician',
+                        'Lands in the LVT app: live view, alerts, device management'
+                      ].map((item, idx) => (
+                        <li key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', fontSize: '15px', color: 'rgba(255,255,255,0.8)', fontWeight: '400', paddingLeft: '4px' }}>
+                          <span style={{ width: '6px', height: '6px', background: '#56d3cc', borderRadius: '50%', marginTop: '7px', minWidth: '6px' }}></span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="price-amount">
+                      {fmt(HARDWARE_PRICE)}
+                      <span style={{ fontSize: '18px', color: 'rgba(255,255,255,0.6)', fontWeight: '600', marginLeft: '8px' }}>+ from ${PLANS[0].monthly}/mo</span>
+                    </div>
+                    <p className="price-caption">One-time hardware, then a simple monthly plan. Buy it — no lease.</p>
+                  </div>
+
+                  <div className="product-image">
+                    <div style={{ background: 'rgba(27, 30, 35, 0.6)', borderRadius: '18px', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', width: '100%' }}>
+                      <div style={{ background: '#ffffff', borderRadius: '14px', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '8px' }}>
+                        <img src={CAMERA_IMAGE} alt="LVT Budget Cam — solar-powered cellular camera"
+                          style={{ width: '100%', maxWidth: '380px', height: '300px', objectFit: 'contain' }}
+                          onError={(e) => { e.target.style.display = 'none'; }} />
+                      </div>
+                      <div style={{ display: 'flex', gap: '28px', color: 'rgba(255,255,255,0.75)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}><Sun style={{ width: '26px', height: '26px', color: '#56d3cc' }} /><span style={{ fontSize: '12px', fontWeight: '700' }}>Solar</span></div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}><Signal style={{ width: '26px', height: '26px', color: '#56d3cc' }} /><span style={{ fontSize: '12px', fontWeight: '700' }}>4G / LTE</span></div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}><Camera style={{ width: '26px', height: '26px', color: '#56d3cc' }} /><span style={{ fontSize: '12px', fontWeight: '700' }}>24/7</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quantity selector */}
+                <div className="units-config-card" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '16px', padding: '40px', maxWidth: '900px', margin: '0 auto' }}>
+                  <h3 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '8px', letterSpacing: '-0.5px' }}>How many cameras?</h3>
+                  <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.6', marginBottom: '28px' }}>
+                    One camera covers one vantage point. Order one per area you need eyes on — add more sites anytime.
+                  </p>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '24px' }}>
+                    <div className="qty-stepper">
+                      <button onClick={() => setQuantity(config.quantity - 1)} aria-label="Decrease">−</button>
+                      <input type="number" min="1" value={config.quantity}
+                        onChange={(e) => setQuantity(parseInt(e.target.value || '1', 10))} />
+                      <button onClick={() => setQuantity(config.quantity + 1)} aria-label="Increase">+</button>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', marginBottom: '4px' }}>Hardware, due today</div>
+                      <div style={{ fontSize: '32px', fontWeight: '900', color: '#56d3cc', letterSpacing: '-1px' }}>{fmt(hardwareTotal)}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ===== Step 1: Plan ===== */}
+            {currentStep === 1 && (
+              <div>
+                <h2 style={{ fontWeight: '900', marginBottom: '12px', letterSpacing: '-1.5px' }}>Choose a <span className="gradient-text">monthly plan</span></h2>
+                <p style={{ fontSize: '18px', color: 'rgba(255,255,255,0.7)', marginBottom: '40px', fontWeight: '400', maxWidth: '760px' }}>
+                  Your camera streams to the LVT cloud. Pick the plan that fits — billed monthly per camera, cancel anytime. Applies to all {config.quantity} {config.quantity === 1 ? 'camera' : 'cameras'}.
+                </p>
+
+                <div className="plan-grid">
+                  {PLANS.map((p, idx) => {
+                    const selected = config.planId === p.id;
+                    return (
+                      <div key={p.id} className={`option-card ${selected ? 'selected-card' : ''}`}
+                        onClick={() => setConfig(prev => ({ ...prev, planId: p.id }))}
+                        style={{
+                          animationDelay: `${idx * 0.1}s`,
+                          background: selected ? 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))' : 'rgba(255,255,255,0.04)',
+                          border: selected ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.1)',
+                          borderRadius: '16px', padding: '32px', cursor: 'pointer', position: 'relative', transition: 'all 0.3s ease'
+                        }}>
+                        {p.badge && (
+                          <div style={{ position: 'absolute', top: '16px', right: '16px', background: '#F4CD27', color: '#1b1e23', padding: '4px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase' }}>{p.badge}</div>
+                        )}
+                        {selected && <CheckCircle style={{ position: 'absolute', top: '24px', left: '24px', color: '#56d3cc', width: '26px', height: '26px' }} />}
+                        <h3 style={{ fontSize: '28px', fontWeight: '900', marginTop: '28px', marginBottom: '6px', color: selected ? '#56d3cc' : '#fff', letterSpacing: '-0.5px' }}>{p.name}</h3>
+                        <div style={{ fontSize: '44px', fontWeight: '900', color: '#56d3cc', letterSpacing: '-2px', marginBottom: '4px' }}>
+                          ${p.monthly}<span style={{ fontSize: '18px', color: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>/mo per camera</span>
+                        </div>
+                        <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.7)', marginBottom: '20px' }}>{p.tagline}</p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          {p.features.map((f, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: 'rgba(255,255,255,0.75)' }}>
+                              <CheckCircle style={{ width: '16px', height: '16px', color: selected ? '#56d3cc' : 'rgba(255,255,255,0.4)', minWidth: '16px' }} />
+                              {f}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.5)', marginTop: '24px', maxWidth: '760px' }}>
+                  Budget Cam is basic detection and recording — no active deterrence. Need automated strobes, spotlights, audio warnings, or monitored response? That's what LVT's Mobile Security Units and Matrix are for — we'll show you at checkout.
+                </p>
+              </div>
+            )}
+
+            {/* ===== Step 2: Add-ons ===== */}
+            {currentStep === 2 && (
+              <div>
+                <h2 style={{ fontWeight: '900', marginBottom: '12px', letterSpacing: '-1.5px' }}>Optional <span className="gradient-text">add-ons</span></h2>
+                <p style={{ fontSize: '18px', color: 'rgba(255,255,255,0.7)', marginBottom: '40px', fontWeight: '400', maxWidth: '760px' }}>
+                  Tune each camera for the job. Everything here is optional — skip it and you're still ready to deploy.
+                </p>
+
+                <div className="addon-grid">
+                  {ADDONS.map((a, idx) => {
+                    const selected = config.addons.includes(a.id);
+                    return (
+                      <div key={a.id} className={`option-card ${selected ? 'selected-card' : ''}`}
+                        onClick={() => toggleAddon(a.id)}
+                        style={{
+                          animationDelay: `${idx * 0.1}s`,
+                          background: selected ? 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))' : 'rgba(255,255,255,0.04)',
+                          border: selected ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.1)',
+                          borderRadius: '16px', padding: '28px', cursor: 'pointer', position: 'relative', transition: 'all 0.3s ease'
+                        }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '18px' }}>
+                          <div style={{ width: '56px', height: '56px', borderRadius: '12px', background: selected ? 'rgba(86,211,204,0.15)' : 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: selected ? '#56d3cc' : '#fff' }}>
+                            {addonIcon(a.icon)}
+                          </div>
+                          {selected && <CheckCircle style={{ color: '#56d3cc', width: '26px', height: '26px' }} />}
+                        </div>
+                        <h3 style={{ fontSize: '19px', fontWeight: '800', marginBottom: '10px', letterSpacing: '-0.3px' }}>{a.name}</h3>
+                        <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.65)', marginBottom: '18px', lineHeight: '1.6' }}>{a.description}</p>
+                        <div style={{ fontSize: '24px', fontWeight: '900', color: selected ? '#56d3cc' : 'rgba(255,255,255,0.6)' }}>
+                          +${a.price}{a.unit === 'mo' ? '/mo' : ''}
+                          <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', fontWeight: '600', marginLeft: '6px' }}>{a.unit === 'mo' ? 'per camera' : 'one-time, per camera'}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ===== Step 3: Shipping ===== */}
+            {currentStep === 3 && (
+              <div>
+                <h2 style={{ fontWeight: '700', marginBottom: '16px', letterSpacing: '-1px', lineHeight: '1.1' }}>Where do we <span className="gradient-text">ship it?</span></h2>
+                <p style={{ fontSize: '18px', color: 'rgba(255,255,255,0.8)', marginBottom: '32px', fontWeight: '400', maxWidth: '640px', lineHeight: '1.6' }}>
+                  One box, shipped to your site or office. You install it yourself — most crews are live within an hour of opening the box.
+                </p>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(86,211,204,0.08)', border: '1px solid rgba(86,211,204,0.2)', borderRadius: '12px', padding: '16px 20px', marginBottom: '32px', maxWidth: '800px' }}>
+                  <Truck style={{ width: '24px', height: '24px', color: '#56d3cc', minWidth: '24px' }} />
+                  <span style={{ fontSize: '14px', color: 'rgba(255,255,255,0.85)' }}>Free 2-day shipping · No technician required · {config.quantity} {config.quantity === 1 ? 'camera' : 'cameras'} in one shipment</span>
+                </div>
+
+                <div style={{ maxWidth: '800px', display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                  <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '16px', padding: '32px' }}>
+                    <h3 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '24px', color: '#56d3cc' }}>Your details</h3>
+                    <div className="contact-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      <div><label style={labelStyle}>Full Name *</label><input style={inputStyle} value={config.contact.fullName} onChange={(e) => setContact('fullName', e.target.value)} onFocus={onFocus} onBlur={onBlur} placeholder="Full Name" /></div>
+                      <div><label style={labelStyle}>Company (optional)</label><input style={inputStyle} value={config.contact.companyName} onChange={(e) => setContact('companyName', e.target.value)} onFocus={onFocus} onBlur={onBlur} placeholder="Company Name" /></div>
+                      <div><label style={labelStyle}>Email *</label><input type="email" style={inputStyle} value={config.contact.email} onChange={(e) => setContact('email', e.target.value)} onFocus={onFocus} onBlur={onBlur} placeholder="you@company.com" /></div>
+                      <div><label style={labelStyle}>Phone *</label><input type="tel" style={inputStyle} value={config.contact.phone} onChange={(e) => setContact('phone', e.target.value)} onFocus={onFocus} onBlur={onBlur} placeholder="(555) 123-4567" /></div>
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '16px', padding: '32px' }}>
+                    <h3 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '24px', color: '#56d3cc' }}>Shipping address</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <input style={inputStyle} value={config.contact.shipStreet} onChange={(e) => setContact('shipStreet', e.target.value)} onFocus={onFocus} onBlur={onBlur} placeholder="Street Address *" />
+                      <div className="address-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '16px' }}>
+                        <input style={inputStyle} value={config.contact.shipCity} onChange={(e) => setContact('shipCity', e.target.value)} onFocus={onFocus} onBlur={onBlur} placeholder="City *" />
+                        <input style={inputStyle} maxLength="2" value={config.contact.shipState} onChange={(e) => setContact('shipState', e.target.value.toUpperCase())} onFocus={onFocus} onBlur={onBlur} placeholder="State *" />
+                        <input style={inputStyle} maxLength="5" value={config.contact.shipZip} onChange={(e) => setContact('shipZip', e.target.value.replace(/\D/g, ''))} onFocus={onFocus} onBlur={onBlur} placeholder="Zip *" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ===== Step 4: Checkout ===== */}
+            {currentStep === 4 && (
+              <div>
+                <h2 style={{ fontWeight: '700', marginBottom: '16px', letterSpacing: '-1px', lineHeight: '1.1' }}>How would you like to <span className="gradient-text">pay?</span></h2>
+                <p style={{ fontSize: '18px', color: 'rgba(255,255,255,0.8)', marginBottom: '32px', fontWeight: '400', maxWidth: '720px', lineHeight: '1.6' }}>
+                  Swipe a card and deploy today, or request an invoice / PO if your company buys that way. Either path gets you the same camera.
+                </p>
+
+                <div className="checkout-grid">
+                  <div>
+                    {/* Payment method toggle */}
+                    <div className="pay-grid">
+                      {[
+                        { id: 'card', title: 'Credit Card', sub: 'Instant checkout · ship today', icon: <CreditCard style={{ width: '26px', height: '26px' }} /> },
+                        { id: 'invoice', title: 'Invoice / PO', sub: 'For businesses · we send a quote', icon: <FileText style={{ width: '26px', height: '26px' }} /> }
+                      ].map(opt => {
+                        const selected = config.paymentMethod === opt.id;
+                        return (
+                          <div key={opt.id} className="option-card" onClick={() => setConfig(prev => ({ ...prev, paymentMethod: opt.id }))}
+                            style={{ background: selected ? 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))' : 'rgba(255,255,255,0.04)', border: selected ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.1)', borderRadius: '14px', padding: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                            <div style={{ color: selected ? '#56d3cc' : '#fff' }}>{opt.icon}</div>
+                            <div>
+                              <div style={{ fontSize: '16px', fontWeight: '800' }}>{opt.title}</div>
+                              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>{opt.sub}</div>
+                            </div>
+                            {selected && <CheckCircle style={{ color: '#56d3cc', width: '22px', height: '22px', marginLeft: 'auto' }} />}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Card form */}
+                    {config.paymentMethod === 'card' && (
+                      <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '16px', padding: '32px' }}>
+                        {/* Live card preview */}
+                        <div style={{
+                          position: 'relative', width: '100%', maxWidth: '380px', margin: '0 auto 28px', aspectRatio: '1.586 / 1',
+                          borderRadius: '16px', padding: '24px', color: '#fff', overflow: 'hidden',
+                          background: 'linear-gradient(135deg, #23272e 0%, #2f3a3a 55%, #0f6f6a 140%)',
+                          boxShadow: '0 12px 30px rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.12)',
+                          display: 'flex', flexDirection: 'column', justifyContent: 'space-between'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            {/* chip */}
+                            <div style={{ width: '46px', height: '34px', borderRadius: '6px', background: 'linear-gradient(135deg, #e7c66b, #b8912f)', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.15)' }}></div>
+                            <div style={{ fontSize: '16px', fontWeight: '800', letterSpacing: '1px', fontStyle: 'italic', minHeight: '20px', color: 'rgba(255,255,255,0.95)' }}>
+                              {cardBrand(config.card.number) || 'CARD'}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: '21px', fontWeight: '600', letterSpacing: '2px', fontFamily: 'monospace', textShadow: '0 1px 2px rgba(0,0,0,0.4)' }}>
+                            {config.card.number || '•••• •••• •••• ••••'}
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '16px' }}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: '9px', letterSpacing: '1px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>Card Holder</div>
+                              <div style={{ fontSize: '14px', fontWeight: '700', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{config.card.name || 'YOUR NAME'}</div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontSize: '9px', letterSpacing: '1px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>Expires</div>
+                              <div style={{ fontSize: '14px', fontWeight: '700' }}>{config.card.exp || 'MM/YY'}</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <h3 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '20px', color: '#56d3cc' }}>Card details</h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                          <div><label style={labelStyle}>Card Number *</label><input style={inputStyle} inputMode="numeric" value={config.card.number} onChange={(e) => setCard('number', formatCardNumber(e.target.value))} onFocus={onFocus} onBlur={onBlur} placeholder="1234 5678 9012 3456" /></div>
+                          <div><label style={labelStyle}>Name on Card *</label><input style={inputStyle} value={config.card.name} onChange={(e) => setCard('name', e.target.value)} onFocus={onFocus} onBlur={onBlur} placeholder="Full Name" /></div>
+                          <div className="address-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                            <div><label style={labelStyle}>Expiry *</label><input style={inputStyle} inputMode="numeric" value={config.card.exp} onChange={(e) => setCard('exp', formatExp(e.target.value))} onFocus={onFocus} onBlur={onBlur} placeholder="MM / YY" /></div>
+                            <div><label style={labelStyle}>CVC *</label><input style={inputStyle} inputMode="numeric" value={config.card.cvc} onChange={(e) => setCard('cvc', e.target.value.replace(/\D/g, '').slice(0, 4))} onFocus={onFocus} onBlur={onBlur} placeholder="123" /></div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '18px', fontSize: '12px', color: 'rgba(255,255,255,0.55)' }}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                          Secure 256-bit encrypted payment · we never store your card details
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Invoice form */}
+                    {config.paymentMethod === 'invoice' && (
+                      <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '16px', padding: '32px' }}>
+                        <h3 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '8px', color: '#56d3cc' }}>Request an invoice</h3>
+                        <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', marginBottom: '20px', lineHeight: '1.6' }}>
+                          We'll generate a quote from this and email it over — a rep only steps in if you need one. Same order, business-friendly terms.
+                        </p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                          <div><label style={labelStyle}>Billing Email *</label><input type="email" style={inputStyle} value={config.invoice.billingEmail} onChange={(e) => setInvoice('billingEmail', e.target.value)} onFocus={onFocus} onBlur={onBlur} placeholder="accounts-payable@company.com" /></div>
+                          <div><label style={labelStyle}>PO Number (optional)</label><input style={inputStyle} value={config.invoice.poNumber} onChange={(e) => setInvoice('poNumber', e.target.value)} onFocus={onFocus} onBlur={onBlur} placeholder="PO-00000" /></div>
+                          <div><label style={labelStyle}>Notes (optional)</label><input style={inputStyle} value={config.invoice.notes} onChange={(e) => setInvoice('notes', e.target.value)} onFocus={onFocus} onBlur={onBlur} placeholder="Anything we should know" /></div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Order summary */}
+                  <div className="review-summary-card" style={{ background: 'linear-gradient(135deg, rgba(86, 211, 204, 0.15), rgba(125, 232, 224, 0.08))', border: '2px solid #56d3cc', borderRadius: '16px', padding: '32px', height: 'fit-content', position: 'sticky', top: '120px' }}>
+                    <h3 style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '20px', color: 'rgba(255,255,255,0.7)', fontWeight: '600' }}>Order Summary</h3>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '14px', color: 'rgba(255,255,255,0.85)', marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>{config.quantity} × Budget Cam</span><span>{fmt(hardwareTotal)}</span></div>
+                      {oneTimeAddons.map(a => (<div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(255,255,255,0.65)' }}><span>{config.quantity} × {a.name}</span><span>{fmt(a.price * config.quantity)}</span></div>))}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(255,255,255,0.65)' }}><span>Shipping (2-day)</span><span>Free</span></div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '14px', fontWeight: '700' }}>Due today</span>
+                      <span style={{ fontSize: '34px', fontWeight: '900', color: '#56d3cc', letterSpacing: '-1px' }}>{fmt(dueToday)}</span>
+                    </div>
+                    <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.75)', marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
+                      Then <strong style={{ color: '#fff' }}>{fmt(monthlyTotal)}/mo</strong> ({plan.name}{monthlyAddons.length ? ' + add-ons' : ''}, {config.quantity} {config.quantity === 1 ? 'camera' : 'cameras'}) — first charge when your camera comes online.
+                    </div>
+
+                    <button disabled={isSubmitting || !canProceed()} onClick={submitOrder}
+                      style={{ width: '100%', padding: '18px', background: (isSubmitting || !canProceed()) ? 'rgba(86, 211, 204, 0.4)' : '#56d3cc', color: '#1b1e23', border: 'none', borderRadius: '10px', fontSize: '15px', fontWeight: '800', cursor: (isSubmitting || !canProceed()) ? 'not-allowed' : 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      {isSubmitting ? 'Processing…' : (isInvoice ? 'Request Invoice / Quote' : `Place Order · ${fmt(dueToday)}`)}
+                    </button>
+                    <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', textAlign: 'center', lineHeight: '1.4', marginTop: '14px' }}>
+                      {isInvoice ? 'No charge now — we email your quote.' : 'Secure checkout · cancel your plan anytime'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ===== Step 5: Confirmation ===== */}
+            {currentStep === 5 && (
+              <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+                <div style={{ textAlign: 'center', marginBottom: '48px' }}>
+                  <CheckCircle style={{ width: '64px', height: '64px', color: '#56d3cc', marginBottom: '20px' }} />
+                  <h2 style={{ fontWeight: '800', marginBottom: '12px', letterSpacing: '-1px' }}>
+                    {isInvoice ? 'Quote request received' : "You're all set!"}
+                  </h2>
+                  <p style={{ fontSize: '18px', color: 'rgba(255,255,255,0.8)', maxWidth: '640px', margin: '0 auto', lineHeight: '1.6' }}>
+                    {isInvoice
+                      ? `We've generated your quote and sent it to ${config.invoice.billingEmail || config.contact.email}. A rep will follow up only if anything needs a signature.`
+                      : `Your ${config.quantity} ${config.quantity === 1 ? 'Budget Cam is' : 'Budget Cams are'} on the way to ${config.contact.shipCity || 'your site'}. Confirmation sent to ${config.contact.email}.`}
+                  </p>
+                  <div style={{ display: 'inline-block', marginTop: '20px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '10px 20px', fontSize: '14px', fontWeight: '700', color: '#56d3cc' }}>
+                    Order {orderId}
+                  </div>
+                </div>
+
+                {/* Quick-start install guide */}
+                <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '16px', padding: '40px', marginBottom: '28px' }}>
+                  <h3 style={{ fontSize: '22px', fontWeight: '800', marginBottom: '8px' }}>Set it up in 3 steps</h3>
+                  <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.65)', marginBottom: '28px' }}>No tools, no wiring, no technician. Here's the whole install.</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    {[
+                      { t: 'Mount the pole', d: 'Set the free-standing pole where you want eyes, or strap the camera to an existing post. Point the panel at the sky.' },
+                      { t: 'Power on & scan the QR', d: 'Flip it on and scan the QR code in the LVT app. It finds LTE and comes online on its own — no WiFi, no config.' },
+                      { t: 'Watch live', d: 'Your camera appears in the LVT app with live view, 24/7 recording, and people & vehicle detection running.' }
+                    ].map((s, i) => (
+                      <div key={i} style={{ display: 'flex', gap: '18px', alignItems: 'flex-start' }}>
+                        <div className="install-step-num">{i + 1}</div>
+                        <div>
+                          <div style={{ fontSize: '16px', fontWeight: '800', marginBottom: '4px' }}>{s.t}</div>
+                          <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.6' }}>{s.d}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Gateway upsell */}
+                <div style={{ background: 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))', border: '2px solid #56d3cc', borderRadius: '16px', padding: '40px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '800', letterSpacing: '1px', textTransform: 'uppercase', color: '#56d3cc', marginBottom: '12px' }}>When you need more than eyes</div>
+                  <h3 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '12px', letterSpacing: '-0.5px' }}>Ready for active deterrence & monitored response?</h3>
+                  <p style={{ fontSize: '15px', color: 'rgba(255,255,255,0.75)', lineHeight: '1.7', marginBottom: '24px', maxWidth: '640px' }}>
+                    Budget Cam is your fast start. When a site needs to <em>stop</em> incidents — automated strobes, spotlights, audio warnings, on-site lighting, and 24/7 monitored response — step up to LVT's Mobile Security Units and Matrix. Same app, same account, permanent coverage.
+                  </p>
+                  <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+                    <a href="index.html" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '14px 24px', background: '#56d3cc', color: '#1b1e23', borderRadius: '10px', fontSize: '14px', fontWeight: '800', textDecoration: 'none', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Explore Mobile Security Units <ArrowRight style={{ width: '18px', height: '18px' }} />
+                    </a>
+                    <button onClick={() => { setConfig(prev => ({ ...prev, quantity: 1, addons: [] })); setCurrentStep(0); }}
+                      style={{ padding: '14px 24px', background: 'rgba(255,255,255,0.08)', color: '#fff', border: '2px solid rgba(255,255,255,0.15)', borderRadius: '10px', fontSize: '14px', fontWeight: '700', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Order more Budget Cams
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ===== Navigation ===== */}
+            {currentStep < 5 && (
+              <div style={{ marginTop: '64px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 100 }}>
+                <button onClick={() => currentStep > 0 && setCurrentStep(currentStep - 1)} disabled={currentStep === 0}
+                  style={{ padding: '14px 28px', background: currentStep === 0 ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.08)', color: currentStep === 0 ? 'rgba(255,255,255,0.3)' : '#fff', border: '2px solid rgba(255,255,255,0.15)', borderRadius: '10px', fontSize: '14px', fontWeight: '700', cursor: currentStep === 0 ? 'not-allowed' : 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  ← Back
+                </button>
+
+                {currentStep < 4 && (
+                  <button onClick={() => canProceed() && setCurrentStep(currentStep + 1)} disabled={!canProceed()}
+                    style={{ padding: '14px 40px', background: !canProceed() ? 'rgba(86, 211, 204, 0.2)' : '#56d3cc', color: !canProceed() ? 'rgba(255,255,255,0.4)' : '#1b1e23', border: 'none', borderRadius: '10px', fontSize: '14px', fontWeight: '800', cursor: !canProceed() ? 'not-allowed' : 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Continue →
+                  </button>
+                )}
+              </div>
+            )}
+          </main>
+
+          {/* Floating price summary */}
+          {currentStep > 0 && currentStep < 4 && (
+            <div style={{ position: 'fixed', top: '140px', right: '48px', background: 'linear-gradient(135deg, rgba(86, 211, 204, 0.15), rgba(125, 232, 224, 0.08))', backdropFilter: 'blur(20px)', border: '2px solid #56d3cc', borderRadius: '12px', padding: '20px 28px', boxShadow: '0 8px 32px rgba(86, 211, 204, 0.4)', zIndex: 50 }}>
+              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '600' }}>Due today</div>
+              <div style={{ fontSize: '28px', fontWeight: '900', color: '#56d3cc', letterSpacing: '-1px' }}>{fmt(dueToday)}</div>
+              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginTop: '8px' }}>then {fmt(monthlyTotal)}/mo</div>
+            </div>
+          )}
+
+          {/* Payment processing overlay */}
+          {payStage && (
+            <div className="pay-overlay">
+              <div className="pay-modal">
+                {payStage === 'approved' ? (
+                  <div className="pay-check">
+                    <CheckCircle style={{ width: '38px', height: '38px' }} />
+                  </div>
+                ) : (
+                  <div className="pay-spinner"></div>
+                )}
+                <div style={{ fontSize: '19px', fontWeight: '800', letterSpacing: '-0.3px', marginBottom: '6px' }}>
+                  {payText}
+                </div>
+                <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.55)' }}>
+                  {payStage === 'approved'
+                    ? 'Finalizing your order…'
+                    : (isInvoice ? 'Preparing your quote — no charge' : `${fmt(dueToday)} · ${cardBrand(config.card.number) || 'Card'} ending ${(config.card.number || '').replace(/\D/g, '').slice(-4) || '––––'}`)}
+                </div>
+                {payStage === 'processing' && (
+                  <div className="pay-progress"><div></div></div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<BudgetCamOrder />);
+  </script>
+</body>
+</html>

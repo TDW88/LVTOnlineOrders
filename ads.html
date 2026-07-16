@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Budget Cam — Ad Concepts (Demo)</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #f0f2f5;
+      color: #1c1e21;
+      min-height: 100vh;
+      padding-bottom: 80px;
+    }
+    a { text-decoration: none; color: inherit; }
+
+    /* ---- Demo control bar ---- */
+    .demo-bar {
+      position: sticky; top: 0; z-index: 100;
+      background: #1b1e23; color: #fff;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 12px 24px; flex-wrap: wrap;
+    }
+    .demo-bar .title { font-size: 13px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: rgba(255,255,255,0.75); }
+    .demo-bar .title b { color: #56d3cc; }
+    .tabs { display: flex; gap: 8px; }
+    .tab {
+      padding: 8px 18px; border-radius: 999px; font-size: 13px; font-weight: 700;
+      background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.15);
+      cursor: pointer; transition: all 0.2s ease;
+    }
+    .tab.active { background: #56d3cc; color: #1b1e23; border-color: #56d3cc; }
+    .hint { font-size: 12px; color: rgba(255,255,255,0.5); }
+
+    .stage { max-width: 560px; margin: 28px auto; padding: 0 12px; }
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* ============ SHARED CARD ============ */
+    .card { background: #fff; border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); margin-bottom: 18px; overflow: hidden; }
+    .ad-img { width: 100%; display: block; cursor: pointer; background:#111; }
+    .avatar {
+      width: 48px; height: 48px; border-radius: 50%; background: #1b1e23;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .avatar svg { width: 30px; height: 15px; color: #fff; }
+    .cta-btn { cursor: pointer; border: none; font-family: inherit; }
+
+    /* ============ LINKEDIN ============ */
+    .li-topbar { background: #fff; border-bottom: 1px solid #e0e0e0; }
+    .li-topbar-inner { max-width: 560px; margin: 0 auto; display: flex; align-items: center; gap: 10px; padding: 6px 12px; }
+    .li-logo { width: 34px; height: 34px; background: #0a66c2; border-radius: 6px; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 20px; }
+    .li-search { flex: 1; background: #edf3f8; border-radius: 6px; padding: 8px 12px; font-size: 13px; color: #666; max-width: 220px; }
+    .li-navicons { margin-left: auto; display: flex; gap: 20px; color: #666; font-size: 11px; }
+    .li-navicons span { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .dot { width: 22px; height: 22px; border-radius: 50%; background: #d9d9d9; }
+
+    .post-head { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px 8px; }
+    .post-name { font-size: 14px; font-weight: 700; color: #1c1e21; line-height: 1.2; }
+    .post-sub { font-size: 12px; color: #65676b; margin-top: 1px; }
+    .post-promoted { font-size: 12px; color: #65676b; margin-top: 2px; }
+    .follow-link { color: #0a66c2; font-weight: 700; font-size: 14px; margin-left: auto; white-space: nowrap; }
+    .post-text { padding: 4px 16px 12px; font-size: 14px; line-height: 1.5; color: #1c1e21; }
+
+    .li-linkbar { display: flex; align-items: center; gap: 12px; background: #edf3f8; padding: 12px 16px; }
+    .li-linkbar .meta { flex: 1; min-width: 0; }
+    .li-linkbar .headline { font-size: 15px; font-weight: 700; color: #1c1e21; line-height: 1.25; }
+    .li-linkbar .domain { font-size: 12px; color: #65676b; margin-top: 2px; }
+    .li-shop { background: #0a66c2; color: #fff; padding: 8px 18px; border-radius: 999px; font-weight: 700; font-size: 14px; white-space: nowrap; }
+
+    .li-social { display: flex; justify-content: space-between; padding: 6px 24px; color: #65676b; font-size: 13px; font-weight: 600; }
+    .li-social span { display: flex; align-items: center; gap: 6px; padding: 8px; }
+    .li-count { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; font-size: 12px; color: #65676b; border-bottom: 1px solid #eee; }
+
+    /* ============ FACEBOOK ============ */
+    .fb-topbar { background: #fff; border-bottom: 1px solid #dddfe2; }
+    .fb-topbar-inner { max-width: 560px; margin: 0 auto; display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
+    .fb-logo { width: 40px; height: 40px; background: #1877f2; border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 26px; font-family: Georgia, serif; }
+    .fb-search { flex: 1; background: #f0f2f5; border-radius: 999px; padding: 9px 14px; font-size: 14px; color: #65676b; max-width: 240px; }
+    .fb-navicons { margin-left: auto; display: flex; gap: 10px; }
+    .fb-navicons .dot { width: 40px; height: 40px; background: #e4e6eb; }
+
+    .fb-linkbar { background: #f0f2f5; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+    .fb-linkbar .meta { flex: 1; min-width: 0; }
+    .fb-linkbar .domain { font-size: 12px; color: #65676b; text-transform: uppercase; letter-spacing: 0.3px; }
+    .fb-linkbar .headline { font-size: 16px; font-weight: 700; color: #1c1e21; line-height: 1.25; margin-top: 2px; }
+    .fb-linkbar .sub { font-size: 13px; color: #65676b; margin-top: 2px; }
+    .fb-shop { background: #e4e6eb; color: #050505; padding: 9px 16px; border-radius: 8px; font-weight: 700; font-size: 14px; white-space: nowrap; }
+
+    .fb-reactions { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; font-size: 13px; color: #65676b; border-bottom: 1px solid #eee; }
+    .fb-actions { display: flex; justify-content: space-around; padding: 4px 8px; color: #65676b; font-weight: 600; font-size: 15px; }
+    .fb-actions span { padding: 8px; }
+
+    .concept-badge {
+      position: fixed; right: 14px; bottom: 14px; z-index: 200;
+      background: rgba(27,30,35,0.9); color: #56d3cc; font-size: 11px; font-weight: 700;
+      padding: 8px 14px; border-radius: 999px; letter-spacing: 0.5px; text-transform: uppercase;
+      border: 1px solid rgba(86,211,204,0.4); cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <!-- LVT mark reused as advertiser avatar -->
+  <svg style="display:none"><symbol id="lvtmark" viewBox="0 0 76 36"><path d="M14.1675 0.521484L29.4019 35.5215H29.4528H39.1845L23.9501 0.521484H14.1675Z" fill="currentColor"></path><path d="M9.45465 27.2862V0.521484H0.5V35.5215H24.6763L21.097 27.2862H9.45465Z" fill="currentColor"></path><path d="M44.6873 0.521484L36.6753 18.9222L41.5666 30.1557L50.8779 8.75678H55.5654V35.5215H64.5201V8.75678H71.9207L75.5 0.521484H44.6873Z" fill="currentColor"></path></symbol></svg>
+
+  <div class="demo-bar">
+    <div class="title">Budget Cam · <b>Ad → Site</b> Funnel Demo</div>
+    <div class="tabs">
+      <div class="tab active" data-view="linkedin" onclick="showView('linkedin', this)">LinkedIn</div>
+      <div class="tab" data-view="facebook" onclick="showView('facebook', this)">Facebook</div>
+    </div>
+    <div class="hint">Click the ad or “Shop Now” → lands on the store</div>
+  </div>
+
+  <!-- ================= LINKEDIN ================= -->
+  <div class="view active" id="view-linkedin">
+    <div class="li-topbar">
+      <div class="li-topbar-inner">
+        <div class="li-logo">in</div>
+        <div class="li-search">Search</div>
+        <div class="li-navicons">
+          <span><div class="dot"></div>Home</span>
+          <span><div class="dot"></div>Network</span>
+          <span><div class="dot"></div>Jobs</span>
+          <span><div class="dot"></div>Me</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="card">
+        <div class="post-head">
+          <div class="avatar"><svg><use href="#lvtmark"/></svg></div>
+          <div>
+            <div class="post-name">LiveView Technologies</div>
+            <div class="post-sub">12,431 followers</div>
+            <div class="post-promoted">Promoted</div>
+          </div>
+          <div class="follow-link">+ Follow</div>
+        </div>
+        <div class="post-text">
+          Your jobsite shouldn’t wait weeks for security. ☀️ <b>Budget Cam</b> is a solar + LTE camera you order online and set up yourself in minutes — no trenching, no electrician, no install crew. 24/7 recording with people &amp; vehicle detection, live in the LVT app.
+        </div>
+        <a href="budget-cam.html">
+          <img class="ad-img" src="images/2024_05_VKX_CONSTRUCTION.jpg" alt="Budget Cam deployed on a construction site">
+        </a>
+        <a href="budget-cam.html" style="display:block">
+          <div class="li-linkbar">
+            <div class="meta">
+              <div class="headline">Live eyes on your site in hours — from $895 + $59/mo</div>
+              <div class="domain">budgetcam.lvt.com</div>
+            </div>
+            <button class="cta-btn li-shop">Shop Now</button>
+          </div>
+        </a>
+        <div class="li-count">
+          <span>👍❤️👏 214</span><span>18 comments</span>
+        </div>
+        <div class="li-social">
+          <span>👍 Like</span><span>💬 Comment</span><span>🔁 Repost</span><span>➤ Send</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= FACEBOOK ================= -->
+  <div class="view" id="view-facebook">
+    <div class="fb-topbar">
+      <div class="fb-topbar-inner">
+        <div class="fb-logo">f</div>
+        <div class="fb-search">Search Facebook</div>
+        <div class="fb-navicons">
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="card">
+        <div class="post-head">
+          <div class="avatar"><svg><use href="#lvtmark"/></svg></div>
+          <div>
+            <div class="post-name">LiveView Technologies</div>
+            <div class="post-sub">Sponsored · 🌐</div>
+          </div>
+          <div class="follow-link" style="color:#65676b;font-size:20px">⋯</div>
+        </div>
+        <div class="post-text">
+          Pull it out of the truck, mount it, done. ☀️📶 Solar-powered, cell-connected security for construction &amp; remote sites — ships to your door and installs in minutes. 24/7 eyes on your site, right in the LVT app.
+        </div>
+        <a href="budget-cam.html">
+          <img class="ad-img" src="images/2024_05_VKX_CONSTRUCTION.jpg" alt="Budget Cam deployed on a construction site">
+        </a>
+        <a href="budget-cam.html" style="display:block">
+          <div class="fb-linkbar">
+            <div class="meta">
+              <div class="domain">BUDGETCAM.LVT.COM</div>
+              <div class="headline">Budget Cam — from $895 + $59/mo</div>
+              <div class="sub">Solar + LTE security you install yourself. Live in hours.</div>
+            </div>
+            <button class="cta-btn fb-shop">Shop Now</button>
+          </div>
+        </a>
+        <div class="fb-reactions">
+          <span>👍❤️ 1.2K</span><span>96 comments · 41 shares</span>
+        </div>
+        <div class="fb-actions">
+          <span>👍 Like</span><span>💬 Comment</span><span>↪ Share</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="concept-badge" onclick="this.style.display='none'" title="Click to hide for a live demo">Concept mockup · click to hide</div>
+
+  <script>
+    function showView(name, el) {
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById('view-' + name).classList.add('active');
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      el.classList.add('active');
+      window.scrollTo(0, 0);
+    }
+  </script>
+</body>
+</html>
