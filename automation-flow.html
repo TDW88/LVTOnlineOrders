@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Budget Cam — Order-to-Fulfillment Automation</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --teal: #56d3cc; --wk: #4aa8ff; --sf: #00a1e0; --deal: #b98bff; --logi: #f4cd27;
+      --panel: rgba(255,255,255,0.04); --border: rgba(255,255,255,0.12);
+    }
+    body {
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(1200px 700px at 50% -10%, #23303a 0%, #1b1e23 55%, #16181c 100%);
+      color: #fff; min-height: 100vh; overflow-x: hidden;
+    }
+    .noise { position: fixed; inset: 0; opacity: 0.03; pointer-events: none; z-index: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+    header { display: flex; align-items: center; justify-content: space-between; gap: 20px;
+      padding: 18px 40px; border-bottom: 1px solid var(--border); position: sticky; top: 0;
+      background: rgba(27,30,35,0.85); backdrop-filter: blur(10px); z-index: 20; flex-wrap: wrap; }
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .brand svg { color: #fff; }
+    .brand .sub { font-size: 9px; font-weight: 600; letter-spacing: 0.5px; color: rgba(255,255,255,0.55); text-transform: uppercase; }
+    .brand .divider { width: 1px; height: 34px; background: rgba(255,255,255,0.2); margin: 0 4px; }
+    .brand .title { font-size: 12px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: rgba(255,255,255,0.8); }
+    .controls { display: flex; align-items: center; gap: 12px; }
+    .btn { padding: 10px 20px; border-radius: 999px; font-size: 13px; font-weight: 800; letter-spacing: 0.4px;
+      text-transform: uppercase; cursor: pointer; border: none; background: var(--teal); color: #1b1e23; transition: transform 0.15s ease, background 0.2s ease; }
+    .btn:hover { transform: scale(1.04); background: #7de8e0; }
+    .btn.ghost { background: rgba(255,255,255,0.08); color: #fff; border: 1px solid var(--border); }
+
+    main { max-width: 1400px; margin: 0 auto; padding: 40px; position: relative; z-index: 1; }
+    .headline { font-size: clamp(26px, 4vw, 40px); font-weight: 900; letter-spacing: -1.2px; margin-bottom: 8px; }
+    .headline .grad { background: linear-gradient(135deg, var(--teal), #7de8e0); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .lede { font-size: 16px; color: rgba(255,255,255,0.7); max-width: 760px; line-height: 1.6; margin-bottom: 36px; }
+
+    .layout { display: grid; grid-template-columns: 1.6fr 1fr; gap: 28px; align-items: start; }
+
+    /* Pipeline */
+    .pipe-wrap { overflow-x: auto; padding-bottom: 8px; }
+    .pipeline { display: flex; align-items: stretch; min-width: 720px; }
+    .node {
+      flex: 1; min-width: 150px; background: var(--panel); border: 1.5px solid var(--border);
+      border-radius: 16px; padding: 20px 16px; text-align: center; position: relative;
+      transition: all 0.4s ease; opacity: 0.55;
+    }
+    .node .ic { width: 54px; height: 54px; margin: 0 auto 12px; border-radius: 13px; display: flex; align-items: center; justify-content: center;
+      background: rgba(255,255,255,0.06); color: #fff; transition: all 0.4s ease; }
+    .node .sys { font-size: 15px; font-weight: 800; letter-spacing: -0.2px; margin-bottom: 3px; }
+    .node .act { font-size: 11.5px; color: rgba(255,255,255,0.6); line-height: 1.4; min-height: 30px; }
+    .node .pill { display: inline-block; margin-top: 10px; font-size: 10px; font-weight: 800; letter-spacing: 0.4px;
+      text-transform: uppercase; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.5); transition: all 0.3s ease; }
+    .node.active { opacity: 1; transform: translateY(-4px); }
+    .node.active .ic { box-shadow: 0 0 0 4px rgba(86,211,204,0.12); animation: pulse 1s ease-in-out infinite; }
+    .node.done { opacity: 1; }
+    .node.done .pill { background: rgba(86,211,204,0.18); color: var(--teal); }
+    .node[data-accent="teal"].active .ic, .node[data-accent="teal"].done .ic { background: rgba(86,211,204,0.18); color: var(--teal); }
+    .node[data-accent="sf"].active .ic, .node[data-accent="sf"].done .ic { background: rgba(0,161,224,0.2); color: var(--sf); }
+    .node[data-accent="deal"].active .ic, .node[data-accent="deal"].done .ic { background: rgba(185,139,255,0.2); color: var(--deal); }
+    .node[data-accent="logi"].active .ic, .node[data-accent="logi"].done .ic { background: rgba(244,205,39,0.2); color: var(--logi); }
+    .node.done { border-color: rgba(86,211,204,0.5); }
+    @keyframes pulse { 0%,100% { box-shadow: 0 0 0 4px rgba(86,211,204,0.1); } 50% { box-shadow: 0 0 0 9px rgba(86,211,204,0.02); } }
+
+    /* Connector (Workato) */
+    .conn { flex: 0 0 90px; align-self: center; position: relative; height: 60px; display: flex; align-items: center; justify-content: center; }
+    .conn .track { position: absolute; top: 50%; left: 0; right: 0; height: 3px; transform: translateY(-50%);
+      background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; }
+    .conn .track::after { content: ''; position: absolute; inset: 0; width: 0; background: linear-gradient(90deg, var(--wk), var(--teal)); transition: width 0.1s linear; }
+    .conn.flow .track::after { animation: fill 1s ease-in-out forwards; }
+    @keyframes fill { to { width: 100%; } }
+    .conn .dot { position: absolute; top: 50%; left: 0; width: 12px; height: 12px; border-radius: 50%;
+      background: var(--teal); box-shadow: 0 0 14px 3px rgba(86,211,204,0.7); transform: translate(-50%,-50%); opacity: 0; }
+    .conn.flow .dot { animation: travel 1s ease-in-out forwards; }
+    @keyframes travel { 0% { left: 0; opacity: 1; } 100% { left: 100%; opacity: 1; } }
+    .conn .wk { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-size: 9px; font-weight: 800;
+      letter-spacing: 0.5px; text-transform: uppercase; color: var(--wk); white-space: nowrap; opacity: 0.55; display: flex; align-items: center; gap: 4px; }
+    .conn .wk svg { transition: transform 0.6s ease; }
+    .conn.flow .wk { opacity: 1; }
+    .conn.flow .wk svg { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Parallel automations */
+    .parallel { margin-top: 26px; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; }
+    .parallel .lbl { font-size: 10px; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; color: rgba(255,255,255,0.5); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 10px; }
+    .chip { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.55); background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border); padding: 8px 14px; border-radius: 999px; display: flex; align-items: center; gap: 8px; transition: all 0.35s ease; }
+    .chip .led { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.25); transition: all 0.35s ease; }
+    .chip.on { color: #fff; border-color: rgba(74,168,255,0.5); background: rgba(74,168,255,0.1); }
+    .chip.on .led { background: var(--wk); box-shadow: 0 0 8px 2px rgba(74,168,255,0.6); }
+
+    /* Console */
+    .console { background: #0f1114; border: 1px solid var(--border); border-radius: 16px; overflow: hidden; height: 480px; display: flex; flex-direction: column; }
+    .console .bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.02); }
+    .console .bar .d { width: 11px; height: 11px; border-radius: 50%; }
+    .console .bar .t { margin-left: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; color: rgba(255,255,255,0.55); text-transform: uppercase; }
+    .log { flex: 1; overflow-y: auto; padding: 14px 16px; font-family: "JetBrains Mono", monospace; font-size: 12.5px; line-height: 1.7; }
+    .log .row { display: flex; gap: 10px; margin-bottom: 7px; opacity: 0; transform: translateY(6px); animation: rowIn 0.3s ease-out forwards; }
+    @keyframes rowIn { to { opacity: 1; transform: none; } }
+    .log .ts { color: rgba(255,255,255,0.35); flex-shrink: 0; }
+    .log .tag { flex-shrink: 0; font-weight: 600; }
+    .log .msg { color: rgba(255,255,255,0.82); }
+    .t-store { color: var(--teal); } .t-wk { color: var(--wk); } .t-sf { color: var(--sf); }
+    .t-deal { color: var(--deal); } .t-logi { color: var(--logi); } .t-ok { color: #52e0a0; }
+
+    /* Complete banner + metrics */
+    .complete { margin-top: 26px; border: 1.5px solid var(--teal); border-radius: 16px; padding: 24px 28px;
+      background: linear-gradient(135deg, rgba(86,211,204,0.14), rgba(125,232,224,0.05)); display: none; align-items: center; gap: 20px; }
+    .complete.show { display: flex; animation: rowIn 0.5s ease-out; }
+    .complete .chk { width: 52px; height: 52px; border-radius: 50%; background: rgba(86,211,204,0.2); color: var(--teal); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .complete h3 { font-size: 20px; font-weight: 800; letter-spacing: -0.4px; margin-bottom: 4px; }
+    .complete p { font-size: 13.5px; color: rgba(255,255,255,0.7); }
+    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 22px; }
+    .metric { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px; text-align: center; }
+    .metric .v { font-size: 30px; font-weight: 900; color: var(--teal); letter-spacing: -1px; }
+    .metric .k { font-size: 11px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; font-weight: 600; }
+
+    @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } .console { height: 360px; } }
+    @media (max-width: 640px) { header { padding: 14px 18px; } main { padding: 24px 16px; } .metrics { grid-template-columns: repeat(2,1fr); } }
+  </style>
+</head>
+<body>
+  <div class="noise"></div>
+
+  <header>
+    <div class="brand">
+      <svg width="52" height="24" viewBox="0 0 76 36" fill="none">
+        <path d="M14.1675 0.521484L29.4019 35.5215H29.4528H39.1845L23.9501 0.521484H14.1675Z" fill="currentColor"/>
+        <path d="M9.45465 27.2862V0.521484H0.5V35.5215H24.6763L21.097 27.2862H9.45465Z" fill="currentColor"/>
+        <path d="M44.6873 0.521484L36.6753 18.9222L41.5666 30.1557L50.8779 8.75678H55.5654V35.5215H64.5201V8.75678H71.9207L75.5 0.521484H44.6873Z" fill="currentColor"/>
+      </svg>
+      <div><div class="sub">LiveView Technologies</div></div>
+      <div class="divider"></div>
+      <div class="title">Order-to-Fulfillment · Automation</div>
+    </div>
+    <div class="controls">
+      <button class="btn ghost" id="replay">↻ Replay</button>
+      <button class="btn" id="play">▶ Run flow</button>
+    </div>
+  </header>
+
+  <main>
+    <h1 class="headline">One credit-card click. <span class="grad">Zero human touches.</span></h1>
+    <p class="lede">When a customer buys a Budget Cam, the order fulfills itself: Workato catches the webhook, writes it into Salesforce alongside every other automation, routes it through Deal Desk, and hands Logistics a shipment ticket — end to end, untouched.</p>
+
+    <div class="layout">
+      <div>
+        <div class="pipe-wrap">
+          <div class="pipeline">
+            <div class="node" id="n-store" data-accent="teal">
+              <div class="ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></div>
+              <div class="sys">Budget Cam Store</div>
+              <div class="act" id="a-store">Awaiting order</div>
+              <div class="pill" id="p-store">Idle</div>
+            </div>
+
+            <div class="conn" id="c1"><div class="wk">◆ Workato <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M19.1 4.9l-2.8 2.8M7.7 16.3l-2.8 2.8"/></svg></div><div class="track"></div><div class="dot"></div></div>
+
+            <div class="node" id="n-sf" data-accent="sf">
+              <div class="ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 1 0-1.3-8.8A5.5 5.5 0 0 0 5.4 11 4 4 0 0 0 6 19h11.5z"/></svg></div>
+              <div class="sys">Salesforce</div>
+              <div class="act" id="a-sf">System of record</div>
+              <div class="pill" id="p-sf">Idle</div>
+            </div>
+
+            <div class="conn" id="c2"><div class="wk">◆ Workato <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M19.1 4.9l-2.8 2.8M7.7 16.3l-2.8 2.8"/></svg></div><div class="track"></div><div class="dot"></div></div>
+
+            <div class="node" id="n-deal" data-accent="deal">
+              <div class="ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="m9 15 2 2 4-4"/></svg></div>
+              <div class="sys">Deal Desk</div>
+              <div class="act" id="a-deal">Quote &amp; approval</div>
+              <div class="pill" id="p-deal">Idle</div>
+            </div>
+
+            <div class="conn" id="c3"><div class="wk">◆ Workato <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M19.1 4.9l-2.8 2.8M7.7 16.3l-2.8 2.8"/></svg></div><div class="track"></div><div class="dot"></div></div>
+
+            <div class="node" id="n-logi" data-accent="logi">
+              <div class="ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H2v14M14 9h5l3 3v6h-8"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></div>
+              <div class="sys">Logistics</div>
+              <div class="act" id="a-logi">Fulfillment</div>
+              <div class="pill" id="p-logi">Idle</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="parallel">
+          <div class="lbl">◆ Also triggered in Salesforce · tracked alongside every other automation</div>
+          <div class="chips">
+            <div class="chip" id="ch-snow"><span class="led"></span>Snowflake data sync</div>
+            <div class="chip" id="ch-slack"><span class="led"></span>Slack #new-orders alert</div>
+            <div class="chip" id="ch-email"><span class="led"></span>Customer confirmation email</div>
+            <div class="chip" id="ch-cpq"><span class="led"></span>CPQ quote generated</div>
+          </div>
+        </div>
+
+        <div class="complete" id="complete">
+          <div class="chk"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg></div>
+          <div>
+            <h3>Order fulfilled automatically</h3>
+            <p id="complete-sub">Shipment ticket created — no rep, no deal desk analyst, no logistics coordinator involved.</p>
+          </div>
+        </div>
+
+        <div class="metrics">
+          <div class="metric"><div class="v" id="m-systems">0</div><div class="k">Systems touched</div></div>
+          <div class="metric"><div class="v" id="m-recipes">0</div><div class="k">Workato recipes fired</div></div>
+          <div class="metric"><div class="v" id="m-time">0.0s</div><div class="k">End to end</div></div>
+          <div class="metric"><div class="v" id="m-manual">0</div><div class="k">Manual touches</div></div>
+        </div>
+      </div>
+
+      <div class="console">
+        <div class="bar">
+          <span class="d" style="background:#ff5f57"></span><span class="d" style="background:#febc2e"></span><span class="d" style="background:#28c840"></span>
+          <span class="t">Workato · Automation Log</span>
+        </div>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const logEl = $('log');
+    let token = 0;
+
+    // deterministic-ish demo IDs
+    const orderId = 'BC-1784159084259';
+    const sfOrder = 'O-10042';
+    const sfOpp = 'OPP-88431';
+    const shipId = 'SHP-88213';
+
+    const two = (n) => String(n).padStart(2, '0');
+    let clock = { h: 16, m: 4, s: 2 };
+    function stamp() {
+      clock.s += 1; if (clock.s > 59) { clock.s = 0; clock.m += 1; }
+      return `${two(clock.h)}:${two(clock.m)}:${two(clock.s)}`;
+    }
+    function log(tagClass, tag, msg) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `<span class="ts">${stamp()}</span><span class="tag ${tagClass}">[${tag}]</span><span class="msg">${msg}</span>`;
+      logEl.appendChild(row);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function reset() {
+      logEl.innerHTML = '';
+      clock = { h: 16, m: 4, s: 2 };
+      ['store','sf','deal','logi'].forEach(n => {
+        $('n-' + n).classList.remove('active','done');
+        $('p-' + n).textContent = 'Idle';
+      });
+      ['c1','c2','c3'].forEach(c => $(c).classList.remove('flow'));
+      ['ch-snow','ch-slack','ch-email','ch-cpq'].forEach(c => $(c).classList.remove('on'));
+      $('a-store').textContent = 'Awaiting order';
+      $('a-sf').textContent = 'System of record';
+      $('a-deal').textContent = 'Quote & approval';
+      $('a-logi').textContent = 'Fulfillment';
+      $('complete').classList.remove('show');
+      $('m-systems').textContent = '0'; $('m-recipes').textContent = '0';
+      $('m-time').textContent = '0.0s'; $('m-manual').textContent = '0';
+    }
+
+    const wait = (ms) => new Promise(r => setTimeout(r, ms));
+
+    async function play() {
+      const my = ++token;
+      reset();
+      const alive = () => my === token;
+      const setPill = (n, txt) => { $('p-' + n).textContent = txt; };
+
+      // 1. Store — order placed
+      $('n-store').classList.add('active');
+      $('a-store').textContent = '1× Budget Cam · $895';
+      setPill('store', 'Order placed');
+      log('t-store', 'STORE', `Credit-card payment approved · order <b>${orderId}</b> ($895 + $99/mo)`);
+      await wait(1000); if (!alive()) return;
+      $('n-store').classList.remove('active'); $('n-store').classList.add('done'); setPill('store', 'Sent');
+
+      // Workato picks up webhook -> Salesforce
+      $('c1').classList.add('flow');
+      log('t-wk', 'WORKATO', 'Webhook <b>POST /order</b> received · recipe "BudgetCam → Salesforce" triggered');
+      await wait(1050); if (!alive()) return;
+
+      // 2. Salesforce
+      $('n-sf').classList.add('active');
+      $('a-sf').textContent = 'Creating records';
+      setPill('sf', 'Writing');
+      log('t-sf', 'SALESFORCE', 'Account matched · <b>Summit Ridge Construction</b>');
+      await wait(700); if (!alive()) return;
+      log('t-sf', 'SALESFORCE', `Order <b>${sfOrder}</b> + Opportunity <b>${sfOpp}</b> created · Stage: Closed Won`);
+      $('m-systems').textContent = '2';
+      await wait(500); if (!alive()) return;
+
+      // Parallel automations light up
+      log('t-wk', 'WORKATO', 'Fan-out: 3 downstream recipes tracked on this record');
+      const chips = ['ch-snow','ch-slack','ch-email'];
+      for (const c of chips) { if (!alive()) return; $(c).classList.add('on'); await wait(260); }
+      log('t-ok', 'SNOWFLAKE', 'Order synced to analytics warehouse');
+      log('t-ok', 'SLACK', 'Posted to #new-orders · "New Budget Cam sale 🎉"');
+      log('t-ok', 'EMAIL', `Confirmation sent to jordan@summitridge.co`);
+      await wait(700); if (!alive()) return;
+      $('n-sf').classList.remove('active'); $('n-sf').classList.add('done'); setPill('sf', 'Recorded');
+
+      // Workato -> Deal Desk
+      $('c2').classList.add('flow');
+      log('t-wk', 'WORKATO', `Recipe "New Order → Deal Desk" picked up <b>${sfOrder}</b>`);
+      await wait(1050); if (!alive()) return;
+
+      // 3. Deal Desk
+      $('n-deal').classList.add('active');
+      $('a-deal').textContent = 'Reviewing order';
+      setPill('deal', 'Reviewing');
+      $('ch-cpq').classList.add('on');
+      log('t-deal', 'DEAL DESK', 'CPQ quote generated & attached to opportunity');
+      await wait(750); if (!alive()) return;
+      log('t-deal', 'DEAL DESK', 'Paid order · under approval threshold — <b>auto-approved</b>, no manual review');
+      $('m-systems').textContent = '3';
+      await wait(650); if (!alive()) return;
+      $('n-deal').classList.remove('active'); $('n-deal').classList.add('done'); setPill('deal', 'Approved');
+
+      // Workato -> Logistics
+      $('c3').classList.add('flow');
+      log('t-wk', 'WORKATO', 'Recipe "Approved Order → Logistics" fired');
+      await wait(1050); if (!alive()) return;
+
+      // 4. Logistics
+      $('n-logi').classList.add('active');
+      $('a-logi').textContent = 'Creating ticket';
+      setPill('logi', 'Ticketing');
+      log('t-logi', 'LOGISTICS', `Shipment ticket <b>${shipId}</b> created · ship-to West Valley City, UT`);
+      await wait(750); if (!alive()) return;
+      log('t-logi', 'LOGISTICS', 'Carrier: 2-day · 1× Budget Cam · pick/pack queued');
+      $('m-systems').textContent = '4';
+      await wait(650); if (!alive()) return;
+      $('n-logi').classList.remove('active'); $('n-logi').classList.add('done'); setPill('logi', `🎫 ${shipId}`);
+
+      // Complete
+      log('t-ok', 'DONE', `Order ${orderId} fulfilled end-to-end · 0 manual touches`);
+      $('complete-sub').textContent = `Order ${orderId} → Salesforce ${sfOrder} → Deal Desk approved → Logistics ticket ${shipId}. No human involved.`;
+      $('complete').classList.add('show');
+
+      // animate metrics
+      animateVal('m-recipes', 0, 6, 700, v => v);
+      animateVal('m-time', 0, 6.4, 900, v => v.toFixed(1) + 's');
+      $('m-manual').textContent = '0';
+    }
+
+    function animateVal(id, from, to, dur, fmt) {
+      const el = $(id); const start = performance.now();
+      function step(now) {
+        const p = Math.min(1, (now - start) / dur);
+        const val = from + (to - from) * p;
+        el.textContent = fmt(val);
+        if (p < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    $('play').addEventListener('click', play);
+    $('replay').addEventListener('click', play);
+    // auto-play shortly after load
+    window.addEventListener('load', () => setTimeout(play, 500));
+  </script>
+</body>
+</html>
