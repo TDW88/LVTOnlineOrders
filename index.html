@@ -191,7 +191,7 @@ function LVTConfigurator() {
   const LPR_MONTHLY = 500;
   const SATCOM_MONTHLY = 500;
 
-  // Alert Response Services (ARS) pricing (monthly, per site)
+  // Alert Response Services (ARS) pricing (monthly, per unit)
   const ARS_PRICING = { '12': 300, '24': 500 };
   
   // Software packages (monthly)
@@ -548,9 +548,9 @@ function LVTConfigurator() {
       if (pkg) monthlyTotal += pkg.monthlyPrice * unitCount;
     });
 
-    // Add Alert Response Services (flat monthly charge per site)
+    // Add Alert Response Services (per unit)
     if (config.siteConfig.ars.enabled === 'yes' && config.siteConfig.ars.hours) {
-      monthlyTotal += ARS_PRICING[config.siteConfig.ars.hours] || 0;
+      monthlyTotal += (ARS_PRICING[config.siteConfig.ars.hours] || 0) * unitCount;
     }
     
     // Apply lease term discount if selected
@@ -612,9 +612,9 @@ function LVTConfigurator() {
       if (pkg) monthlyTotal += pkg.monthlyPrice * unitCount;
     });
 
-    // Add Alert Response Services (flat monthly charge per site)
+    // Add Alert Response Services (per unit)
     if (config.siteConfig.ars.enabled === 'yes' && config.siteConfig.ars.hours) {
-      monthlyTotal += ARS_PRICING[config.siteConfig.ars.hours] || 0;
+      monthlyTotal += (ARS_PRICING[config.siteConfig.ars.hours] || 0) * unitCount;
     }
     
     // Apply discount for this specific term
@@ -2998,7 +2998,14 @@ function LVTConfigurator() {
                               fontWeight: '900',
                               color: active ? '#56d3cc' : 'rgba(255,255,255,0.6)'
                             }}>
-                              +${ARS_PRICING[opt.value].toLocaleString()}/mo
+                              +${ARS_PRICING[opt.value].toLocaleString()}/mo per unit
+                            </div>
+                            <div style={{
+                              fontSize: '12px',
+                              color: 'rgba(255,255,255,0.55)',
+                              marginTop: '2px'
+                            }}>
+                              {totalUnits} {totalUnits === 1 ? 'unit' : 'units'} · +${(ARS_PRICING[opt.value] * totalUnits).toLocaleString()}/mo total
                             </div>
                           </button>
                         );
@@ -3738,7 +3745,9 @@ function LVTConfigurator() {
                         <div style={rowStyle}>
                           <span>Alert Response Services</span>
                           <span style={{ color: '#56d3cc', textAlign: 'right' }}>
-                            {arsOn ? `${sc.ars.hours} hrs · +$${ARS_PRICING[sc.ars.hours].toLocaleString()}/mo` : 'Not included'}
+                            {arsOn
+                              ? `${totalUnits} × ${sc.ars.hours} hrs · +$${(ARS_PRICING[sc.ars.hours] * totalUnits).toLocaleString()}/mo`
+                              : 'Not included'}
                           </span>
                         </div>
                       )}
@@ -3959,8 +3968,11 @@ function LVTConfigurator() {
                       arsMonitoringHours: config.siteConfig.ars.enabled === 'yes' && config.siteConfig.ars.hours
                         ? `${config.siteConfig.ars.hours} hours`
                         : 'N/A',
-                      arsMonthlyCharge: config.siteConfig.ars.enabled === 'yes' && config.siteConfig.ars.hours
+                      arsRatePerUnit: config.siteConfig.ars.enabled === 'yes' && config.siteConfig.ars.hours
                         ? ARS_PRICING[config.siteConfig.ars.hours]
+                        : 0,
+                      arsMonthlyCharge: config.siteConfig.ars.enabled === 'yes' && config.siteConfig.ars.hours
+                        ? ARS_PRICING[config.siteConfig.ars.hours] * totalUnits
                         : 0,
                       arsContacts: config.siteConfig.ars.enabled === 'yes'
                         ? config.siteConfig.ars.contacts.map((contact, i) => ({
