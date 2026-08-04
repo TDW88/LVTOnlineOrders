@@ -882,6 +882,347 @@ function LVTConfigurator() {
     return sum + locationTotal;
   }, 0);
 
+  // ---------------------------------------------------------------------------
+  // Order model
+  //
+  // buildOrderModel() is the single typed representation of a submission:
+  // booleans are booleans, numbers are numbers, repeated things are arrays.
+  // Every outbound format is rendered FROM it, so a field is defined once:
+  //   buildWebhookPayload()    -> the flat, human-readable object Workato receives
+  //   buildSalesforceRecord()  -> Salesforce-shaped fields for CLI import
+  // ---------------------------------------------------------------------------
+
+  // Salesforce constants for orders originating in this configurator
+  const SF_DEFAULTS = {
+    type: 'Existing',
+    leadSource: 'Website',
+    stage: '1',
+    referenceConnection: 'No',
+    quotePrimary: true
+  };
+
+  const addMonths = (date, months) => {
+    const d = new Date(date.getTime());
+    const targetMonth = d.getMonth() + months;
+    const dayOfMonth = d.getDate();
+    d.setDate(1);
+    d.setMonth(targetMonth);
+    // Clamp to the last valid day when the target month is shorter
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    d.setDate(Math.min(dayOfMonth, lastDay));
+    return d;
+  };
+  const toDateOnly = (date) => date.toISOString().split('T')[0];
+
+  const buildOrderModel = ({ orderId, submittedAt }) => {
+    const sc = config.siteConfig;
+    const ci = config.contactInfo;
+    const billing = ci.billingAddress;
+
+    const shipping = ci.shippingAddresses.map(address => {
+      const source = address.sameAsBilling ? billing : address;
+      return {
+        locationZip: address.zipCode,
+        unitCount: unitsByZip[address.zipCode] || 0,
+        sameAsBilling: !!address.sameAsBilling,
+        street: source.street,
+        city: source.city,
+        state: source.state,
+        zip: source.zip
+      };
+    });
+
+    const locations = config.locations.map((location, idx) => ({
+      locationNumber: idx + 1,
+      zipCode: location.zipCode,
+      units: location.units.map(unit => {
+        const unitType = getUnitType(unit.unitType);
+        return {
+          unitTypeId: unit.unitType,
+          unitTypeName: unitType.name,
+          quantity: unit.quantity || 0,
+          needsGenerator: !!(unitType.generatorEligible && unit.needsGenerator),
+          baseMonthlyPerUnit: unitType.baseMonthly
+        };
+      })
+    }));
+
+    // One entry per physical unit, index-aligned with the GPS inputs
+    const gps = gpsUnitList.map((u, i) => {
+      const coord = sc.gpsCoordinates[i] || { lat: '', long: '' };
+      const asNumber = (v) => {
+        const n = parseFloat(v);
+        return v !== '' && !Number.isNaN(n) ? n : null;
+      };
+      return {
+        unitNumber: i + 1,
+        unitTypeName: u.typeName,
+        zipCode: u.zip,
+        latitude: asNumber(coord.lat),
+        longitude: asNumber(coord.long)
+      };
+    });
+
+    const arsTier = sc.ars.enabled === 'yes' && sc.ars.tier ? getArsTier(sc.ars.tier) : null;
+    const leaseTermOption = leaseTerms.find(t => t.months === config.leaseTerm) || null;
+
+    const model = {
+      meta: {
+        orderId,
+        submittedAt: submittedAt.toISOString(),
+        source: 'online-configurator'
+      },
+      account: {
+        companyName: ci.companyName
+      },
+      contacts: {
+        primary: { name: ci.fullName, email: ci.email, phone: ci.phone },
+        onsite: {
+          sameAsPrimary: !!ci.onsiteContact.sameAsPrimary,
+          name: resolvedOnsiteContact.name,
+          phone: resolvedOnsiteContact.phone
+        },
+        arsEscalation: arsTier
+          ? sc.ars.contacts.map((c, i) => ({
+              position: i + 1, name: c.name, email: c.email, phone: c.phone
+            }))
+          : []
+      },
+      addresses: { billing: { ...billing }, shipping },
+      deployment: { totalUnits, locations, gpsCoordinates: gps },
+      hardware: {
+        ndaaCompliant: !!config.ndaaCompliant,
+        nightVision: !!config.nightVision,
+        lpr: !!config.lpr,
+        satCom: !!config.satCom,
+        generator: {
+          recommendedCount: generatorUnitCount,
+          billedCount: billedGeneratorCount,
+          declined: !!config.generatorBypass,
+          downtimeAccepted: !!config.generatorBypass,
+          monthlyPerGenerator: GENERATOR_MONTHLY
+        }
+      },
+      software: {
+        packages: config.softwarePackages
+          .map(id => softwarePackages.find(p => p.id === id))
+          .filter(Boolean)
+          .map(pkg => ({ id: pkg.id, name: pkg.name, monthlyPerUnit: pkg.monthlyPrice }))
+      },
+      ars: {
+        enabled: sc.ars.enabled === 'yes',
+        tierId: arsTier ? arsTier.value : null,
+        tierLabel: arsTier ? arsTier.label : null,
+        coverage: arsTier ? arsTier.coverage : null,
+        customDetail: arsTier && arsTier.value === 'custom' ? sc.ars.customDetail : null,
+        ratePerUnit: arsTier && arsTier.monthly ? arsTier.monthly : 0,
+        monthlyCharge: arsTier && arsTier.monthly ? arsTier.monthly * totalUnits : 0,
+        quotedSeparately: !!(arsTier && !arsTier.monthly)
+      },
+      site: {
+        placementMap: {
+          fileName: sc.placementMapLater ? null : (sc.placementMapName || null),
+          deferred: !!sc.placementMapLater,
+          // The file itself is not transmitted — only its name. See notes in the PR.
+          fileIncluded: false
+        },
+        schedule: {
+          weekday: { armFrom: sc.securitySchedule.weekdayArm || null, armUntil: sc.securitySchedule.weekdayDisarm || null },
+          weekend: { armFrom: sc.securitySchedule.weekendArm || null, armUntil: sc.securitySchedule.weekendDisarm || null }
+        },
+        deterrence: {
+          strobes: sc.deterrence.strobes, // 'off' | 'night' | '24-7'
+          floodlight: !!sc.deterrence.floodlight,
+          audio: !!sc.deterrence.audio
+        },
+        areasOfConcern: sc.areasOfConcern || null
+      },
+      lease: {
+        termMonths: config.leaseTerm,
+        discountRate: leaseTermOption ? leaseTermOption.discount : 0,
+        baseMonthlyTotal,
+        monthlyPayment: Math.round(calculateMonthlyTotal()),
+        totalContract: calculateContractTotal()
+      }
+    };
+
+    model.salesforce = buildSalesforceRecord(model, submittedAt);
+    return model;
+  };
+
+  // Salesforce-shaped fields. Values this configurator cannot know are null and
+  // listed in `unresolved` rather than guessed — see the notes on each.
+  const buildSalesforceRecord = (model, submittedAt) => {
+    const units = model.deployment.totalUnits;
+    const term = model.lease.termMonths;
+    const unresolved = [];
+
+    // Owner fields come from the Account Owner in Salesforce, not from the form
+    unresolved.push({ field: 'opportunityOwner', reason: 'Set from Account Owner on the Account record' });
+    unresolved.push({ field: 'quote.salesRep', reason: 'Set from Account Owner on the Account record' });
+    // Not collected anywhere in the configurator today
+    unresolved.push({ field: 'quote.paymentSchedule', reason: 'Not collected by the configurator' });
+    unresolved.push({ field: 'quote.termsAndConditionsType', reason: 'Not collected by the configurator' });
+    unresolved.push({ field: 'quote.startDate', reason: 'Not collected — no requested deployment date is captured' });
+    unresolved.push({ field: 'quote.paymentTerms', reason: 'Not collected by the configurator' });
+
+    return {
+      opportunity: {
+        // Derived: adjust the format to match your naming convention
+        name: `${model.account.companyName} - ${units} ${units === 1 ? 'Unit' : 'Units'} - ${term} mo`,
+        primaryContact: model.contacts.primary.name,
+        primaryContactEmail: model.contacts.primary.email,
+        primaryContactPhone: model.contacts.primary.phone,
+        projectPointOfContact: model.contacts.onsite.name,
+        projectPointOfContactPhone: model.contacts.onsite.phone,
+        type: SF_DEFAULTS.type,
+        leadSource: SF_DEFAULTS.leadSource,
+        stage: SF_DEFAULTS.stage,
+        closeDate: toDateOnly(addMonths(submittedAt, 1)),
+        referenceConnection: SF_DEFAULTS.referenceConnection,
+        opportunityOwner: null,
+        amount: model.lease.totalContract
+      },
+      quote: {
+        salesRep: null,
+        primary: SF_DEFAULTS.quotePrimary,
+        paymentSchedule: null,
+        termsAndConditionsType: null,
+        startDate: null,
+        subscriptionTerm: term,
+        paymentTerms: null
+      },
+      unresolved
+    };
+  };
+
+  // Renders the flat, human-readable object the Workato webhook already expects.
+  const buildWebhookPayload = (model) => {
+    const yn = (v) => (v ? 'Yes' : 'No');
+    const addressFull = (a) => `${a.street}, ${a.city}, ${a.state} ${a.zip}`;
+    const timeWindow = (w) => (w.armFrom || w.armUntil) ? `${w.armFrom || '—'} to ${w.armUntil || '—'}` : 'Not set';
+    const strobeLabels = { '24-7': '24/7', night: 'Night', off: 'Off' };
+
+    const unitLines = model.deployment.locations.flatMap(loc =>
+      loc.units.map(unit => ({ loc, unit }))
+    );
+    const shippingByZip = model.addresses.shipping.reduce((acc, a) => {
+      acc[a.locationZip] = a;
+      return acc;
+    }, {});
+
+    return {
+      // Order Info
+      timestamp: model.meta.submittedAt,
+      orderId: model.meta.orderId,
+
+      // Configuration Summary
+      unitCount: model.deployment.totalUnits,
+      baseMonthlyTotal: model.lease.baseMonthlyTotal,
+      deploymentZips: model.deployment.locations.map(l => l.zipCode).join(', '),
+      deploymentDetails: unitLines.map(({ loc, unit }) =>
+        `Location ${loc.locationNumber}: ${unit.quantity} ${unit.quantity === 1 ? 'Unit' : 'Units'} • ${unit.unitTypeName} • Zip ${loc.zipCode}${unit.needsGenerator ? ' (+ Generator)' : ''}`
+      ).join(' | '),
+      unitBreakdown: unitLines.map(({ loc, unit }) => {
+        const ship = shippingByZip[loc.zipCode] || null;
+        return {
+          location: loc.locationNumber,
+          unitType: unit.unitTypeName,
+          quantity: unit.quantity,
+          zipCode: loc.zipCode,
+          needsGenerator: yn(unit.needsGenerator),
+          shippingAddress: ship
+            ? {
+                locationZip: ship.locationZip,
+                unitCount: ship.unitCount,
+                sameAsBilling: yn(ship.sameAsBilling),
+                street: ship.street,
+                city: ship.city,
+                state: ship.state,
+                zip: ship.zip,
+                addressFull: addressFull(ship)
+              }
+            : null
+        };
+      }),
+      generatorsNeeded: model.hardware.generator.recommendedCount,
+
+      // Hardware Options
+      ndaaCompliant: yn(model.hardware.ndaaCompliant),
+      nightVision: yn(model.hardware.nightVision),
+      lpr: yn(model.hardware.lpr),
+      satCom: yn(model.hardware.satCom),
+      generatorDeclined: yn(model.hardware.generator.declined),
+      generatorDowntimeAccepted: model.hardware.generator.declined ? 'Yes' : 'N/A',
+      generatorsBilled: model.hardware.generator.billedCount,
+
+      // Software Packages
+      softwarePackages: model.software.packages.length > 0
+        ? model.software.packages.map(p => p.id).join(', ')
+        : 'None',
+
+      // Site Configuration
+      placementMap: model.site.placementMap.deferred
+        ? 'To be determined later'
+        : (model.site.placementMap.fileName || 'Not provided'),
+      arsEnabled: yn(model.ars.enabled),
+      arsTier: model.ars.tierLabel || 'N/A',
+      arsCoverage: model.ars.coverage || 'N/A',
+      arsCustomDetail: model.ars.customDetail || 'N/A',
+      arsRatePerUnit: model.ars.ratePerUnit,
+      arsMonthlyCharge: model.ars.monthlyCharge,
+      arsContacts: model.contacts.arsEscalation.map(c => ({
+        contact: c.position, name: c.name, email: c.email, phone: c.phone
+      })),
+      gpsCoordinates: model.deployment.gpsCoordinates.length > 0
+        ? model.deployment.gpsCoordinates.map(g =>
+            `Unit ${g.unitNumber} (${g.unitTypeName}${g.zipCode ? `, Zip ${g.zipCode}` : ''}): ${g.latitude !== null ? g.latitude.toFixed(6) : '—'}, ${g.longitude !== null ? g.longitude.toFixed(6) : '—'}`
+          ).join(' | ')
+        : 'None',
+      scheduleWeekday: timeWindow(model.site.schedule.weekday),
+      scheduleWeekend: timeWindow(model.site.schedule.weekend),
+      deterrenceStrobes: strobeLabels[model.site.deterrence.strobes],
+      deterrenceFloodlight: model.site.deterrence.floodlight ? 'On' : 'Off',
+      deterrenceAudio: model.site.deterrence.audio ? 'On' : 'Off',
+      areasOfConcern: model.site.areasOfConcern || 'None provided',
+
+      // Lease Details
+      leaseTerm: model.lease.termMonths + ' months',
+      monthlyPayment: model.lease.monthlyPayment,
+      totalContract: model.lease.totalContract,
+
+      // Contact Information
+      companyName: model.account.companyName,
+      contactName: model.contacts.primary.name,
+      email: model.contacts.primary.email,
+      phone: model.contacts.primary.phone,
+
+      // Onsite Contact
+      onsiteContactSameAsPrimary: yn(model.contacts.onsite.sameAsPrimary),
+      onsiteContactName: model.contacts.onsite.name,
+      onsiteContactPhone: model.contacts.onsite.phone,
+
+      // Billing Address
+      billingStreet: model.addresses.billing.street,
+      billingCity: model.addresses.billing.city,
+      billingState: model.addresses.billing.state,
+      billingZip: model.addresses.billing.zip,
+      billingAddressFull: addressFull(model.addresses.billing),
+
+      // Shipping Addresses
+      shippingAddresses: model.addresses.shipping.map(a => ({
+        locationZip: a.locationZip,
+        unitCount: a.unitCount,
+        sameAsBilling: yn(a.sameAsBilling),
+        street: a.street,
+        city: a.city,
+        state: a.state,
+        zip: a.zip,
+        addressFull: addressFull(a)
+      }))
+    };
+  };
+
   return (
     <div className="app-shell">
       <div className="noise-bg"></div>
@@ -4123,142 +4464,12 @@ function LVTConfigurator() {
                     const monthlyTotal = Math.round(calculateMonthlyTotal());
                     const contractTotal = calculateContractTotal();
                     
-                    const resolvedShippingAddresses = config.contactInfo.shippingAddresses.map(address => {
-                      const source = address.sameAsBilling
-                        ? config.contactInfo.billingAddress
-                        : address;
-                      return {
-                        locationZip: address.zipCode,
-                        unitCount: unitsByZip[address.zipCode] || 0,
-                        sameAsBilling: address.sameAsBilling ? 'Yes' : 'No',
-                        street: source.street,
-                        city: source.city,
-                        state: source.state,
-                        zip: source.zip,
-                        addressFull: `${source.street}, ${source.city}, ${source.state} ${source.zip}`
-                      };
+                    const submittedAt = new Date();
+                    const orderModel = buildOrderModel({
+                      orderId: `LVT-${submittedAt.getTime()}`,
+                      submittedAt
                     });
-                    const shippingByZip = resolvedShippingAddresses.reduce((acc, address) => {
-                      acc[address.locationZip] = address;
-                      return acc;
-                    }, {});
-                    const submittedArsTier = config.siteConfig.ars.enabled === 'yes' && config.siteConfig.ars.tier
-                      ? getArsTier(config.siteConfig.ars.tier)
-                      : null;
-
-                    const orderData = {
-                      // Order Info
-                      timestamp: new Date().toISOString(),
-                      orderId: `LVT-${Date.now()}`,
-                      
-                      // Configuration Summary
-                      unitCount: totalUnits,
-                      baseMonthlyTotal,
-                      deploymentZips: config.locations.map(location => location.zipCode).join(', '),
-                      deploymentDetails: config.locations.flatMap((location, locationIdx) =>
-                        location.units.map(unit =>
-                          `Location ${locationIdx + 1}: ${unit.quantity} ${unit.quantity === 1 ? 'Unit' : 'Units'} • ${getUnitType(unit.unitType).name} • Zip ${location.zipCode}${unit.needsGenerator ? ' (+ Generator)' : ''}`
-                        )
-                      ).join(' | '),
-                      unitBreakdown: config.locations.flatMap((location, locationIdx) => {
-                        const shippingAddress = shippingByZip[location.zipCode] || null;
-                        return location.units.map(unit => ({
-                          location: locationIdx + 1,
-                          unitType: getUnitType(unit.unitType).name,
-                          quantity: unit.quantity || 0,
-                          zipCode: location.zipCode,
-                          needsGenerator: unit.needsGenerator ? 'Yes' : 'No',
-                          shippingAddress
-                        }));
-                      }),
-                      generatorsNeeded: config.locations.reduce((sum, location) => {
-                        const locationGenerators = location.units
-                          .filter(unit => getUnitType(unit.unitType).generatorEligible && unit.needsGenerator)
-                          .reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
-                        return sum + locationGenerators;
-                      }, 0),
-                      
-                      // Hardware Options
-                      ndaaCompliant: config.ndaaCompliant ? 'Yes' : 'No',
-                      nightVision: config.nightVision ? 'Yes' : 'No',
-                      lpr: config.lpr ? 'Yes' : 'No',
-                      satCom: config.satCom ? 'Yes' : 'No',
-                      generatorDeclined: config.generatorBypass ? 'Yes' : 'No',
-                      generatorDowntimeAccepted: config.generatorBypass ? 'Yes' : 'N/A',
-                      generatorsBilled: billedGeneratorCount,
-                      
-                      // Software Packages
-                      softwarePackages: config.softwarePackages.length > 0
-                        ? config.softwarePackages.join(', ')
-                        : 'None',
-
-                      // Site Configuration
-                      placementMap: config.siteConfig.placementMapLater
-                        ? 'To be determined later'
-                        : (config.siteConfig.placementMapName || 'Not provided'),
-                      arsEnabled: config.siteConfig.ars.enabled === 'yes' ? 'Yes' : 'No',
-                      arsTier: submittedArsTier ? submittedArsTier.label : 'N/A',
-                      arsCoverage: submittedArsTier ? submittedArsTier.coverage : 'N/A',
-                      arsCustomDetail: submittedArsTier && submittedArsTier.value === 'custom'
-                        ? config.siteConfig.ars.customDetail
-                        : 'N/A',
-                      arsRatePerUnit: submittedArsTier && submittedArsTier.monthly
-                        ? submittedArsTier.monthly
-                        : 0,
-                      arsMonthlyCharge: submittedArsTier && submittedArsTier.monthly
-                        ? submittedArsTier.monthly * totalUnits
-                        : 0,
-                      arsContacts: config.siteConfig.ars.enabled === 'yes'
-                        ? config.siteConfig.ars.contacts.map((contact, i) => ({
-                            contact: i + 1,
-                            name: contact.name,
-                            email: contact.email,
-                            phone: contact.phone
-                          }))
-                        : [],
-                      gpsCoordinates: gpsUnitList.length > 0
-                        ? gpsUnitList.map((u, i) => {
-                            const c = config.siteConfig.gpsCoordinates[i] || { lat: '', long: '' };
-                            return `Unit ${i + 1} (${u.typeName}${u.zip ? `, Zip ${u.zip}` : ''}): ${c.lat || '—'}, ${c.long || '—'}`;
-                          }).join(' | ')
-                        : 'None',
-                      scheduleWeekday: (config.siteConfig.securitySchedule.weekdayArm || config.siteConfig.securitySchedule.weekdayDisarm)
-                        ? `${config.siteConfig.securitySchedule.weekdayArm || '—'} to ${config.siteConfig.securitySchedule.weekdayDisarm || '—'}`
-                        : 'Not set',
-                      scheduleWeekend: (config.siteConfig.securitySchedule.weekendArm || config.siteConfig.securitySchedule.weekendDisarm)
-                        ? `${config.siteConfig.securitySchedule.weekendArm || '—'} to ${config.siteConfig.securitySchedule.weekendDisarm || '—'}`
-                        : 'Not set',
-                      deterrenceStrobes: { '24-7': '24/7', night: 'Night', off: 'Off' }[config.siteConfig.deterrence.strobes],
-                      deterrenceFloodlight: config.siteConfig.deterrence.floodlight ? 'On' : 'Off',
-                      deterrenceAudio: config.siteConfig.deterrence.audio ? 'On' : 'Off',
-                      areasOfConcern: config.siteConfig.areasOfConcern || 'None provided',
-
-                      // Lease Details
-                      leaseTerm: config.leaseTerm + ' months',
-                      monthlyPayment: monthlyTotal,
-                      totalContract: contractTotal,
-                      
-                      // Contact Information
-                      companyName: config.contactInfo.companyName,
-                      contactName: config.contactInfo.fullName,
-                      email: config.contactInfo.email,
-                      phone: config.contactInfo.phone,
-
-                      // Onsite Contact
-                      onsiteContactSameAsPrimary: config.contactInfo.onsiteContact.sameAsPrimary ? 'Yes' : 'No',
-                      onsiteContactName: resolvedOnsiteContact.name,
-                      onsiteContactPhone: resolvedOnsiteContact.phone,
-                      
-                      // Billing Address
-                      billingStreet: config.contactInfo.billingAddress.street,
-                      billingCity: config.contactInfo.billingAddress.city,
-                      billingState: config.contactInfo.billingAddress.state,
-                      billingZip: config.contactInfo.billingAddress.zip,
-                      billingAddressFull: `${config.contactInfo.billingAddress.street}, ${config.contactInfo.billingAddress.city}, ${config.contactInfo.billingAddress.state} ${config.contactInfo.billingAddress.zip}`,
-                      
-                      // Shipping Addresses
-                      shippingAddresses: resolvedShippingAddresses
-                    };
+                    const orderData = buildWebhookPayload(orderModel);
                     
                     const payload = JSON.stringify(orderData);
                     let submitted = false;
