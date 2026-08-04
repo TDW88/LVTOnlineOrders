@@ -3674,6 +3674,28 @@ function LVTConfigurator() {
                         {orderResult.primary_contact_created && <> (new contact created)</>}
                       </>
                     )}
+                    {orderResult && orderResult.account_name && (
+                      <>
+                        <br />
+                        Account <strong>{orderResult.account_name}</strong>
+                        {orderResult.provisioned
+                          && orderResult.provisioned.billing_account_created
+                          && <> (new account created)</>}
+                      </>
+                    )}
+                    {orderResult && orderResult.provisioned
+                      && orderResult.provisioned.needs_vms_reconciliation && (
+                      <div style={{
+                        color: '#e0b341',
+                        fontSize: '12px',
+                        marginTop: '8px',
+                        textAlign: 'left'
+                      }}>
+                        This account was created from the portal. Its LVT identifiers were
+                        generated here and are not yet known to VMS, so it needs
+                        reconciling with the customer's real VMS record.
+                      </div>
+                    )}
                     {orderResult && orderResult.dry_run && (
                       <><br />Dry run — validated and resolved, nothing written.</>
                     )}

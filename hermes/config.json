@@ -14,9 +14,26 @@
   },
 
   "opportunity_defaults": {
+    "_note": "Exact Opportunity picklist values, verified against the org. No flow populates LeadSource on insert - every Hermes order had it null before this was set explicitly.",
     "record_type_developer_name": "Inside_Sales",
-    "stage_name": "2 - Discovery / Qualification",
-    "type": "New Business",
+    "_stage_note": "Four org validation rules constrain how the stage is set, and together they dictate the whole sequence: (1) 'New Opportunities cannot be created beyond Stage 1' - cannot insert at a late stage; (2) 'Please select a Primary Contact' - cannot advance without a primary contact role; (3) 'You must have a primary quote to progress this opportunity beyond the 4 - Proposal Delivered stage' - the quote must exist first; (4) 'Please only move forward one stage at a time' - no jumping. So: insert at creation_stage_name, attach the contact, build the quote and lines, then walk stage_progression one step at a time up to stage_name.",
+    "creation_stage_name": "2 - Discovery / Qualification",
+    "stage_name": "6 - Verbal Commit",
+
+    "_apex_test_note": "Apex_Test__c=true bypasses ONLY the 'one stage at a time' rule, letting the stage jump straight to the target in a single update instead of walking every intermediate stage. Verified: it does NOT bypass the create-beyond-stage-1, primary-contact, primary-quote or units rules - those still have to be satisfied properly. The flag is set for the jump and cleared immediately afterwards, so finished records are not left marked as Apex test data (no other opportunity in the org carries it). Set use_apex_test_bypass=false to fall back to walking stage_progression.",
+    "use_apex_test_bypass": true,
+    "clear_apex_test_after_jump": true,
+
+    "stage_progression": [
+      "1 - Target Identified",
+      "2 - Discovery / Qualification",
+      "3 - Solution Scoped",
+      "4 - Business Consideration / Negotiation",
+      "5 - Procurement",
+      "6 - Verbal Commit"
+    ],
+    "type": "Existing Business",
+    "lead_source": "Website",
     "close_date_offset_days": 90,
     "unit_count_field": "of_Units_in_Pipeline__c",
     "external_id_field": "External_Id__c"
@@ -77,6 +94,36 @@
       "option_id": "a1PUm0000049j2WMAQ",
       "name": "D-IR-PTZ- Base-Dahua",
       "list_price": 0
+    }
+  },
+
+  "bundle_option_fees": {
+    "_note": "Fees that ARE configured options of the bundle, so they attach under the bundle head like any other option. One-time charges, NOT extended over the term. Pinned by option id because ProductCode is ambiguous - two distinct products share the code 'Setup Fee' ($400 and $1,800 for Live Unit - Surround).",
+    "setup_fee": {
+      "option_id": "a1PUm0000049izNMAQ",
+      "name": "Setup Fee",
+      "product_id": "01t4W00000B3AK2QAN",
+      "list_price": 400,
+      "one_time": true
+    }
+  },
+
+  "standalone_fees": {
+    "_note": "Round-trip shipping is NOT a configured option of this bundle - the only shipping option under 'LVT Bundle' is One-Way. On real quotes in this org these products appear as standalone top-level lines (SBQQ__RequiredBy__c and SBQQ__ProductOption__c both null, 156 lines that way), so we match that rather than altering the product catalog. One-time, quantity tracks unit count.",
+    "round_trip_shipping_fee": {
+      "by_unit_type": {
+        "mobile": {
+          "product_id": "01tUm00000F3xFpIAJ",
+          "name": "Round-Trip Shipping Fee",
+          "list_price": 2000
+        },
+        "wall": {
+          "product_id": "01tUm00000F3xMHIAZ",
+          "name": "Wall / Pole Round-Trip Shipping Fee",
+          "list_price": 1000
+        }
+      },
+      "one_time": true
     }
   },
 

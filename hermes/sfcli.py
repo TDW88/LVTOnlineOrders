@@ -107,9 +107,21 @@ def run(args: list[str], *, timeout: int = 180) -> dict:
         raise SalesforceError(f"Salesforce CLI returned no JSON: {detail}")
 
     if payload.get("status") != 0:
-        raise SalesforceError(
-            payload.get("message") or f"sf {' '.join(args)} failed", payload
-        )
+        # The CLI's top-level message for a multi-error failure is just "Multiple errors
+        # returned. Check `error.data` for the error details", which is useless on its own
+        # - the actual validation-rule messages live in data[]. Flatten them in.
+        message = payload.get("message") or f"sf {' '.join(args)} failed"
+        details = []
+        for entry in payload.get("data") or []:
+            if isinstance(entry, dict):
+                text = entry.get("message") or entry.get("errorMessage")
+            else:
+                text = str(entry)
+            if text:
+                details.append(text.strip())
+        if details:
+            message = message.split("\n")[0] + " | " + " | ".join(details)
+        raise SalesforceError(message, payload)
 
     return payload.get("result", {})
 

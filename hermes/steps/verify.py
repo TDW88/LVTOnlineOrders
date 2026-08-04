@@ -90,9 +90,10 @@ def wait_for_pricing(quote_id: str, org: str,
 
 
 def verify(opportunity_id: str, quote_id: str, org: str,
-           expected_net: float | None = None) -> dict:
+           expected_net: float | None = None,
+           expected_fields: dict | None = None) -> dict:
     opportunity = sfcli.query_one(
-        "SELECT Id, Name, StageName, Type, CloseDate, AccountId, Account.Name, "
+        "SELECT Id, Name, StageName, Type, LeadSource, CloseDate, AccountId, Account.Name, "
         "of_Units_in_Pipeline__c, External_Id__c, RecordType.Name "
         f"FROM Opportunity WHERE Id = '{opportunity_id}'",
         org=org,
@@ -146,7 +147,13 @@ def verify(opportunity_id: str, quote_id: str, org: str,
     if quote and not quote.get("SBQQ__Primary__c"):
         warnings.append("quote is not flagged primary.")
 
-    head_lines = [ln for ln in lines if not ln.get("SBQQ__RequiredBy__c")]
+    # A bundle head has no RequiredBy but does carry the bundle product. Standalone fee
+    # lines also have no RequiredBy, so "RequiredBy is null" alone would over-count heads
+    # and mask a genuinely missing bundle head.
+    top_level = [ln for ln in lines if not ln.get("SBQQ__RequiredBy__c")]
+    head_lines = [ln for ln in top_level if ln.get("SBQQ__ProductOption__c") is None
+                  and (ln.get("SBQQ__Product__r") or {}).get("ProductCode") == "LVT Bundle"]
+    standalone_lines = [ln for ln in top_level if ln not in head_lines]
     if not head_lines:
         warnings.append("no bundle head line found - the bundle structure is wrong.")
 
@@ -162,6 +169,16 @@ def verify(opportunity_id: str, quote_id: str, org: str,
             f"quote list amount ({quote_list}) differs from net ({quote_net}), implying "
             "a discount was applied. v1 is meant to quote at list price only."
         )
+
+    # Read back the fields we set rather than assuming they stuck. A flow, validation rule
+    # or field-level security can quietly overwrite or drop a value on insert.
+    for field, wanted in (expected_fields or {}).items():
+        actual = (opportunity or {}).get(field)
+        if actual != wanted:
+            warnings.append(
+                f"Opportunity.{field} is {actual!r} but should be {wanted!r} - "
+                "something downstream changed it after insert."
+            )
 
     quote_contact_name = ((quote or {}).get("SBQQ__PrimaryContact__r") or {}).get("Name")
     opp_contact_name = (primary_roles[0].get("Contact") or {}).get("Name") if primary_roles else None
@@ -183,6 +200,7 @@ def verify(opportunity_id: str, quote_id: str, org: str,
         "expected_net_amount": expected_net,
         "line_count": len(lines),
         "head_line_count": len(head_lines),
+        "standalone_line_count": len(standalone_lines),
         "priced_line_count": len(priced_lines),
         "line_total": round(line_total, 2),
         "quote_net_amount": quote_net,

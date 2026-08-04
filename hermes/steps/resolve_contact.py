@@ -65,7 +65,8 @@ def resolve_contact(contact: dict, billing_account_id: str, org: str) -> dict | 
             org=org,
         )
         if matches:
-            return {"id": matches[0]["Id"], "name": matches[0]["Name"], "created": False}
+            return {"id": matches[0]["Id"], "name": matches[0]["Name"], "created": False,
+                    "email": email}
 
     # Fall back to a name match on the billing account before creating, so repeated
     # orders from someone who gave no email do not pile up duplicates.
@@ -78,7 +79,8 @@ def resolve_contact(contact: dict, billing_account_id: str, org: str) -> dict | 
         org=org,
     )
     if matches:
-        return {"id": matches[0]["Id"], "name": matches[0]["Name"], "created": False}
+        return {"id": matches[0]["Id"], "name": matches[0]["Name"], "created": False,
+                    "email": email}
 
     fields = {
         "LastName": last_name,
@@ -93,7 +95,47 @@ def resolve_contact(contact: dict, billing_account_id: str, org: str) -> dict | 
         fields["Phone"] = phone
 
     contact_id = sfcli.create("Contact", fields, org=org)
-    return {"id": contact_id, "name": name.strip(), "created": True}
+    return {"id": contact_id, "name": name.strip(), "created": True, "email": email}
+
+
+def link_account_billing_contact(account_id: str, contact: dict, org: str) -> dict:
+    """Set the account's billing contact, if it does not already have one.
+
+    Not cosmetic - it gates the quote line group. The chain is:
+
+        Account.Billing_Contact__c populated
+          -> Valid_Billing_Account__c formula turns green
+          -> Show_in_Billing_Results__c becomes true
+          -> the group's Billing_Account__c lookup filter accepts the account
+
+    Without it a freshly provisioned account reads "Needs Valid Billing Contact" and
+    creating the group fails with the opaque "Value does not exist or does not match filter
+    criteria". Established accounts already have one, so this only ever fires for new
+    customers.
+
+    An existing billing contact is never overwritten - whoever set it knew more than we do.
+    """
+    account = sfcli.query_one(
+        "SELECT Id, Billing_Contact__c, Valid_Billing_Account__c "
+        f"FROM Account WHERE Id = '{account_id}'",
+        org=org,
+    )
+    if not account:
+        return {"set": False, "reason": "account not found"}
+    if account.get("Billing_Contact__c"):
+        return {"set": False, "reason": "account already has a billing contact"}
+
+    values = [f'Billing_Contact__c="{contact["id"]}"']
+    email = (contact.get("email") or "").strip()
+    if email:
+        values.append(f'Billing_Contact_Email__c="{email}"')
+
+    sfcli.run(
+        ["data", "update", "record", "--sobject", "Account",
+         "--record-id", account_id, "--target-org", org,
+         "--values", " ".join(values)]
+    )
+    return {"set": True, "contact_id": contact["id"]}
 
 
 def link_primary_contact_role(opportunity_id: str, contact_id: str, org: str) -> bool:

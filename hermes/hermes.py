@@ -111,23 +111,57 @@ def run_order(payload: dict, config: dict, org: str, *, dry_run: bool = False) -
             opportunity["id"], contact["id"], org
         )
         contact["role_created"] = role_created
+        # Must happen before the quote line group: the group's Billing_Account__c lookup
+        # filter only accepts an account that already counts as a valid billing account,
+        # and that hinges on the account having a billing contact.
+        contact["account_billing_contact"] = resolve_contact.link_account_billing_contact(
+            resolved["billing_account_id"], contact, org
+        )
+
 
     quote_id = create_quote.find_existing_quote(opportunity["id"], org)
     reused_quote = quote_id is not None
-    if not reused_quote:
+    line_group = None
+
+    if reused_quote:
+        line_group = create_quote.find_existing_group(quote_id, org)
+        if contact:
+            # Re-run against an existing quote: keep the primary contact in step with the
+            # payload rather than leaving whatever the first submission set.
+            create_quote.set_primary_contact(quote_id, contact["id"], org)
+    else:
         quote_id = create_quote.create_quote(
             normalised, resolved, opportunity["id"], config, org,
             contact_id=contact["id"] if contact else None,
         )
-        insert_lines.insert_lines(quote_id, normalised, resolved, config, org)
-    elif contact:
-        # Re-run against an existing quote: keep the primary contact in step with the
-        # payload rather than leaving whatever the first submission set.
-        create_quote.set_primary_contact(quote_id, contact["id"], org)
 
+    # Insert lines when the quote has none. That covers both a fresh quote and the nastier
+    # case of a previous run that died after creating the quote: without this check a
+    # re-run adopts the empty quote and produces a $0 order that looks processed.
+    if not insert_lines.quote_has_lines(quote_id, org):
+        if line_group is None:
+            # The group must exist first, so each line can join it as it is created
+            # rather than needing a second pass to reassign them.
+            line_group = create_quote.create_line_group(quote_id, resolved, org)
+        insert_lines.insert_lines(
+            quote_id, normalised, resolved, config, org, group_id=line_group["id"]
+        )
+        # After the lines, not before: CPQ's recalculation on insert resets this flag.
+        line_group["grouping_enabled"] = create_quote.enable_grouping(quote_id, org)
+
+    # Last, because the org will not let the stage past 4 until a primary quote exists,
+    # nor past the creation stage until a primary contact role does.
+    stage_change = create_opp.advance_stage(opportunity["id"], config, org)
+
+    defaults = config["opportunity_defaults"]
     result = verify.verify(
         opportunity["id"], quote_id, org,
         expected_net=insert_lines.expected_net_amount(normalised, resolved, config),
+        expected_fields={
+            "Type": defaults["type"],
+            "LeadSource": defaults.get("lead_source"),
+            "StageName": defaults["stage_name"],
+        },
     )
     result.update(
         {
@@ -136,6 +170,8 @@ def run_order(payload: dict, config: dict, org: str, *, dry_run: bool = False) -
             "opportunity_already_existed": opportunity["already_existed"],
             "quote_reused": reused_quote,
             "contact": contact,
+            "line_group": line_group,
+            "stage_change": stage_change,
             "provisioned": resolved.get("provisioned"),
         }
     )
@@ -181,7 +217,21 @@ def _print_human(result: dict) -> None:
     print(f"  order            {result['order_id']}")
     print(f"  opportunity      {opportunity.get('Name')} ({opportunity.get('Id')})"
           f"{'  [existing]' if result['opportunity_already_existed'] else '  [created]'}")
-    print(f"  stage            {opportunity.get('StageName')}")
+    stage_change = result.get("stage_change") or {}
+    stage_note = ""
+    if stage_change.get("advanced"):
+        if stage_change.get("method") == "apex_test_bypass":
+            stage_note = "  [jumped via Apex_Test__c bypass"
+            stage_note += "" if stage_change.get("apex_test_cleared") else ", FLAG STILL SET"
+            stage_note += "]"
+        else:
+            steps = stage_change.get("steps") or []
+            stage_note = f"  [walked {len(steps)} stage(s)]"
+    elif stage_change.get("reason", "").startswith("left at"):
+        stage_note = f"  [{stage_change['reason']}]"
+    print(f"  stage            {opportunity.get('StageName')}{stage_note}")
+    print(f"  type             {opportunity.get('Type')}")
+    print(f"  lead source      {opportunity.get('LeadSource')}")
     print(f"  account          {(opportunity.get('Account') or {}).get('Name')}")
     provisioned = result.get("provisioned")
     if provisioned:
@@ -201,8 +251,13 @@ def _print_human(result: dict) -> None:
         print("  primary contact  none - payload carried no contact name")
     print(f"  quote            {quote.get('Name')} ({quote.get('Id')})"
           f"{'  [reused]' if result['quote_reused'] else '  [created]'}")
+    line_group = result.get("line_group")
+    if line_group:
+        print(f"  line group       {line_group['name']}")
     print(f"  quote lines      {result['line_count']} "
-          f"({result['head_line_count']} bundle head, {result['priced_line_count']} priced)")
+          f"({result['head_line_count']} bundle head, "
+          f"{result.get('standalone_line_count', 0)} standalone, "
+          f"{result['priced_line_count']} priced)")
     print(f"  term             {quote.get('SBQQ__SubscriptionTerm__c')} months")
     print(f"  CPQ list amount  {result['quote_list_amount']:,.2f}")
     print(f"  CPQ net amount   {result['quote_net_amount']:,.2f}"
@@ -244,7 +299,12 @@ def main(argv: list[str] | None = None) -> int:
             print("\nNo records were created.", file=sys.stderr)
         return 2
     except sfcli.SalesforceError as exc:
-        print(f"Salesforce CLI error: {exc}", file=sys.stderr)
+        if args.as_json:
+            # Machine-readable on stdout so callers (hermes.serve) can report the cause
+            # rather than falling back to "no output".
+            print(json.dumps({"ok": False, "error": f"Salesforce CLI error: {exc}"}))
+        else:
+            print(f"Salesforce CLI error: {exc}", file=sys.stderr)
         return 3
 
     if args.as_json:
