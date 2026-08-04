@@ -1121,30 +1121,8 @@ function LVTConfigurator() {
   // booleans are booleans, numbers are numbers, repeated things are arrays.
   // Every outbound format is rendered FROM it, so a field is defined once:
   //   buildWebhookPayload()    -> the flat, human-readable object Workato receives
-  //   buildSalesforceRecord()  -> Salesforce-shaped fields for CLI import
+  //   buildHermesPayload()     -> the Hermes contract consumed by hermes/
   // ---------------------------------------------------------------------------
-
-  // Salesforce constants for orders originating in this configurator
-  const SF_DEFAULTS = {
-    type: 'Existing',
-    leadSource: 'Website',
-    stage: '1',
-    referenceConnection: 'No',
-    quotePrimary: true
-  };
-
-  const addMonths = (date, months) => {
-    const d = new Date(date.getTime());
-    const targetMonth = d.getMonth() + months;
-    const dayOfMonth = d.getDate();
-    d.setDate(1);
-    d.setMonth(targetMonth);
-    // Clamp to the last valid day when the target month is shorter
-    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-    d.setDate(Math.min(dayOfMonth, lastDay));
-    return d;
-  };
-  const toDateOnly = (date) => date.toISOString().split('T')[0];
 
   const buildOrderModel = ({ orderId, submittedAt }) => {
     const sc = config.siteConfig;
@@ -1327,54 +1305,142 @@ function LVTConfigurator() {
       }
     };
 
-    model.salesforce = buildSalesforceRecord(model, submittedAt);
     return model;
   };
 
   // Salesforce-shaped fields. Values this configurator cannot know are null and
   // listed in `unresolved` rather than guessed — see the notes on each.
-  const buildSalesforceRecord = (model, submittedAt) => {
-    const units = model.deployment.totalUnits;
-    const term = model.lease.termMonths;
-    const unresolved = [];
+  // --- Hermes order contract -------------------------------------------------
+  //
+  // The seam between this portal and the deterministic script that writes the
+  // Salesforce Opportunity + CPQ Quote (see hermes/). Hermes validates this
+  // payload, resolves the UUIDs, and refuses the order outright if anything is
+  // ambiguous — it never guesses at an account. This contract replaces the
+  // earlier buildSalesforceRecord() mapping.
+  //
+  // DEMO LIMITATION: this portal has no authentication, so it cannot prove who is
+  // ordering. One known sandbox account is pinned below so the existing-customer
+  // path stays demonstrable. Production needs an authenticated VMS admin session
+  // supplying these ids; do not ship the pinned pair.
+  //
+  // Any OTHER company name is treated as a new customer: no ids are sent, and
+  // Hermes provisions the account structure rather than filing the order under the
+  // pinned account. That provisioning mints LVT ids VMS does not know about, so a
+  // new account arrives flagged for reconciliation.
+  const HERMES_DEMO_ACCOUNT = {
+    companyName: 'Brasfield & Gorrie',
+    lvt_customer_id: '338654e0-4f4a-c8d9-b7e9-c7f7446318bd', // Brasfield & Gorrie- GA
+    lvt_location_id: '64fe394f-eee6-269c-d810-08133aef8258'  // ...- Cartersville GA
+  };
 
-    // Owner fields come from the Account Owner in Salesforce, not from the form
-    unresolved.push({ field: 'opportunityOwner', reason: 'Set from Account Owner on the Account record' });
-    unresolved.push({ field: 'quote.salesRep', reason: 'Set from Account Owner on the Account record' });
-    // Not collected anywhere in the configurator today
-    unresolved.push({ field: 'quote.paymentSchedule', reason: 'Not collected by the configurator' });
-    unresolved.push({ field: 'quote.termsAndConditionsType', reason: 'Not collected by the configurator' });
-    unresolved.push({ field: 'quote.startDate', reason: 'Not collected — no requested deployment date is captured' });
-    unresolved.push({ field: 'quote.paymentTerms', reason: 'Not collected by the configurator' });
+  const isPinnedDemoAccount = () =>
+    (config.contactInfo.companyName || '').trim().toLowerCase() ===
+    HERMES_DEMO_ACCOUNT.companyName.toLowerCase();
 
-    return {
-      opportunity: {
-        // Derived: adjust the format to match your naming convention
-        name: `${model.account.companyName} - ${units} ${units === 1 ? 'Unit' : 'Units'} - ${term} mo`,
-        primaryContact: model.contacts.primary.name,
-        primaryContactEmail: model.contacts.primary.email,
-        primaryContactPhone: model.contacts.primary.phone,
-        projectPointOfContact: model.contacts.onsite.name,
-        projectPointOfContactPhone: model.contacts.onsite.phone,
-        type: SF_DEFAULTS.type,
-        leadSource: SF_DEFAULTS.leadSource,
-        stage: SF_DEFAULTS.stage,
-        closeDate: toDateOnly(addMonths(submittedAt, 1)),
-        referenceConnection: SF_DEFAULTS.referenceConnection,
-        opportunityOwner: null,
-        amount: model.lease.totalContract
+  // Portal package ids do not match the CPQ product names, and CPQ also carries a
+  // legacy module whose name collides with one of ours. Send the display name so
+  // Hermes resolves against the right product.
+  const hermesSoftwareNames = () =>
+    config.softwarePackages
+      .map(id => (softwarePackages.find(pkg => pkg.id === id) || {}).name)
+      .filter(Boolean);
+
+  const buildHermesPayload = (model) => ({
+    order_id: model.meta.orderId,
+    submitted_at: model.meta.submittedAt,
+    submitted_by: {
+      email: config.contactInfo.email,
+      company_name: config.contactInfo.companyName,
+      // Null for anyone but the pinned demo account, which is what tells Hermes to
+      // provision a new account instead of filing under an existing one.
+      lvt_customer_id: isPinnedDemoAccount() ? HERMES_DEMO_ACCOUNT.lvt_customer_id : null,
+      billing_address: { ...model.addresses.billing }
+    },
+    order: {
+      term_months: model.lease.termMonths,
+      po_number: null,
+      // v1 targets a single location. Every configured unit is attributed to it
+      // rather than inventing a UUID per zip code we cannot resolve.
+      locations: [
+        {
+          lvt_location_id: isPinnedDemoAccount() ? HERMES_DEMO_ACCOUNT.lvt_location_id : null,
+          zip_code: (config.locations[0] || {}).zipCode || null,
+          units: model.deployment.locations.flatMap(location =>
+            location.units.map(unit => ({
+              // Sent verbatim. Hermes only accepts 'mobile' and 'wall' today, so a
+              // Guardgate is rejected rather than silently filed as something else.
+              unit_type: unit.unitTypeId,
+              quantity: unit.quantity,
+              needs_generator: !!unit.needsGenerator
+            }))
+          )
+        }
+      ],
+      hardware_options: {
+        // Hermes selects between an Axis (NDAA) and Dahua (non-NDAA) head unit
+        ndaa_compliant: model.cameras.ndaaRequired === true,
+        lpr: model.hardware.lpr,
+        sat_com: model.hardware.satCom
       },
-      quote: {
-        salesRep: null,
-        primary: SF_DEFAULTS.quotePrimary,
-        paymentSchedule: null,
-        termsAndConditionsType: null,
-        startDate: null,
-        subscriptionTerm: term,
-        paymentTerms: null
+      // The specific packages the customer chose. Hermes currently resolves a head
+      // unit from ndaa_compliant alone; these SKUs are the authoritative selection.
+      cameras: {
+        default_sku: model.cameras.defaultSku,
+        mixed: model.cameras.mixed,
+        per_unit: model.cameras.perUnit.map(u => ({
+          unit: u.unitNumber,
+          zip_code: u.zipCode,
+          sku: u.sku
+        }))
       },
-      unresolved
-    };
+      software_packages: hermesSoftwareNames(),
+      alert_response_services: model.ars.enabled ? {
+        tier: model.ars.tierId,
+        coverage: model.ars.coverage,
+        custom_detail: model.ars.customDetail,
+        rate_per_unit: model.ars.ratePerUnit,
+        monthly_charge: model.ars.monthlyCharge
+      } : null
+    },
+    contacts: {
+      billing: { ...model.contacts.primary },
+      shipping: { ...model.contacts.primary },
+      onsite: { ...model.contacts.onsite },
+      ars_escalation: model.contacts.arsEscalation
+    },
+    site_config: {
+      placement_map: model.site.placementMap,
+      areas_of_concern: model.site.areasOfConcern,
+      per_location: model.site.schedule.perLocation,
+      gps_coordinates: model.deployment.gpsCoordinates
+    },
+    // Displayed figures travel with the order so a rep can see what the customer was
+    // shown. They are NOT inputs to pricing — the quote is built at CPQ list price.
+    portal_estimate: {
+      monthly: model.lease.monthlyPayment,
+      contract_total: Math.round(model.lease.totalContract),
+      disclaimer: 'Non-binding estimate. The Salesforce quote is priced from the CPQ price book and will differ.'
+    }
+  });
+
+  // Writes the contract to a file. For the demo Hermes runs locally against the
+  // sandbox, so the payload has to leave the browser somehow; a download is the
+  // least surprising route and needs no backend.
+  const savePayloadToFile = (payload, filename) => {
+    try {
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+      return true;
+    } catch (error) {
+      console.error('[hermes] payload download failed:', error);
+      return false;
+    }
   };
 
   // Renders the flat, human-readable object the Workato webhook already expects.
@@ -5075,6 +5141,10 @@ function LVTConfigurator() {
                       submittedAt
                     });
                     const orderData = buildWebhookPayload(orderModel);
+
+                    // Emit the Hermes contract for the local Salesforce pipeline
+                    const hermesPayload = buildHermesPayload(orderModel);
+                    const hermesSaved = savePayloadToFile(hermesPayload, `${orderModel.meta.orderId}.json`);
                     
                     const payload = JSON.stringify(orderData);
                     let submitted = false;
@@ -5107,7 +5177,7 @@ function LVTConfigurator() {
                         const verificationNote = verified
                           ? ''
                           : '\n\nNote: The request was sent, but the browser could not verify a response due to cross-origin restrictions.';
-                        alert(`Thank you — your order has been submitted!\n\n${totalUnits} Security ${totalUnits === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${verificationNote}`);
+                        alert(`Thank you — your order has been submitted!\n\n${totalUnits} Security ${totalUnits === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${hermesSaved ? `\n\nOrder file ${orderData.orderId}.json has been downloaded for Salesforce processing.` : ''}${verificationNote}`);
                         
                         // Optional: Reset form or redirect
                         // setCurrentStep(0);
