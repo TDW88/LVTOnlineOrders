@@ -1,0 +1,35 @@
+{
+  "order_id": "HERMES-2026-0001",
+  "submitted_at": "2026-08-04T16:20:00Z",
+  "submitted_by": {
+    "email": "admin@brasfieldgorrie.com",
+    "company_name": "Brasfield & Gorrie",
+    "lvt_customer_id": "338654e0-4f4a-c8d9-b7e9-c7f7446318bd"
+  },
+  "order": {
+    "term_months": 12,
+    "po_number": null,
+    "locations": [
+      {
+        "lvt_location_id": "64fe394f-eee6-269c-d810-08133aef8258",
+        "zip_code": "30120",
+        "units": [
+          { "unit_type": "mobile", "quantity": 2, "needs_generator": false }
+        ]
+      }
+    ],
+    "hardware_options": {
+      "ndaa_compliant": true,
+      "night_vision": false
+    },
+    "software_packages": ["detect-deter", "alert-management"]
+  },
+  "contacts": {
+    "billing":  { "name": "Dana Reyes", "email": "dana.reyes@brasfieldgorrie.com", "phone": "205-555-0142" },
+    "shipping": { "name": "Site Super",  "email": "cartersville@brasfieldgorrie.com", "phone": "770-555-0188" }
+  },
+  "site_config": {
+    "placement_map_name": "Cartersville-Yard-North",
+    "areas_of_concern": "Equipment yard, north fence line after hours."
+  }
+}

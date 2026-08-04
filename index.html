@@ -172,11 +172,15 @@ function LVTConfigurator() {
     }
   ];
 
-  // Lease term options
+  // Lease term options.
+  // Discounts are 0 across the board in v1 and that is deliberate. Orders placed here
+  // flow straight into a Salesforce quote at list price; quoting at list is what makes
+  // that automation safe to run without a rep in the loop. Discounting and unit-price
+  // overrides are a separate initiative with their own approval story.
   const leaseTerms = [
     { months: 12, label: '12 Months', discount: 0 },
-    { months: 24, label: '24 Months', discount: 0.05 }, // 5% discount
-    { months: 36, label: '36 Months', discount: 0.10 }  // 10% discount
+    { months: 24, label: '24 Months', discount: 0 },
+    { months: 36, label: '36 Months', discount: 0 }
   ];
 
   const steps = ['Location', 'Hardware', 'Software', 'Lease Term', 'Contact Info', 'Configuration', 'Review'];
@@ -555,6 +559,87 @@ function LVTConfigurator() {
     if (!config.leaseTerm) return 0;
     return calculateMonthlyTotal() * config.leaseTerm;
   };
+
+  // --- Hermes order contract -------------------------------------------------
+  //
+  // The seam between this portal and the deterministic script that writes the
+  // Salesforce Opportunity + CPQ Quote (see hermes/). The script validates this
+  // payload, resolves the UUIDs, and refuses the order outright if anything is
+  // ambiguous - it never guesses at an account.
+  //
+  // DEMO LIMITATION: this portal has no authentication and collects no LVT identity,
+  // so there is nothing here to derive a real customer or location UUID from. The
+  // pinned pair below is a known-good sandbox account used to make the end-to-end
+  // path demonstrable. A production version needs an authenticated VMS admin session
+  // supplying these; do not ship this hardcoded.
+  const HERMES_DEMO_IDENTITY = {
+    lvt_customer_id: '338654e0-4f4a-c8d9-b7e9-c7f7446318bd', // Brasfield & Gorrie- GA
+    lvt_location_id: '64fe394f-eee6-269c-d810-08133aef8258'  // ...- Cartersville GA
+  };
+
+  // Portal package ids do not match the CPQ product names, and CPQ also carries a
+  // legacy module whose name collides with one of ours. Send the display name so the
+  // script resolves against the right product.
+  const hermesSoftwareNames = () =>
+    config.softwarePackages
+      .map(id => (softwarePackages.find(pkg => pkg.id === id) || {}).name)
+      .filter(Boolean);
+
+  const buildHermesPayload = (orderId) => ({
+    order_id: orderId,
+    submitted_at: new Date().toISOString(),
+    submitted_by: {
+      email: config.contactInfo.email,
+      company_name: config.contactInfo.companyName,
+      lvt_customer_id: HERMES_DEMO_IDENTITY.lvt_customer_id
+    },
+    order: {
+      term_months: config.leaseTerm,
+      po_number: null,
+      // v1 targets a single location. Every configured unit is attributed to the
+      // pinned location rather than inventing a UUID per zip code we cannot resolve.
+      locations: [
+        {
+          lvt_location_id: HERMES_DEMO_IDENTITY.lvt_location_id,
+          zip_code: (config.locations[0] || {}).zipCode || null,
+          units: config.locations.flatMap(location =>
+            location.units.map(unit => ({
+              unit_type: unit.unitType === 'mobile' ? 'mobile' : 'wall',
+              quantity: unit.quantity,
+              needs_generator: unit.unitType === 'mobile' && !!unit.needsGenerator
+            }))
+          )
+        }
+      ],
+      hardware_options: {
+        ndaa_compliant: !!config.ndaaCompliant,
+        // Carried for the rep only. There is no night-vision SKU in CPQ; IR/thermal
+        // capability is inherent to the head unit that gets selected.
+        night_vision: !!config.nightVision
+      },
+      software_packages: hermesSoftwareNames()
+    },
+    contacts: {
+      billing: {
+        name: config.contactInfo.fullName,
+        email: config.contactInfo.email,
+        phone: config.contactInfo.phone
+      },
+      shipping: {
+        name: config.contactInfo.fullName,
+        email: config.contactInfo.email,
+        phone: config.contactInfo.phone
+      }
+    },
+    site_config: config.siteConfig,
+    // Displayed figures travel with the order so a rep can see what the customer was
+    // shown. They are NOT inputs to pricing - the quote is built at CPQ list price.
+    portal_estimate: {
+      monthly: Math.round(calculateMonthlyTotal()),
+      contract_total: Math.round(calculateContractTotal()),
+      disclaimer: 'Non-binding estimate. The Salesforce quote is priced from the CPQ price book and will differ.'
+    }
+  });
 
   const toggleHardwareOption = (option) => {
     setConfig(prev => ({ ...prev, [option]: !prev[option] }));
@@ -3198,7 +3283,21 @@ function LVTConfigurator() {
                 }}>
                   ${calculateContractTotal().toLocaleString()} total contract
                 </div>
-                
+
+                {/* The figures above are computed from this page's own rate table, not
+                    from the LVT price book that the formal quote is built against. The
+                    two do not currently agree, so saying so here is the honest option. */}
+                <div style={{
+                  fontSize: '12px',
+                  lineHeight: '1.5',
+                  color: 'rgba(255,255,255,0.55)',
+                  marginBottom: '24px',
+                  marginTop: '-16px'
+                }}>
+                  Estimate only, not a binding quote. Your formal quote is priced from
+                  the current LVT price book and may differ from the figures shown.
+                </div>
+
                 <button
                   disabled={isSubmitting}
                   style={{
@@ -3238,7 +3337,35 @@ function LVTConfigurator() {
                     
                     const monthlyTotal = Math.round(calculateMonthlyTotal());
                     const contractTotal = calculateContractTotal();
-                    
+
+                    // One id shared by the webhook payload and the Hermes contract, so
+                    // an order can be traced across both. Hermes upserts the
+                    // Opportunity on this value, which is what makes a resubmission
+                    // idempotent rather than duplicating the order.
+                    const orderId = `LVT-${Date.now()}`;
+                    const hermesPayload = buildHermesPayload(orderId);
+
+                    // For the demo the script is run locally against the sandbox, so
+                    // the payload needs to reach a file. Logging it as well makes a
+                    // rejected order diagnosable without re-submitting.
+                    console.log('[hermes] order contract:', hermesPayload);
+                    const downloadHermesPayload = () => {
+                      try {
+                        const blob = new Blob([JSON.stringify(hermesPayload, null, 2)],
+                                              { type: 'application/json' });
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(blob);
+                        link.download = `${orderId}.json`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(link.href);
+                      } catch (downloadError) {
+                        // A blocked download must not make a submitted order look failed.
+                        console.error('[hermes] payload download failed:', downloadError);
+                      }
+                    };
+
                     const resolvedShippingAddresses = config.contactInfo.shippingAddresses.map(address => {
                       const source = address.sameAsBilling
                         ? config.contactInfo.billingAddress
@@ -3262,8 +3389,13 @@ function LVTConfigurator() {
                     const orderData = {
                       // Order Info
                       timestamp: new Date().toISOString(),
-                      orderId: `LVT-${Date.now()}`,
-                      
+                      orderId,
+
+                      // The deterministic contract consumed by hermes/. Kept as a
+                      // nested object rather than flattened so the script can be fed
+                      // it verbatim.
+                      hermes: hermesPayload,
+
                       // Configuration Summary
                       unitCount: totalUnits,
                       baseMonthlyTotal,
@@ -3372,7 +3504,8 @@ function LVTConfigurator() {
                         const verificationNote = verified
                           ? ''
                           : '\n\nNote: The request was sent, but the browser could not verify a response due to cross-origin restrictions.';
-                        alert(`Thank you for your lease request!\n\n${totalUnits} Security ${totalUnits === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${verificationNote}`);
+                        downloadHermesPayload();
+                        alert(`Thank you for your lease request!\n\n${totalUnits} Security ${totalUnits === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nEstimated Monthly: $${monthlyTotal.toLocaleString()}\nEstimated Contract Total: $${contractTotal.toLocaleString()}\n\nFigures shown are a non-binding estimate. Your formal quote is priced from the current LVT price book and may differ.\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${verificationNote}`);
                         
                         // Optional: Reset form or redirect
                         // setCurrentStep(0);
@@ -3530,7 +3663,7 @@ function LVTConfigurator() {
             letterSpacing: '0.5px',
             fontWeight: '600'
           }}>
-            {config.leaseTerm ? `Monthly (${config.leaseTerm} mo. lease)` : 'Estimated Monthly'}
+            {config.leaseTerm ? `Est. monthly (${config.leaseTerm} mo. lease)` : 'Estimated Monthly'}
           </div>
           <div style={{
             fontSize: '32px',
@@ -3546,7 +3679,7 @@ function LVTConfigurator() {
               color: 'rgba(255,255,255,0.6)',
               marginTop: '8px'
             }}>
-              ${calculateContractTotal().toLocaleString()} total
+              ${calculateContractTotal().toLocaleString()} est. total
             </div>
           )}
         </div>
