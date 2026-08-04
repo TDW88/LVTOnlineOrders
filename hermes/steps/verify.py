@@ -44,17 +44,26 @@ def _read_quote(quote_id: str, org: str) -> dict | None:
     return sfcli.query_one(
         "SELECT Id, Name, SBQQ__Primary__c, SBQQ__SubscriptionTerm__c, SBQQ__Status__c, "
         "SBQQ__NetAmount__c, SBQQ__ListAmount__c, SBQQ__CustomerAmount__c, "
-        "SBQQ__LineItemCount__c "
+        "SBQQ__LineItemCount__c, SBQQ__PrimaryContact__c, SBQQ__PrimaryContact__r.Name "
         f"FROM SBQQ__Quote__c WHERE Id = '{quote_id}'",
         org=org,
     )
 
 
-def wait_for_pricing(quote_id: str, org: str) -> tuple[dict | None, bool]:
-    """Poll until CPQ's net amount is non-zero and has stopped changing.
+def wait_for_pricing(quote_id: str, org: str,
+                     expected_net: float | None = None) -> tuple[dict | None, bool]:
+    """Poll until CPQ has finished pricing the quote.
 
-    Returns (quote, settled). `settled` is False if we ran out of attempts, which means
-    the reported total should not be trusted.
+    Returns (quote, settled). `settled` is False if we ran out of attempts, meaning the
+    reported total should not be trusted.
+
+    When `expected_net` is known we wait for that exact figure, which is the only
+    reliable stopping condition: CPQ prices incrementally, and a pause between lines
+    longer than the poll interval makes a partial total look stable. Observed live -
+    the same order settled at 80,000 on one run and 92,000 on another, the difference
+    being a single module line that had not landed when two consecutive reads agreed.
+
+    Without an expectation we fall back to stability, which is weaker and can under-report.
     """
     quote = _read_quote(quote_id, org)
     previous = None
@@ -63,10 +72,11 @@ def wait_for_pricing(quote_id: str, org: str) -> tuple[dict | None, bool]:
     for _ in range(PRICING_POLL_ATTEMPTS):
         current = _as_number(quote.get("SBQQ__NetAmount__c")) if quote else 0.0
 
-        if current > 0 and current == previous:
+        if expected_net is not None:
+            if abs(current - expected_net) <= 0.01:
+                return quote, True
+        elif current > 0 and current == previous:
             stable_reads += 1
-            # Two consecutive identical non-zero reads. One repeat is enough given the
-            # poll delay is well clear of CPQ's per-line calculation time.
             if stable_reads >= REQUIRED_STABLE_READS:
                 return quote, True
         else:
@@ -79,7 +89,8 @@ def wait_for_pricing(quote_id: str, org: str) -> tuple[dict | None, bool]:
     return quote, False
 
 
-def verify(opportunity_id: str, quote_id: str, org: str) -> dict:
+def verify(opportunity_id: str, quote_id: str, org: str,
+           expected_net: float | None = None) -> dict:
     opportunity = sfcli.query_one(
         "SELECT Id, Name, StageName, Type, CloseDate, AccountId, Account.Name, "
         "of_Units_in_Pipeline__c, External_Id__c, RecordType.Name "
@@ -87,7 +98,7 @@ def verify(opportunity_id: str, quote_id: str, org: str) -> dict:
         org=org,
     )
 
-    quote, settled = wait_for_pricing(quote_id, org)
+    quote, settled = wait_for_pricing(quote_id, org, expected_net)
     priced = settled
 
     lines = sfcli.query(
@@ -96,6 +107,14 @@ def verify(opportunity_id: str, quote_id: str, org: str) -> dict:
         "SBQQ__RequiredBy__c, SBQQ__ProductOption__c "
         f"FROM SBQQ__QuoteLine__c WHERE SBQQ__Quote__c = '{quote_id}' "
         "ORDER BY SBQQ__RequiredBy__c NULLS FIRST",
+        org=org,
+    )
+
+    # Read the primary contact back rather than trusting the write.
+    primary_roles = sfcli.query(
+        "SELECT ContactId, Contact.Name, Contact.Email, Role, IsPrimary "
+        f"FROM OpportunityContactRole WHERE OpportunityId = '{opportunity_id}' "
+        "AND IsPrimary = true",
         org=org,
     )
 
@@ -109,12 +128,20 @@ def verify(opportunity_id: str, quote_id: str, org: str) -> dict:
 
     warnings = []
     if lines and not priced:
+        detail = (
+            f"expected {expected_net} but read {quote_net}"
+            if expected_net is not None else f"net amount currently {quote_net}"
+        )
         warnings.append(
             f"CPQ pricing had not settled after "
-            f"{PRICING_POLL_ATTEMPTS * PRICING_POLL_DELAY_SECONDS:.0f}s "
-            f"(net amount currently {quote_net}). This total may be partial - re-read "
-            "the quote, or open it in the Quote Line Editor and save to force a "
-            "recalculation, before trusting any figure."
+            f"{PRICING_POLL_ATTEMPTS * PRICING_POLL_DELAY_SECONDS:.0f}s ({detail}). "
+            "This total is likely partial - re-read the quote, or open it in the Quote "
+            "Line Editor and save to force a recalculation, before trusting any figure."
+        )
+    elif expected_net is not None and abs(quote_net - expected_net) > 0.01:
+        warnings.append(
+            f"quote net ({quote_net}) does not match the expected list total "
+            f"({expected_net}). The bundle structure or a pinned price may be wrong."
         )
     if quote and not quote.get("SBQQ__Primary__c"):
         warnings.append("quote is not flagged primary.")
@@ -136,10 +163,24 @@ def verify(opportunity_id: str, quote_id: str, org: str) -> dict:
             "a discount was applied. v1 is meant to quote at list price only."
         )
 
+    quote_contact_name = ((quote or {}).get("SBQQ__PrimaryContact__r") or {}).get("Name")
+    opp_contact_name = (primary_roles[0].get("Contact") or {}).get("Name") if primary_roles else None
+
+    # A quote whose primary contact disagrees with the opportunity's is the kind of
+    # inconsistency nobody notices until the quote document goes out addressed wrongly.
+    if quote_contact_name and opp_contact_name and quote_contact_name != opp_contact_name:
+        warnings.append(
+            f"quote primary contact ({quote_contact_name}) differs from the "
+            f"opportunity's primary contact ({opp_contact_name})."
+        )
+
     return {
         "opportunity": opportunity,
         "quote": quote,
         "priced": priced,
+        "primary_contact_opportunity": opp_contact_name,
+        "primary_contact_quote": quote_contact_name,
+        "expected_net_amount": expected_net,
         "line_count": len(lines),
         "head_line_count": len(head_lines),
         "priced_line_count": len(priced_lines),

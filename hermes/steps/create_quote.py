@@ -14,7 +14,8 @@ from .. import sfcli
 
 
 def create_quote(normalised: dict, resolved: dict, opportunity_id: str,
-                 config: dict, org: str, *, today: date | None = None) -> str:
+                 config: dict, org: str, *, today: date | None = None,
+                 contact_id: str | None = None) -> str:
     """Create the primary quote and return its Id."""
     today = today or date.today()
 
@@ -26,7 +27,21 @@ def create_quote(normalised: dict, resolved: dict, opportunity_id: str,
         "SBQQ__SubscriptionTerm__c": normalised["term_months"],
         "SBQQ__StartDate__c": today.isoformat(),
     }
+    # By far the most-used contact field in this org (5,751 quotes carry it) and what
+    # appears on the generated quote document.
+    if contact_id:
+        fields["SBQQ__PrimaryContact__c"] = contact_id
+
     return sfcli.create("SBQQ__Quote__c", fields, org=org)
+
+
+def set_primary_contact(quote_id: str, contact_id: str, org: str) -> None:
+    """Set the primary contact on an existing quote, for idempotent re-runs."""
+    sfcli.run(
+        ["data", "update", "record", "--sobject", "SBQQ__Quote__c",
+         "--record-id", quote_id, "--target-org", org,
+         "--values", f'SBQQ__PrimaryContact__c="{contact_id}"']
+    )
 
 
 def find_existing_quote(opportunity_id: str, org: str) -> str | None:

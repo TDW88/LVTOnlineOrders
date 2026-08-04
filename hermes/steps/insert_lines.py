@@ -97,6 +97,33 @@ def plan_lines(normalised: dict, resolved: dict, config: dict) -> list[dict]:
     return planned
 
 
+def expected_net_amount(normalised: dict, resolved: dict, config: dict) -> float:
+    """What the quote should total if CPQ priced our lines correctly, at list.
+
+    This is a verification expectation, not an input to pricing - nothing computed here
+    is ever written to Salesforce. It exists because "the total stopped changing" turned
+    out to be an unsound signal for CPQ having finished: pricing lands incrementally, and
+    a pause between lines long enough to span two polls reads as settled. Knowing the
+    number we are waiting for removes the guesswork.
+
+    Only FORM FACTOR SUBSCRIPTION and MODULE lines carry value; the bundle head,
+    BASEUNIT and HEADUNIT all list at $0. Line net price is the monthly list extended
+    over the subscription term, then multiplied by quantity.
+    """
+    term = normalised["term_months"]
+    modules = normalised["software_packages"]
+    total = 0.0
+
+    for group in plan_lines(normalised, resolved, config):
+        quantity = group["quantity"]
+        form_factor_key = "mobile" if group["unit_type"] == "mobile" else "wall"
+        monthly = config["form_factor_subscriptions"][form_factor_key]["list_price"]
+        monthly += sum(config["software_modules"][name]["list_price"] for name in modules)
+        total += monthly * term * quantity
+
+    return round(total, 2)
+
+
 def insert_lines(quote_id: str, normalised: dict, resolved: dict, config: dict,
                  org: str) -> dict:
     """Insert bundle head lines and their option lines. Returns a creation manifest.

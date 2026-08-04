@@ -52,7 +52,26 @@ def validate(payload: dict, config: dict) -> dict:
         raise Rejection(INVALID_FIELD, "order_id must be a non-empty string", field="order_id")
 
     submitted_by = _require(payload, "submitted_by", "submitted_by")
-    lvt_customer_id = _require_uuid(submitted_by, "lvt_customer_id", "submitted_by.lvt_customer_id")
+
+    # Two paths. An existing customer supplies lvt_customer_id and resolves against it.
+    # A new customer supplies only a company name and gets an account provisioned.
+    raw_customer_id = submitted_by.get("lvt_customer_id")
+    is_new_customer = raw_customer_id in (None, "")
+
+    if is_new_customer:
+        company_name = (submitted_by.get("company_name") or "").strip()
+        if not company_name:
+            raise Rejection(
+                MISSING_FIELD,
+                "submitted_by.company_name is required when no lvt_customer_id is supplied",
+                field="submitted_by.company_name",
+            )
+        lvt_customer_id = None
+    else:
+        lvt_customer_id = _require_uuid(
+            submitted_by, "lvt_customer_id", "submitted_by.lvt_customer_id"
+        )
+        company_name = (submitted_by.get("company_name") or "").strip()
 
     order = _require(payload, "order", "order")
 
@@ -99,10 +118,24 @@ def validate(payload: dict, config: dict) -> dict:
         if name not in resolved_modules:
             resolved_modules.append(name)
 
+    if is_new_customer and len(locations) > 1:
+        raise Rejection(
+            UNSUPPORTED_OPTION,
+            "a new customer order supports a single location in v1; "
+            f"got {len(locations)}",
+            field="order.locations",
+        )
+
     normalised_locations = []
     for index, location in enumerate(locations):
         path = f"order.locations[{index}]"
-        lvt_location_id = _require_uuid(location, "lvt_location_id", f"{path}.lvt_location_id")
+        # A new customer has no location UUID yet - one is minted during provisioning.
+        if is_new_customer:
+            lvt_location_id = None
+        else:
+            lvt_location_id = _require_uuid(
+                location, "lvt_location_id", f"{path}.lvt_location_id"
+            )
 
         zip_code = location.get("zip_code")
         if zip_code is not None and not ZIP_RE.match(str(zip_code)):
@@ -160,6 +193,8 @@ def validate(payload: dict, config: dict) -> dict:
     return {
         "order_id": order_id.strip(),
         "lvt_customer_id": lvt_customer_id,
+        "company_name": company_name,
+        "is_new_customer": is_new_customer,
         "term_months": term,
         "po_number": order.get("po_number"),
         "locations": normalised_locations,

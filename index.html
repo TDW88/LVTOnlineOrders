@@ -138,6 +138,15 @@ function LVTConfigurator() {
     }
   });
 
+  // Order submission is deliberately separate from the "Request Demo" path above it.
+  // Requesting a demo is a marketing enquiry; submitting an order produces a real
+  // Salesforce Opportunity and CPQ Quote, so it gets an explicit confirmation gate.
+  const [showOrderConfirm, setShowOrderConfirm] = useState(false);
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [placedOrderId, setPlacedOrderId] = useState(null);
+  const [orderResult, setOrderResult] = useState(null);
+  const [orderError, setOrderError] = useState(null);
+
   const getUnitType = (unitTypeId) => UNIT_TYPES.find(type => type.id === unitTypeId) || UNIT_TYPES[0];
   
   // Generator cost (monthly)
@@ -567,15 +576,24 @@ function LVTConfigurator() {
   // payload, resolves the UUIDs, and refuses the order outright if anything is
   // ambiguous - it never guesses at an account.
   //
-  // DEMO LIMITATION: this portal has no authentication and collects no LVT identity,
-  // so there is nothing here to derive a real customer or location UUID from. The
-  // pinned pair below is a known-good sandbox account used to make the end-to-end
-  // path demonstrable. A production version needs an authenticated VMS admin session
-  // supplying these; do not ship this hardcoded.
-  const HERMES_DEMO_IDENTITY = {
+  // DEMO LIMITATION: this portal has no authentication, so it cannot prove who is
+  // ordering. One known sandbox account is pinned below so the existing-customer path
+  // stays demonstrable. Production needs an authenticated VMS admin session supplying
+  // these ids; do not ship the pinned pair.
+  //
+  // Any OTHER company name is treated as a new customer: no ids are sent, and Hermes
+  // provisions the account structure rather than filing the order under the pinned
+  // account. That provisioning mints LVT ids that VMS does not know about, so a new
+  // account arrives flagged for reconciliation.
+  const HERMES_DEMO_ACCOUNT = {
+    companyName: 'Brasfield & Gorrie',
     lvt_customer_id: '338654e0-4f4a-c8d9-b7e9-c7f7446318bd', // Brasfield & Gorrie- GA
     lvt_location_id: '64fe394f-eee6-269c-d810-08133aef8258'  // ...- Cartersville GA
   };
+
+  const isPinnedDemoAccount = () =>
+    (config.contactInfo.companyName || '').trim().toLowerCase() ===
+    HERMES_DEMO_ACCOUNT.companyName.toLowerCase();
 
   // Portal package ids do not match the CPQ product names, and CPQ also carries a
   // legacy module whose name collides with one of ours. Send the display name so the
@@ -591,16 +609,24 @@ function LVTConfigurator() {
     submitted_by: {
       email: config.contactInfo.email,
       company_name: config.contactInfo.companyName,
-      lvt_customer_id: HERMES_DEMO_IDENTITY.lvt_customer_id
+      // Null for anyone but the pinned demo account, which is what tells Hermes to
+      // provision a new account instead of filing the order under an existing one.
+      lvt_customer_id: isPinnedDemoAccount() ? HERMES_DEMO_ACCOUNT.lvt_customer_id : null,
+      billing_address: {
+        street: config.contactInfo.billingAddress.street,
+        city: config.contactInfo.billingAddress.city,
+        state: config.contactInfo.billingAddress.state,
+        zip: config.contactInfo.billingAddress.zip
+      }
     },
     order: {
       term_months: config.leaseTerm,
       po_number: null,
-      // v1 targets a single location. Every configured unit is attributed to the
-      // pinned location rather than inventing a UUID per zip code we cannot resolve.
+      // v1 targets a single location. Every configured unit is attributed to it rather
+      // than inventing a UUID per zip code we cannot resolve.
       locations: [
         {
-          lvt_location_id: HERMES_DEMO_IDENTITY.lvt_location_id,
+          lvt_location_id: isPinnedDemoAccount() ? HERMES_DEMO_ACCOUNT.lvt_location_id : null,
           zip_code: (config.locations[0] || {}).zipCode || null,
           units: config.locations.flatMap(location =>
             location.units.map(unit => ({
@@ -640,6 +666,76 @@ function LVTConfigurator() {
       disclaimer: 'Non-binding estimate. The Salesforce quote is priced from the CPQ price book and will differ.'
     }
   });
+
+  // Writes the contract to a file. For the demo the Hermes script runs locally against
+  // the sandbox, so the payload has to leave the browser somehow; a download is the
+  // least surprising route and needs no backend.
+  const savePayloadToFile = (payload, filename) => {
+    try {
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+      return true;
+    } catch (error) {
+      console.error('[hermes] payload download failed:', error);
+      return false;
+    }
+  };
+
+  // POSTs the order to the local Hermes service, which creates the Opportunity and CPQ
+  // Quote in Salesforce and returns the record ids. Requires `python3 -m hermes.serve`
+  // rather than a plain static file server - a bare http.server cannot run the script,
+  // so in that case we fall back to downloading the payload so the order isn't lost.
+  const submitOrder = async () => {
+    if (isPlacingOrder) return;
+    setIsPlacingOrder(true);
+    setOrderError(null);
+
+    // Same id the script upserts the Opportunity on, so resubmitting a given order
+    // updates it rather than creating a duplicate.
+    const orderId = `LVT-${Date.now()}`;
+    const payload = buildHermesPayload(orderId);
+    console.log('[hermes] submitting order:', payload);
+
+    try {
+      const response = await fetch('/api/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (response.ok && data && data.ok) {
+        console.log('[hermes] created:', data);
+        setOrderResult(data);
+        setPlacedOrderId(data.order_id || orderId);
+        setShowOrderConfirm(false);
+      } else if (data && data.rejected) {
+        // The script refused the order and wrote nothing. Surface why, and keep the
+        // dialog open so it can be retried once the cause is fixed.
+        setOrderError(`Order refused — ${data.code}: ${data.detail}`);
+      } else {
+        setOrderError((data && data.error) || `Submission failed (HTTP ${response.status}).`);
+      }
+    } catch (error) {
+      console.error('[hermes] order service unreachable:', error);
+      const saved = savePayloadToFile(payload, `${orderId}.json`);
+      setOrderError(
+        (saved
+          ? 'Order service unreachable, so the payload was downloaded instead. '
+          : 'Order service unreachable and the payload could not be downloaded. ') +
+        'Start it with: python3 -m hermes.serve'
+      );
+    } finally {
+      setIsPlacingOrder(false);
+    }
+  };
 
   const toggleHardwareOption = (option) => {
     setConfig(prev => ({ ...prev, [option]: !prev[option] }));
@@ -3519,7 +3615,81 @@ function LVTConfigurator() {
                 >
                   {isSubmitting ? 'Submitting...' : 'Request Demo'}
                 </button>
-                
+
+                {/* Placing an order writes real records downstream, so it is a distinct
+                    action from the demo enquiry above and never fires on a single click. */}
+                <button
+                  disabled={isPlacingOrder || !!placedOrderId}
+                  onClick={() => setShowOrderConfirm(true)}
+                  style={{
+                    width: '100%',
+                    padding: '18px',
+                    background: 'transparent',
+                    color: placedOrderId ? 'rgba(255,255,255,0.4)' : '#56d3cc',
+                    border: `2px solid ${placedOrderId ? 'rgba(255,255,255,0.15)' : '#56d3cc'}`,
+                    borderRadius: '10px',
+                    fontSize: '16px',
+                    fontWeight: '800',
+                    cursor: (isPlacingOrder || placedOrderId) ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.3s ease',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    marginBottom: '16px'
+                  }}
+                  onMouseOver={(e) => {
+                    if (!isPlacingOrder && !placedOrderId) {
+                      e.currentTarget.style.background = 'rgba(86, 211, 204, 0.12)';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  {placedOrderId ? 'Order Submitted' : 'Submit Order'}
+                </button>
+
+                {placedOrderId && (
+                  <div style={{
+                    fontSize: '13px',
+                    lineHeight: '1.6',
+                    color: '#56d3cc',
+                    textAlign: 'center',
+                    marginBottom: '16px'
+                  }}>
+                    Order <strong>{placedOrderId}</strong> submitted.
+                    {orderResult && orderResult.quote_name && (
+                      <>
+                        <br />
+                        Quote <strong>{orderResult.quote_name}</strong>
+                        {typeof orderResult.quote_net_amount === 'number' && (
+                          <> — ${orderResult.quote_net_amount.toLocaleString()}</>
+                        )}
+                        {orderResult.already_existed && <> (existing order updated)</>}
+                      </>
+                    )}
+                    {orderResult && orderResult.primary_contact && (
+                      <>
+                        <br />
+                        Primary contact <strong>{orderResult.primary_contact}</strong>
+                        {orderResult.primary_contact_created && <> (new contact created)</>}
+                      </>
+                    )}
+                    {orderResult && orderResult.dry_run && (
+                      <><br />Dry run — validated and resolved, nothing written.</>
+                    )}
+                    {orderResult && (orderResult.warnings || []).map((warning, idx) => (
+                      <div key={idx} style={{
+                        color: '#e0b341',
+                        fontSize: '12px',
+                        marginTop: '8px',
+                        textAlign: 'left'
+                      }}>
+                        {warning}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div style={{
                   fontSize: '12px',
                   color: 'rgba(255,255,255,0.6)',
@@ -3682,6 +3852,117 @@ function LVTConfigurator() {
               ${calculateContractTotal().toLocaleString()} est. total
             </div>
           )}
+        </div>
+      )}
+
+      {/* Order confirmation. Rendered at the component root so it overlays everything
+          regardless of which step is showing. */}
+      {showOrderConfirm && (
+        <div
+          role="presentation"
+          onClick={() => !isPlacingOrder && setShowOrderConfirm(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            zIndex: 1000
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="order-confirm-title"
+            // Stop clicks inside the dialog from reaching the backdrop's dismiss handler.
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#1b1e23',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: '14px',
+              padding: '32px',
+              maxWidth: '440px',
+              width: '100%',
+              boxShadow: '0 24px 64px rgba(0,0,0,0.5)'
+            }}
+          >
+            <h3
+              id="order-confirm-title"
+              style={{
+                margin: '0 0 12px',
+                fontSize: '22px',
+                fontWeight: '800',
+                color: '#fff'
+              }}
+            >
+              Submit this order?
+            </h3>
+
+            <p style={{
+              margin: '0 0 28px',
+              fontSize: '14px',
+              lineHeight: '1.6',
+              color: 'rgba(255,255,255,0.7)'
+            }}>
+              {totalUnits} {totalUnits === 1 ? 'unit' : 'units'}
+              {config.leaseTerm ? ` on a ${config.leaseTerm} month lease` : ''}. Pricing is
+              confirmed on your formal quote and may differ from the estimate shown.
+            </p>
+
+            {orderError && (
+              <div style={{
+                fontSize: '13px',
+                lineHeight: '1.5',
+                color: '#ff8a8a',
+                background: 'rgba(255, 90, 90, 0.1)',
+                border: '1px solid rgba(255, 90, 90, 0.3)',
+                borderRadius: '8px',
+                padding: '12px 14px',
+                marginBottom: '20px'
+              }}>
+                {orderError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => setShowOrderConfirm(false)}
+                disabled={isPlacingOrder}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  background: 'transparent',
+                  color: 'rgba(255,255,255,0.8)',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '10px',
+                  fontSize: '14px',
+                  fontWeight: '700',
+                  cursor: isPlacingOrder ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitOrder}
+                disabled={isPlacingOrder}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  background: isPlacingOrder ? 'rgba(86, 211, 204, 0.5)' : '#56d3cc',
+                  color: '#1b1e23',
+                  border: 'none',
+                  borderRadius: '10px',
+                  fontSize: '14px',
+                  fontWeight: '800',
+                  cursor: isPlacingOrder ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {isPlacingOrder ? 'Submitting...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

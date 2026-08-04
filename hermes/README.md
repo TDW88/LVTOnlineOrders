@@ -8,6 +8,30 @@ transaction path, so the same payload always produces the same records.
 
 ## Running it
 
+### From the portal
+
+```bash
+python3 -m hermes.serve              # http://localhost:8971/index.html
+python3 -m hermes.serve --dry-run    # resolve every order, write nothing
+python3 -m hermes.serve --port 9000
+```
+
+Serves the portal *and* exposes `POST /api/order`, which the Review step's **Submit
+Order** button calls. A plain `python -m http.server` cannot run the script, so the
+button falls back to downloading the payload if this server isn't the one answering —
+if you see a download instead of a quote, you're on the static server.
+
+Bound to `127.0.0.1` only, on purpose: the endpoint writes to Salesforce using your CLI
+credentials and has no authentication of its own. Don't expose it.
+
+Responses: `200` created, `422` order refused (body carries `code`/`field`/`detail`),
+`400` malformed JSON, `502` Salesforce CLI failure, `500` unexpected.
+
+An order takes roughly **60–70 seconds** end to end — about twenty `sf` CLI invocations
+plus the CPQ pricing wait. The button stays in a submitting state throughout.
+
+### From the command line
+
 ```bash
 # validate + resolve only, writes nothing
 python3 -m hermes.hermes hermes/payloads/golden.json --dry-run
@@ -86,10 +110,110 @@ Bundle head, `BASEUNIT` and `HEADUNIT` all list at **$0**. All recurring value s
 `FORM FACTOR SUBSCRIPTION` and `MODULE` lines, so a structurally broken quote can render
 fine and total wrong. That is why `verify.py` exists.
 
-**CPQ prices asynchronously and incrementally.** A partially-calculated quote reports a
-non-zero total that is simply too low — observed live: the same order read 68,000
-mid-calculation and 92,000 once settled. `verify.py` waits for the total to repeat
-across consecutive reads before believing it. Do not replace that with a fixed sleep.
+**CPQ prices asynchronously and incrementally**, and this caused two wrong totals before
+it was solved properly:
+
+1. Reading immediately after insert gives zeros — a healthy quote looks broken.
+2. Waiting for the total to *stop changing* is also unsound. Pricing lands line by line,
+   and a pause longer than the poll interval makes a partial total look settled. Observed
+   live: identical orders reporting 68,000, then 80,000, then 92,000, the differences
+   being module lines that had not landed when two consecutive reads agreed.
+
+`verify.py` therefore waits for a **known expected total**, computed by
+`insert_lines.expected_net_amount` from the pinned config: for each unit group,
+`(form factor monthly + module monthlies) × term × quantity`. Nothing computed there is
+ever written — it exists purely so the wait has an unambiguous stopping condition, and so
+a structurally wrong quote is caught rather than reported as fine. Do not replace it with
+a fixed sleep or a stability check.
+
+## New customers
+
+A payload with **no `lvt_customer_id`** is treated as a new customer: Hermes provisions
+the account structure instead of filing the order under an existing account. A payload
+**with** one resolves against it exactly as before, and is still rejected if anything is
+ambiguous.
+
+The portal decides which path applies by company name: it sends the pinned demo UUIDs
+only when the typed company matches the pinned demo account, and `null` otherwise.
+
+What gets created, mirroring the shape existing customers have so orders resolve down one
+code path either way:
+
+```
+Account "1 - Top/Mid Account"          <- billing, holds LvtCustomerId__c
+  └── Account "2 - Location Account"   <- ship-to, holds LvtLocationId__c
+Location_Account_UUID_Mapping__c        <- binds the two UUIDs
+```
+
+Verified round-trip: a provisioned account resolves through the normal existing-customer
+path, ParentId and mapping checks included.
+
+### What this costs
+
+**The minted LVT ids do not exist in VMS.** All ~10,800 pre-existing accounts carry an
+`LvtCustomerId__c`, which means accounts originate in VMS and Salesforce is downstream.
+An account created here is therefore invisible to VMS, and when the customer is set up
+there properly a second Salesforce account will likely appear alongside this one. Nothing
+here reconciles that — the account's `Description` records what happened so a human can
+merge them. **That merge is a manual job someone has to own.**
+
+This is a deliberate departure from the design doc's find-or-reject rule. Accounts and
+locations for *existing* customers still reject rather than create.
+
+**Matching is exact-name only.** `Brasfield and Gorrie` will not match
+`Brasfield & Gorrie- GA`, so a customer who types their name differently gets a duplicate
+account. Exact repeats are deduplicated correctly (verified: same name reuses the account,
+creates no second location, reuses the contact).
+
+**Provisioning is not atomic.** It is three separate writes with no transaction across
+them. A validation rule requiring a shipping address applies to the location record type
+but *not* to Top/Mid, which really did orphan a billing account during development. On
+failure Hermes now raises `PARTIAL_CREATION` naming every record created, and a
+re-submission with the same company name reuses a billing account left behind by a
+previous failure rather than duplicating it.
+
+### Org quirks this step has to satisfy
+
+- **State/Country picklists are enabled.** Writing `UT` to `BillingState` fails with
+  "Please select a state from the list of valid states"; two-letter codes belong in
+  `BillingStateCode`, which also requires a country code.
+- **"Shipping Address Required"** is enforced on the location record type, so billing
+  address alone will not save. Shipping mirrors billing for the single-location v1 case.
+- Org automation populates the *other* LVT id on each account after insert (the billing
+  account gains an `LvtLocationId__c`, the location gains an `LvtCustomerId__c`). Existing
+  accounts look the same way, so this is left alone.
+
+## Primary contact
+
+The name on the portal's contact step becomes the primary contact in the two places this
+org actually uses:
+
+| Where | Field | Org usage |
+|---|---|---|
+| Opportunity | `OpportunityContactRole`, `Role = 'Primary Contact'`, `IsPrimary = true` | 562 of 586 roles |
+| Quote | `SBQQ__Quote__c.SBQQ__PrimaryContact__c` | 5,751 quotes — the dominant field |
+
+`Opportunity.ContactId` (281) and `Opportunity.Contact__c` (313) are also populated in
+this org but are not set here; say so if they matter. `SalesLoft1__Primary_Contact__c` is
+a managed package field and is left alone.
+
+**This step creates a Contact if it cannot find one — the only place Hermes does that.**
+The golden-path account had zero Contacts, and so do most location accounts, so
+find-or-reject would have refused essentially every order. Accounts and locations still
+reject rather than create: attaching a quote to the wrong company is a cleanup incident,
+whereas a duplicate person is smaller and more fixable.
+
+Duplicates are avoided by matching, in order: email within the account hierarchy (parent
+or any child), then first+last name on the billing account, and only then creating.
+Contacts are always created against the **billing** account. Re-running an order reuses
+the contact and does not stack a second contact role.
+
+A payload with no contact name links nothing and reports it. Inventing a name from an
+email prefix would be worse than leaving the field for a rep.
+
+`Contact` requires only `LastName`, so a single-word name becomes the last name rather
+than getting a placeholder first name. Middle names stay with the last name so nothing is
+silently dropped: `Ana Maria Reyes` → `Ana` / `Maria Reyes`.
 
 ## Portal ↔ CPQ mapping
 
