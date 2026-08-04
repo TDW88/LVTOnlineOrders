@@ -245,8 +245,9 @@ function LVTConfigurator() {
       }
     ],
     cameraConfig: {
-      ndaaRequired: null, // null | 'yes' | 'no'
-      sku: null           // internal SKU from CAMERA_OPTIONS
+      ndaaRequired: null, // null | 'yes' | 'no' — order-level compliance requirement
+      sku: null,          // default SKU applied to every unit
+      overrides: {}       // { [unitKey]: sku } for units that differ from the default
     },
     lpr: false,
     satCom: false,
@@ -752,16 +753,37 @@ function LVTConfigurator() {
     setConfig(prev => ({ ...prev, [option]: !prev[option] }));
   };
 
+  const isNdaaCompliantSku = (sku) => {
+    const option = CAMERA_OPTIONS.find(o => o.sku === sku);
+    return !!(option && option.ndaa);
+  };
+
   const updateCameraConfig = (field, value) => {
     setConfig(prev => {
       const next = { ...prev.cameraConfig, [field]: value };
-      // Requiring NDAA can invalidate a previously chosen non-compliant package
-      if (field === 'ndaaRequired' && value === 'yes' && next.sku) {
-        const stillOffered = CAMERA_OPTIONS.find(o => o.sku === next.sku && o.ndaa);
-        if (!stillOffered) next.sku = null;
+      // Requiring NDAA invalidates any non-compliant default or override
+      if (field === 'ndaaRequired' && value === 'yes') {
+        if (next.sku && !isNdaaCompliantSku(next.sku)) next.sku = null;
+        next.overrides = Object.fromEntries(
+          Object.entries(next.overrides).filter(([, sku]) => isNdaaCompliantSku(sku))
+        );
       }
       return { ...prev, cameraConfig: next };
     });
+  };
+
+  // Passing an empty value clears the override so the unit follows the default
+  const setCameraOverride = (unitKey, sku) => {
+    setConfig(prev => {
+      const overrides = { ...prev.cameraConfig.overrides };
+      if (!sku) delete overrides[unitKey];
+      else overrides[unitKey] = sku;
+      return { ...prev, cameraConfig: { ...prev.cameraConfig, overrides } };
+    });
+  };
+
+  const clearCameraOverrides = () => {
+    setConfig(prev => ({ ...prev, cameraConfig: { ...prev.cameraConfig, overrides: {} } }));
   };
 
   const toggleSoftwarePackage = (id) => {
@@ -996,6 +1018,26 @@ function LVTConfigurator() {
     ? CAMERA_OPTIONS.filter(option => option.ndaa)
     : CAMERA_OPTIONS;
   const selectedCamera = CAMERA_OPTIONS.find(option => option.sku === config.cameraConfig.sku) || null;
+
+  // One row per physical unit, for per-unit camera overrides. `key` is stable
+  // across quantity edits except for the units dropped off the end of a line.
+  const cameraUnitList = config.locations
+    .flatMap((location, locationIdx) =>
+      location.units.flatMap(unit =>
+        Array.from({ length: unit.quantity || 0 }, (_, n) => ({
+          key: `${location.id}-${unit.id}-${n + 1}`,
+          locationNumber: locationIdx + 1,
+          zipCode: location.zipCode,
+          unitTypeName: getUnitType(unit.unitType).name
+        }))
+      )
+    )
+    .map((u, i) => ({ ...u, unitNumber: i + 1 }));
+
+  // The default applies unless a unit has an override
+  const cameraSkuForUnit = (unitKey) => config.cameraConfig.overrides[unitKey] || config.cameraConfig.sku;
+  const overriddenUnitCount = cameraUnitList.filter(u => config.cameraConfig.overrides[u.key]).length;
+  const distinctCameraSkus = [...new Set(cameraUnitList.map(u => cameraSkuForUnit(u.key)).filter(Boolean))];
   const baseMonthlyTotal = config.locations.reduce((sum, location) => {
     const locationTotal = location.units.reduce((unitSum, unit) => {
       const unitType = getUnitType(unit.unitType);
@@ -1117,10 +1159,27 @@ function LVTConfigurator() {
         ndaaRequired: config.cameraConfig.ndaaRequired === null
           ? null
           : config.cameraConfig.ndaaRequired === 'yes',
-        sku: selectedCamera ? selectedCamera.sku : null,
-        label: selectedCamera ? selectedCamera.label : null,
-        capability: selectedCamera ? selectedCamera.capability : null,
-        ndaaCompliantPackage: selectedCamera ? selectedCamera.ndaa : null
+        // The default package applied to every unit without an override
+        defaultSku: selectedCamera ? selectedCamera.sku : null,
+        defaultLabel: selectedCamera ? selectedCamera.label : null,
+        defaultCapability: selectedCamera ? selectedCamera.capability : null,
+        // True when units do not all resolve to the same package
+        mixed: distinctCameraSkus.length > 1,
+        overriddenUnitCount,
+        perUnit: cameraUnitList.map(u => {
+          const sku = cameraSkuForUnit(u.key);
+          const option = CAMERA_OPTIONS.find(o => o.sku === sku) || null;
+          return {
+            unitNumber: u.unitNumber,
+            locationNumber: u.locationNumber,
+            zipCode: u.zipCode,
+            unitTypeName: u.unitTypeName,
+            sku: sku || null,
+            label: option ? option.label : null,
+            ndaaCompliantPackage: option ? option.ndaa : null,
+            isOverride: !!config.cameraConfig.overrides[u.key]
+          };
+        })
       },
       hardware: {
         lpr: !!config.lpr,
@@ -1279,8 +1338,21 @@ function LVTConfigurator() {
 
       // Hardware Options
       ndaaRequired: model.cameras.ndaaRequired === null ? 'Not answered' : yn(model.cameras.ndaaRequired),
-      cameraSku: model.cameras.sku || 'Not selected',
-      cameraDescriptor: model.cameras.label || 'Not selected',
+      // Scalars kept for existing consumers: the SKU when every unit matches,
+      // otherwise 'Mixed' — see cameraSkusByUnit for the authoritative per-unit list
+      cameraSku: model.cameras.mixed ? 'Mixed' : (model.cameras.defaultSku || 'Not selected'),
+      cameraDescriptor: model.cameras.mixed ? 'Mixed — see cameraSkusByUnit' : (model.cameras.defaultLabel || 'Not selected'),
+      cameraDefaultSku: model.cameras.defaultSku || 'Not selected',
+      cameraOverriddenUnits: model.cameras.overriddenUnitCount,
+      cameraSkusByUnit: model.cameras.perUnit.map(u => ({
+        unit: u.unitNumber,
+        location: u.locationNumber,
+        zipCode: u.zipCode,
+        unitType: u.unitTypeName,
+        sku: u.sku || 'Not selected',
+        descriptor: u.label || 'Not selected',
+        isOverride: yn(u.isOverride)
+      })),
       lpr: yn(model.hardware.lpr),
       satCom: yn(model.hardware.satCom),
       generatorDeclined: yn(model.hardware.generator.declined),
@@ -2065,6 +2137,110 @@ function LVTConfigurator() {
                             </div>
                           )}
                         </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Per-unit overrides — only useful once a default is chosen */}
+              {config.cameraConfig.sku && cameraUnitList.length > 1 && (
+                <div style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: '16px',
+                  padding: '32px'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    gap: '16px',
+                    marginBottom: '8px',
+                    flexWrap: 'wrap'
+                  }}>
+                    <h3 style={{ fontSize: '20px', fontWeight: '800', color: '#56d3cc' }}>
+                      Individual Units <span style={{ fontSize: '13px', fontWeight: '600', color: 'rgba(255,255,255,0.45)' }}>· Optional</span>
+                    </h3>
+                    {overriddenUnitCount > 0 && (
+                      <button
+                        onClick={clearCameraOverrides}
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          borderRadius: '6px',
+                          color: 'rgba(255,255,255,0.7)',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          padding: '6px 12px',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        Reset all to default
+                      </button>
+                    )}
+                  </div>
+                  <p style={{
+                    fontSize: '14px',
+                    color: 'rgba(255,255,255,0.6)',
+                    marginBottom: '24px',
+                    lineHeight: '1.6'
+                  }}>
+                    All {cameraUnitList.length} units use the package above unless you change one here.
+                    {overriddenUnitCount > 0
+                      ? ` ${overriddenUnitCount} ${overriddenUnitCount === 1 ? 'unit differs' : 'units differ'} from the default.`
+                      : ''}
+                  </p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {cameraUnitList.map(unit => {
+                      const override = config.cameraConfig.overrides[unit.key] || '';
+                      return (
+                        <div
+                          key={unit.key}
+                          className="unit-row"
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: '220px 1fr',
+                            gap: '16px',
+                            alignItems: 'center',
+                            padding: '12px 16px',
+                            background: override ? 'rgba(86, 211, 204, 0.06)' : 'rgba(39, 42, 47, 0.4)',
+                            border: override ? '1px solid rgba(86,211,204,0.3)' : '1px solid rgba(255,255,255,0.08)',
+                            borderRadius: '8px'
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: '13px', fontWeight: '800', color: '#fff' }}>
+                              Unit {unit.unitNumber}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>
+                              {unit.unitTypeName}{unit.zipCode ? ` · Zip ${unit.zipCode}` : ''}
+                            </div>
+                          </div>
+                          <select
+                            value={override}
+                            onChange={(e) => setCameraOverride(unit.key, e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '10px 12px',
+                              background: 'rgba(27, 30, 35, 0.9)',
+                              border: override ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.15)',
+                              borderRadius: '6px',
+                              color: '#fff',
+                              fontSize: '13px',
+                              fontWeight: '500',
+                              outline: 'none',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <option value="">Same as default — {selectedCamera ? selectedCamera.label : ''}</option>
+                            {availableCameras.map(option => (
+                              <option key={option.sku} value={option.sku}>{option.label}</option>
+                            ))}
+                          </select>
+                        </div>
                       );
                     })}
                   </div>
@@ -4221,16 +4397,45 @@ function LVTConfigurator() {
                       alignItems: 'flex-start',
                       gap: '16px'
                     }}>
-                      <span>{totalUnits} × {selectedCamera.label}</span>
+                      <span>
+                        {totalUnits - overriddenUnitCount} × {selectedCamera.label}
+                        {overriddenUnitCount > 0 && (
+                          <span style={{ color: 'rgba(255,255,255,0.5)', fontWeight: '500' }}> (default)</span>
+                        )}
+                      </span>
                       <span style={{ color: '#56d3cc', whiteSpace: 'nowrap' }}>Included</span>
                     </div>
+
+                    {/* Units that differ from the default */}
+                    {cameraUnitList
+                      .filter(u => config.cameraConfig.overrides[u.key])
+                      .map(u => {
+                        const opt = CAMERA_OPTIONS.find(o => o.sku === config.cameraConfig.overrides[u.key]);
+                        return (
+                          <div key={u.key} style={{
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'flex-start',
+                            gap: '16px',
+                            marginTop: '8px'
+                          }}>
+                            <span style={{ color: 'rgba(255,255,255,0.8)' }}>
+                              Unit {u.unitNumber} · {opt ? opt.label : '—'}
+                            </span>
+                            <span style={{ color: '#56d3cc', whiteSpace: 'nowrap' }}>Included</span>
+                          </div>
+                        );
+                      })}
+
                     <div style={{
                       fontSize: '12px',
                       color: 'rgba(255,255,255,0.5)',
                       marginTop: '6px'
                     }}>
                       NDAA compliance {config.cameraConfig.ndaaRequired === 'yes' ? 'required' : 'not required'}
-                      {selectedCamera.ndaa ? ' · package is NDAA compliant' : ''}
+                      {distinctCameraSkus.length > 1 ? ' · mixed packages across units' : (selectedCamera.ndaa ? ' · package is NDAA compliant' : '')}
                     </div>
                   </div>
                 )}
