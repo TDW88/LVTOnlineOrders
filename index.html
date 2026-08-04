@@ -116,36 +116,29 @@ const UNIT_TYPES = [
 // `ndaa: true` packages are offered to everyone; `ndaa: false` packages are
 // added to the list only when the customer does NOT require NDAA compliance.
 const CAMERA_OPTIONS = [
-  // Consolidated for demo: one package per range tier, per compliance mode.
-  // The full 17-package catalogue is preserved in git history if it needs restoring.
-  // NDAA-compliant
+  // NDAA-compliant: the two best-selling Axis configurations (sales ranks 4 and 5).
+  // Both are near/mid range, so there is no range ladder on the NDAA side — the
+  // choice is whether the center position is a PTZ or a 360-Deg panoramic.
   {
-    tier: 'Near Range',
-    sku: 'NR Fixed Thermal (L,R), A-IR-PTZ (C), NDAA',
-    label: 'Near-Range Thermal (Left/Right) + PTZ Camera (Center)',
-    coverage: 'Thermal detection to ~300 ft',
-    capability: '(L,R) Fixed Thermal, up to 300ft, 55-Deg FOV; (C) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; NDAA',
+    name: 'Analytics PTZ (All Positions)',
+    sku: 'NR/MR A-IR-PTZ (L,R,C), NDAA',
+    label: 'Near/Mid-Range PTZ (Left/Right/Center)',
+    coverage: 'PTZ detection to ~300 ft on all three positions',
+    capability: '(L,R,C) IR PTZ, up to 300ft Human at widest, 58-Deg FOV, NDAA',
     ndaa: true
   },
   {
-    tier: 'Mid Range',
-    sku: 'NR/MR A-IR-PTZ (L,R), LR-Fixed Thermal (C), NDAA',
-    label: 'Near/Mid-Range PTZ (Left/Right) + Long-Range Thermal (Center)',
-    coverage: 'PTZ to ~300 ft, thermal to ~1200 ft down the center',
-    capability: '(L,R) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; (C) Fixed Thermal, up to 1200ft Human, 10-Deg FOV; NDAA',
+    name: 'Analytics PTZ + Panoramic',
+    sku: 'NR/MR A-IR-PTZ (L,R), IR Fisheye w/Analytics (C), NDAA',
+    label: 'Near/Mid-Range PTZ (Left/Right) + Panoramic w/ Analytics (Center)',
+    coverage: 'PTZ to ~300 ft on left/right, plus 360-Deg panoramic center',
+    capability: '(L,R) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; (C) IR Fisheye, up to 50ft Human, 360-Deg FOV; NDAA',
     ndaa: true
   },
+  // Non-NDAA: one architecture across three range tiers — bispectral PTZ on
+  // left/right plus panoramic with analytics in the center.
   {
-    tier: 'Long Range',
-    sku: 'LR Fixed Thermal (L,R), A-IR-PTZ (C), NDAA',
-    label: 'Long-Range Thermal (Left/Right) + PTZ Camera (Center)',
-    coverage: 'Thermal detection to ~1200 ft',
-    capability: '(L,R) Fixed Thermal, up to 1200ft Human, 10-Deg FOV; (C) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; NDAA',
-    ndaa: true
-  },
-  // Non-NDAA — same architecture across all three tiers, differing only in range
-  {
-    tier: 'Near Range',
+    name: 'Near Range',
     sku: 'NR BIS (L,R), IR Fisheye w/Analytics (C)',
     label: 'Near-Range Thermal + Optical (Left/Right) + Panoramic w/ Analytics (Center)',
     coverage: 'Detection to ~300 ft, plus 360-Deg panoramic',
@@ -153,7 +146,7 @@ const CAMERA_OPTIONS = [
     ndaa: false
   },
   {
-    tier: 'Mid Range',
+    name: 'Mid Range',
     sku: 'MR BIS (L,R), IR Fisheye w/Analytics (C)',
     label: 'Mid-Range Thermal + Optical (Left/Right) + Panoramic w/ Analytics (Center)',
     coverage: 'Detection to ~400 ft, plus 360-Deg panoramic',
@@ -161,7 +154,7 @@ const CAMERA_OPTIONS = [
     ndaa: false
   },
   {
-    tier: 'Long Range',
+    name: 'Long Range',
     sku: 'LR BIS (L,R), IR Fisheye w/Analytics (C)',
     label: 'Long-Range Thermal + Optical (Left/Right) + Panoramic w/ Analytics (Center)',
     coverage: 'Detection to ~1200 ft, plus 360-Deg panoramic',
@@ -1113,7 +1106,7 @@ function LVTConfigurator() {
           : config.cameraConfig.ndaaRequired === 'yes',
         // The default package applied to every unit without an override
         defaultSku: selectedCamera ? selectedCamera.sku : null,
-        defaultTier: selectedCamera ? selectedCamera.tier : null,
+        defaultOptionName: selectedCamera ? selectedCamera.name : null,
         defaultLabel: selectedCamera ? selectedCamera.label : null,
         defaultCapability: selectedCamera ? selectedCamera.capability : null,
         // True when units do not all resolve to the same package
@@ -1128,7 +1121,7 @@ function LVTConfigurator() {
             zipCode: u.zipCode,
             unitTypeName: u.unitTypeName,
             sku: sku || null,
-            tier: option ? option.tier : null,
+            optionName: option ? option.name : null,
             label: option ? option.label : null,
             ndaaCompliantPackage: option ? option.ndaa : null,
             isOverride: !!config.cameraConfig.overrides[u.key]
@@ -1297,7 +1290,7 @@ function LVTConfigurator() {
       cameraSku: model.cameras.mixed ? 'Mixed' : (model.cameras.defaultSku || 'Not selected'),
       cameraDescriptor: model.cameras.mixed ? 'Mixed — see cameraSkusByUnit' : (model.cameras.defaultLabel || 'Not selected'),
       cameraDefaultSku: model.cameras.defaultSku || 'Not selected',
-      cameraRangeTier: model.cameras.mixed ? 'Mixed' : (model.cameras.defaultTier || 'Not selected'),
+      cameraOptionName: model.cameras.mixed ? 'Mixed' : (model.cameras.defaultOptionName || 'Not selected'),
       cameraOverriddenUnits: model.cameras.overriddenUnitCount,
       cameraSkusByUnit: model.cameras.perUnit.map(u => ({
         unit: u.unitNumber,
@@ -1305,7 +1298,7 @@ function LVTConfigurator() {
         zipCode: u.zipCode,
         unitType: u.unitTypeName,
         sku: u.sku || 'Not selected',
-        rangeTier: u.tier || 'Not selected',
+        optionName: u.optionName || 'Not selected',
         descriptor: u.label || 'Not selected',
         isOverride: yn(u.isOverride)
       })),
@@ -2022,8 +2015,8 @@ function LVTConfigurator() {
                     lineHeight: '1.6'
                   }}>
                     {config.cameraConfig.ndaaRequired === 'yes'
-                      ? `Choose the detection range you need. All ${availableCameras.length} packages are NDAA compliant. Positions are Left, Right, and Center on the camera mast.`
-                      : `Choose the detection range you need. Positions are Left, Right, and Center on the camera mast.`}
+                      ? 'Our two most-requested NDAA configurations. Both cover near/mid range — choose whether the center position is a PTZ or a 360-Deg panoramic. Positions are Left, Right, and Center on the camera mast.'
+                      : 'Choose the detection range you need. Positions are Left, Right, and Center on the camera mast.'}
                   </p>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -2065,7 +2058,7 @@ function LVTConfigurator() {
                               lineHeight: '1.3',
                               marginBottom: '2px'
                             }}>
-                              {option.tier}
+                              {option.name}
                             </div>
                             {option.coverage && (
                               <div style={{
@@ -2209,9 +2202,9 @@ function LVTConfigurator() {
                               cursor: 'pointer'
                             }}
                           >
-                            <option value="">Same as default — {selectedCamera ? selectedCamera.tier : ''}</option>
+                            <option value="">Same as default — {selectedCamera ? selectedCamera.name : ''}</option>
                             {availableCameras.map(option => (
-                              <option key={option.sku} value={option.sku}>{option.tier} — {option.coverage}</option>
+                              <option key={option.sku} value={option.sku}>{option.name} · {option.coverage}</option>
                             ))}
                           </select>
                         </div>
@@ -4372,7 +4365,7 @@ function LVTConfigurator() {
                       gap: '16px'
                     }}>
                       <span>
-                        {totalUnits - overriddenUnitCount} × {selectedCamera.tier} · {selectedCamera.label}
+                        {totalUnits - overriddenUnitCount} × {selectedCamera.name} · {selectedCamera.label}
                         {overriddenUnitCount > 0 && (
                           <span style={{ color: 'rgba(255,255,255,0.5)', fontWeight: '500' }}> (default)</span>
                         )}
@@ -4396,7 +4389,7 @@ function LVTConfigurator() {
                             marginTop: '8px'
                           }}>
                             <span style={{ color: 'rgba(255,255,255,0.8)' }}>
-                              Unit {u.unitNumber} · {opt ? `${opt.tier} · ${opt.label}` : '—'}
+                              Unit {u.unitNumber} · {opt ? `${opt.name} · ${opt.label}` : '—'}
                             </span>
                             <span style={{ color: '#56d3cc', whiteSpace: 'nowrap' }}>Included</span>
                           </div>
