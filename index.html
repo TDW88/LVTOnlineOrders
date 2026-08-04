@@ -171,9 +171,8 @@ const ANNOUNCEMENT_OPTIONS = [
 ];
 
 const ANNOUNCEMENT_SCHEDULES = [
-  { value: 'security-hours', label: 'During security schedule hours' },
-  { value: 'off-hours', label: 'During off hours (opposite of security schedule)' },
-  { value: '24-7', label: '24/7' }
+  { value: 'day', label: 'Day' },
+  { value: 'night', label: 'Night' }
 ];
 
 const DETECTION_RESPONSES = [
@@ -1306,7 +1305,7 @@ function LVTConfigurator() {
                 schedule: lc.announcementSchedule
               } : null,
               detection: on ? {
-                objects: [lc.detect.human ? 'Human' : null, lc.detect.vehicle ? 'Vehicle' : null].filter(Boolean),
+                objects: [lc.detect.human ? 'Humans' : null, lc.detect.vehicle ? 'Vehicles' : null].filter(Boolean),
                 trigger: lc.trigger,
                 loiterSeconds: lc.trigger === 'loiter' ? lc.loiterSeconds : null,
                 zones: lc.detectWhere || null,
@@ -1593,6 +1592,9 @@ function LVTConfigurator() {
         {/* Step 0: Location */}
         {currentStep === 0 && (
           <div>
+            <h1 className="marketplace-title">
+              LVT Marketplace
+            </h1>
             <h2 className="hero-title">
               Surveillance, Deterrence, <br />and Versatility
             </h2>
@@ -4036,14 +4038,13 @@ function LVTConfigurator() {
                               </div>
                             ))}
                           </div>
-                          <div style={{
-                            fontSize: '12px', marginTop: '10px', lineHeight: '1.5',
-                            color: overCap ? '#e8746a' : 'rgba(255,255,255,0.5)'
-                          }}>
-                            {mins !== null ? `${formatMinutes(mins)} of alerting per day` : 'Set both times'}
-                            {cap !== null && ` · Standard ARS allows up to ${formatMinutes(cap)}`}
-                            {overCap && ' — shorten the window or move to Expanded ARS'}
-                          </div>
+                          {overCap && (
+                            <div style={{
+                              fontSize: '12px', marginTop: '10px', lineHeight: '1.5', color: '#e8746a'
+                            }}>
+                              {formatMinutes(mins)} of alerting per day exceeds the {formatMinutes(cap)} allowed by Standard ARS — shorten the window or move to Expanded.
+                            </div>
+                          )}
                         </div>
 
                         {/* Special days */}
@@ -4111,8 +4112,8 @@ function LVTConfigurator() {
                           <div style={{ marginBottom: '20px' }}>
                             {helper('What would you like to detect?')}
                             <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
-                              {check(lc.detect.human, () => upd('detect.human', !lc.detect.human), 'Human', 'h')}
-                              {check(lc.detect.vehicle, () => upd('detect.vehicle', !lc.detect.vehicle), 'Vehicle', 'v')}
+                              {check(lc.detect.human, () => upd('detect.human', !lc.detect.human), 'Humans', 'h')}
+                              {check(lc.detect.vehicle, () => upd('detect.vehicle', !lc.detect.vehicle), 'Vehicles', 'v')}
                             </div>
                           </div>
 
@@ -4928,7 +4929,7 @@ function LVTConfigurator() {
                               <div style={rowStyle}>
                                 <span>Detecting</span>
                                 <span style={{ color: '#56d3cc' }}>
-                                  {[lc.detect.human ? 'Human' : null, lc.detect.vehicle ? 'Vehicle' : null].filter(Boolean).join(', ') || '—'}
+                                  {[lc.detect.human ? 'Humans' : null, lc.detect.vehicle ? 'Vehicles' : null].filter(Boolean).join(', ') || '—'}
                                 </span>
                               </div>
                               <div style={rowStyle}>

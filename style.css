@@ -137,6 +137,16 @@ body {
   z-index: 1;
 }
 
+.marketplace-title {
+  font-size: clamp(40px, 6.5vw, 68px);
+  font-weight: 900;
+  letter-spacing: -2px;
+  line-height: 1.05;
+  margin-bottom: 12px;
+  /* Kingfisher — same teal as the pricing figures */
+  color: #56d3cc;
+}
+
 .hero-title {
   font-size: clamp(32px, 5vw, 48px);
   font-weight: 700;
@@ -273,6 +283,11 @@ body {
 
   .main-content {
     padding: 32px 16px;
+  }
+
+  .marketplace-title {
+    font-size: 40px;
+    letter-spacing: -1.5px;
   }
 
   .hero-title {
