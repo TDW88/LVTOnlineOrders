@@ -110,6 +110,117 @@ const UNIT_TYPES = [
   }
 ];
 
+// Camera packages. `sku` is the internal SKU that goes into the order payload;
+// `label` is the only text shown to the customer. `capability` is the optional
+// detail line explaining what the cameras can actually see.
+// `ndaa: true` packages are offered to everyone; `ndaa: false` packages are
+// added to the list only when the customer does NOT require NDAA compliance.
+const CAMERA_OPTIONS = [
+  {
+    sku: 'A-IR-PTZ- Base-Axis, NDAA',
+    label: 'Analytics PTZ Camera (Left/Right/Center)',
+    capability: '(C) IR PTZ, 58-Deg FOV, NDAA',
+    ndaa: true
+  },
+  {
+    sku: 'LR Fixed Thermal (L,R), A-IR-PTZ (C), NDAA',
+    label: 'Long-Range Thermal (Left/Right) + PTZ Camera (Center)',
+    capability: '(L,R) Fixed Thermal, up to 1200ft Human, 10-Deg FOV; (C) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; NDAA',
+    ndaa: true
+  },
+  {
+    sku: 'NR Fixed Thermal (L,R), A-IR-PTZ (C), NDAA',
+    label: 'Near-Range Thermal (Left/Right) + PTZ Camera (Center)',
+    capability: '(L,R) Fixed Thermal, up to 300ft, 55-Deg FOV; (C) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; NDAA',
+    ndaa: true
+  },
+  {
+    sku: 'NR/MR A-IR PTZ (L,R), LR Fixed thermal (C), NDAA',
+    label: 'Near/Mid-Range PTZ (Left/Right) + Long-Range Thermal (Center)',
+    capability: '(L,R) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; (C) Fixed Thermal, up to 1200ft Human, 10-Deg FOV; NDAA',
+    ndaa: true
+  },
+  {
+    sku: 'NR/MR A-IR-PTZ (L), NR-Fixed Thermal (R), IR Fisheye w/Analytics (C) NDAA',
+    label: 'Near/Mid-Range PTZ (Left), Near-Range Thermal (Right), Panoramic w/ Analytics (Center)',
+    capability: '(L) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; (R) Fixed Thermal, up to 300ft Human, 55-Deg FOV; (C) IR Fisheye, up to 50ft Human, 360-Deg FOV; NDAA',
+    ndaa: true
+  },
+  {
+    sku: 'NR/MR A-IR-PTZ (L,R), IR Fisheye w/Analytics (C), NDAA',
+    label: 'Near/Mid-Range PTZ (Left/Right) + Panoramic w/ Analytics (Center)',
+    capability: '(L,R) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; (C) IR Fisheye, up to 50ft Human, 360-Deg FOV; NDAA',
+    ndaa: true
+  },
+  {
+    sku: 'NR/MR A-IR-PTZ (L,R), LR-Fixed Thermal (C), NDAA',
+    label: 'Near/Mid-Range PTZ (Left/Right) + Long-Range Thermal (Center)',
+    capability: '(L,R) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; (C) Fixed Thermal, up to 1200ft Human, 10-Deg FOV; NDAA',
+    ndaa: true
+  },
+  // Non-NDAA packages
+  {
+    sku: 'NR BIS (L,R,C)',
+    label: 'Near-Range Thermal + Optical (Left/Right/Center)',
+    capability: null,
+    ndaa: false
+  },
+  {
+    sku: 'NR BIS (L,R), LR-Fixed Thermal (C)',
+    label: 'Near-Range Thermal + Optical (Left/Right) + Long-Range Thermal (Center)',
+    capability: null,
+    ndaa: false
+  },
+  {
+    sku: 'NR BIS (L,R), LR BIS (C)',
+    label: 'Near-Range Thermal + Optical (Left/Right) + Long-Range Thermal + Optical (Center)',
+    capability: null,
+    ndaa: false
+  },
+  {
+    sku: 'NR BIS (L,R), IR Fisheye w/Analytics (C)',
+    label: 'Near-Range Thermal + Optical (Left/Right) + Panoramic w/ Analytics (Center)',
+    capability: null,
+    ndaa: false
+  },
+  {
+    sku: 'NR BIS (L,R), IR Fisheye (C)',
+    label: 'Near-Range Thermal + Optical (Left/Right) + Panoramic (Center)',
+    capability: null,
+    ndaa: false
+  },
+  {
+    sku: 'MR BIS Thermal (L,R,C)',
+    label: 'Mid-Range Thermal + Optical (Left/Right/Center)',
+    capability: null,
+    ndaa: false
+  },
+  {
+    sku: 'MR BIS (L,R), IR Fisheye w/Analytics (C)',
+    label: 'Mid-Range Thermal + Optical (Left/Right) + Panoramic w/ Analytics (Center)',
+    capability: null,
+    ndaa: false
+  },
+  {
+    sku: 'MR BIS (L,R), IR Fisheye (C)',
+    label: 'Mid-Range Thermal + Optical (Left/Right) + Panoramic (Center)',
+    capability: null,
+    ndaa: false
+  },
+  {
+    sku: 'LR BIS (L,R), NR BIS (C)',
+    label: 'Long-Range Thermal + Optical (Left/Right) + Near-Range Thermal + Optical (Center)',
+    capability: null,
+    ndaa: false
+  },
+  {
+    sku: 'LR BIS (L,R), IR Fisheye w/Analytics (C)',
+    label: 'Long-Range Thermal + Optical (Left/Right) + Panoramic w/ Analytics (Center)',
+    capability: null,
+    ndaa: false
+  }
+];
+
 function LVTConfigurator() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -133,8 +244,10 @@ function LVTConfigurator() {
         ]
       }
     ],
-    ndaaCompliant: false,
-    nightVision: false,
+    cameraConfig: {
+      ndaaRequired: null, // null | 'yes' | 'no'
+      sku: null           // internal SKU from CAMERA_OPTIONS
+    },
     lpr: false,
     satCom: false,
     generatorBypass: false, // customer accepts downtime unless externally powered
@@ -192,8 +305,6 @@ function LVTConfigurator() {
   const GENERATOR_MONTHLY = 1000;
   
   // Hardware options pricing (monthly)
-  const NDAA_MONTHLY = 125;
-  const NIGHT_VISION_MONTHLY = 175;
   const LPR_MONTHLY = 500;
   const SATCOM_MONTHLY = 500;
 
@@ -238,7 +349,7 @@ function LVTConfigurator() {
     { months: 36, label: '36 Months', discount: 0.10 }  // 10% discount
   ];
 
-  const steps = ['Location', 'Hardware', 'Software', 'Lease Term', 'Contact Info', 'Configuration', 'Review'];
+  const steps = ['Location', 'Cameras', 'Hardware', 'Software', 'Lease Term', 'Contact Info', 'Configuration', 'Review'];
 
   const totalUnits = config.locations.reduce((sum, location) => {
     const locationTotal = location.units.reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
@@ -526,12 +637,6 @@ function LVTConfigurator() {
     let perUnitMonthly = 0;
     
     // Add hardware options (applied to all units)
-    if (config.ndaaCompliant) {
-      perUnitMonthly += NDAA_MONTHLY;
-    }
-    if (config.nightVision) {
-      perUnitMonthly += NIGHT_VISION_MONTHLY;
-    }
     if (config.lpr) {
       perUnitMonthly += LPR_MONTHLY;
     }
@@ -593,12 +698,6 @@ function LVTConfigurator() {
     let perUnitMonthly = 0;
     
     // Add hardware options (applied to all units)
-    if (config.ndaaCompliant) {
-      perUnitMonthly += NDAA_MONTHLY;
-    }
-    if (config.nightVision) {
-      perUnitMonthly += NIGHT_VISION_MONTHLY;
-    }
     if (config.lpr) {
       perUnitMonthly += LPR_MONTHLY;
     }
@@ -651,6 +750,18 @@ function LVTConfigurator() {
 
   const toggleHardwareOption = (option) => {
     setConfig(prev => ({ ...prev, [option]: !prev[option] }));
+  };
+
+  const updateCameraConfig = (field, value) => {
+    setConfig(prev => {
+      const next = { ...prev.cameraConfig, [field]: value };
+      // Requiring NDAA can invalidate a previously chosen non-compliant package
+      if (field === 'ndaaRequired' && value === 'yes' && next.sku) {
+        const stillOffered = CAMERA_OPTIONS.find(o => o.sku === next.sku && o.ndaa);
+        if (!stillOffered) next.sku = null;
+      }
+      return { ...prev, cameraConfig: next };
+    });
   };
 
   const toggleSoftwarePackage = (id) => {
@@ -830,10 +941,14 @@ function LVTConfigurator() {
         location.zipCode.length === 5 && location.units.every(unit => unit.quantity > 0)
       );
     }
-    if (currentStep === 1) return true; // Hardware options are optional
-    if (currentStep === 2) return true; // Software packages are optional
-    if (currentStep === 3) return config.leaseTerm !== null; // Lease term required
-    if (currentStep === 4) {
+    if (currentStep === 1) {
+      // The NDAA answer drives which SKUs are offered, so both are required
+      return config.cameraConfig.ndaaRequired !== null && config.cameraConfig.sku !== null;
+    }
+    if (currentStep === 2) return true; // Hardware options are optional
+    if (currentStep === 3) return true; // Software packages are optional
+    if (currentStep === 4) return config.leaseTerm !== null; // Lease term required
+    if (currentStep === 5) {
       // Contact info required
       const { email, phone, companyName, fullName, billingAddress, shippingAddresses } = config.contactInfo;
       const billingValid = billingAddress.street && billingAddress.city && 
@@ -853,7 +968,7 @@ function LVTConfigurator() {
         : !!(onsiteContact.name && onsiteContact.phone);
       return email && phone && companyName && fullName && billingValid && shippingValid && onsiteValid;
     }
-    if (currentStep === 5) {
+    if (currentStep === 6) {
       // Placement map and GPS are optional. ARS requires a monitoring window
       // and two complete contacts when enabled.
       const { ars } = config.siteConfig;
@@ -874,6 +989,13 @@ function LVTConfigurator() {
   const generatorUnitCount = generatorUnits.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
   // Generators are only billed when the customer has NOT opted to accept downtime
   const billedGeneratorCount = config.generatorBypass ? 0 : generatorUnitCount;
+
+  // Camera packages offered for the current NDAA answer. Requiring NDAA narrows
+  // the list to compliant packages; not requiring it offers everything.
+  const availableCameras = config.cameraConfig.ndaaRequired === 'yes'
+    ? CAMERA_OPTIONS.filter(option => option.ndaa)
+    : CAMERA_OPTIONS;
+  const selectedCamera = CAMERA_OPTIONS.find(option => option.sku === config.cameraConfig.sku) || null;
   const baseMonthlyTotal = config.locations.reduce((sum, location) => {
     const locationTotal = location.units.reduce((unitSum, unit) => {
       const unitType = getUnitType(unit.unitType);
@@ -990,9 +1112,17 @@ function LVTConfigurator() {
       },
       addresses: { billing: { ...billing }, shipping },
       deployment: { totalUnits, locations, gpsCoordinates: gps },
+      cameras: {
+        // null until the customer answers; true/false once they do
+        ndaaRequired: config.cameraConfig.ndaaRequired === null
+          ? null
+          : config.cameraConfig.ndaaRequired === 'yes',
+        sku: selectedCamera ? selectedCamera.sku : null,
+        label: selectedCamera ? selectedCamera.label : null,
+        capability: selectedCamera ? selectedCamera.capability : null,
+        ndaaCompliantPackage: selectedCamera ? selectedCamera.ndaa : null
+      },
       hardware: {
-        ndaaCompliant: !!config.ndaaCompliant,
-        nightVision: !!config.nightVision,
         lpr: !!config.lpr,
         satCom: !!config.satCom,
         generator: {
@@ -1148,8 +1278,9 @@ function LVTConfigurator() {
       generatorsNeeded: model.hardware.generator.recommendedCount,
 
       // Hardware Options
-      ndaaCompliant: yn(model.hardware.ndaaCompliant),
-      nightVision: yn(model.hardware.nightVision),
+      ndaaRequired: model.cameras.ndaaRequired === null ? 'Not answered' : yn(model.cameras.ndaaRequired),
+      cameraSku: model.cameras.sku || 'Not selected',
+      cameraDescriptor: model.cameras.label || 'Not selected',
       lpr: yn(model.hardware.lpr),
       satCom: yn(model.hardware.satCom),
       generatorDeclined: yn(model.hardware.generator.declined),
@@ -1739,8 +1870,212 @@ function LVTConfigurator() {
           </div>
         )}
 
-        {/* Step 1: Hardware Options */}
+        {/* Step 1: Camera Configuration */}
         {currentStep === 1 && (
+          <div>
+            <h2 style={{
+              fontWeight: '700',
+              marginBottom: '16px',
+              letterSpacing: '-1px',
+              lineHeight: '1.1'
+            }}>
+              Camera <span className="gradient-text">Configuration</span>
+            </h2>
+            <p style={{
+              fontSize: '18px',
+              color: 'rgba(255,255,255,0.8)',
+              marginBottom: '48px',
+              fontWeight: '400',
+              maxWidth: '680px',
+              lineHeight: '1.6'
+            }}>
+              Choose the camera package for your units. Start by telling us whether this deployment requires NDAA-compliant cameras — that determines which packages are available.
+            </p>
+
+            <div style={{
+              maxWidth: '900px',
+              margin: '0 auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '32px'
+            }}>
+              {/* NDAA requirement */}
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '16px',
+                padding: '32px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                  <Shield width={22} height={22} style={{ color: '#56d3cc' }} />
+                  <h3 style={{ fontSize: '20px', fontWeight: '800', color: '#56d3cc' }}>
+                    NDAA Compliance
+                  </h3>
+                </div>
+                <p style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.6)',
+                  marginBottom: '24px',
+                  lineHeight: '1.6'
+                }}>
+                  NDAA Section 889 compliance is required for federal government and many critical infrastructure deployments.
+                </p>
+                <div style={{
+                  fontSize: '13px',
+                  fontWeight: '800',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  marginBottom: '12px',
+                  color: '#fff'
+                }}>
+                  Does this deployment require NDAA-compliant cameras? *
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                  {[
+                    { value: 'yes', label: 'Yes' },
+                    { value: 'no', label: 'No' }
+                  ].map(opt => {
+                    const active = config.cameraConfig.ndaaRequired === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => updateCameraConfig('ndaaRequired', opt.value)}
+                        style={{
+                          padding: '12px 32px',
+                          background: active ? '#56d3cc' : 'rgba(39, 42, 47, 0.6)',
+                          color: active ? '#1b1e23' : '#fff',
+                          border: active ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.15)',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          transition: 'all 0.3s ease'
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Camera package list */}
+              {config.cameraConfig.ndaaRequired === null ? (
+                <div style={{
+                  padding: '40px',
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px dashed rgba(255,255,255,0.15)',
+                  borderRadius: '16px',
+                  textAlign: 'center',
+                  fontSize: '15px',
+                  color: 'rgba(255,255,255,0.55)'
+                }}>
+                  Answer the question above to see the available camera packages.
+                </div>
+              ) : (
+                <div style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: '16px',
+                  padding: '32px'
+                }}>
+                  <h3 style={{
+                    fontSize: '20px',
+                    fontWeight: '800',
+                    marginBottom: '8px',
+                    color: '#56d3cc'
+                  }}>
+                    Camera Package *
+                  </h3>
+                  <p style={{
+                    fontSize: '14px',
+                    color: 'rgba(255,255,255,0.6)',
+                    marginBottom: '24px',
+                    lineHeight: '1.6'
+                  }}>
+                    {config.cameraConfig.ndaaRequired === 'yes'
+                      ? `Showing the ${availableCameras.length} NDAA-compliant packages. Positions are Left, Right, and Center on the camera mast.`
+                      : `Showing all ${availableCameras.length} packages. Positions are Left, Right, and Center on the camera mast.`}
+                  </p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {availableCameras.map(option => {
+                      const active = config.cameraConfig.sku === option.sku;
+                      return (
+                        <button
+                          key={option.sku}
+                          onClick={() => updateCameraConfig('sku', option.sku)}
+                          style={{
+                            width: '100%',
+                            padding: '20px 24px',
+                            background: active ? 'rgba(86, 211, 204, 0.15)' : 'rgba(39, 42, 47, 0.6)',
+                            border: active ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.15)',
+                            borderRadius: '10px',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease',
+                            textAlign: 'left',
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '16px'
+                          }}
+                        >
+                          <div style={{
+                            width: '20px',
+                            height: '20px',
+                            minWidth: '20px',
+                            marginTop: '2px',
+                            borderRadius: '50%',
+                            border: active ? '6px solid #56d3cc' : '2px solid rgba(255,255,255,0.35)',
+                            background: 'transparent',
+                            transition: 'all 0.2s ease'
+                          }}></div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{
+                              fontSize: '15px',
+                              fontWeight: '700',
+                              color: '#fff',
+                              lineHeight: '1.4',
+                              marginBottom: option.capability ? '6px' : '0'
+                            }}>
+                              {option.label}
+                            </div>
+                            {option.capability && (
+                              <div style={{
+                                fontSize: '12px',
+                                color: 'rgba(255,255,255,0.55)',
+                                lineHeight: '1.5'
+                              }}>
+                                {option.capability}
+                              </div>
+                            )}
+                          </div>
+                          {option.ndaa && (
+                            <div style={{
+                              fontSize: '10px',
+                              fontWeight: '800',
+                              letterSpacing: '0.5px',
+                              color: active ? '#56d3cc' : 'rgba(255,255,255,0.45)',
+                              border: `1px solid ${active ? 'rgba(86,211,204,0.5)' : 'rgba(255,255,255,0.2)'}`,
+                              borderRadius: '4px',
+                              padding: '3px 7px',
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0
+                            }}>
+                              NDAA
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Hardware Options */}
+        {currentStep === 2 && (
           <div>
             <h2 style={{
               fontWeight: '900',
@@ -1917,218 +2252,6 @@ function LVTConfigurator() {
               gridTemplateColumns: 'repeat(2, 1fr)',
               gap: '24px'
             }}>
-              {/* NDAA Compliant Toggle */}
-              <div
-                className={`option-card ${config.ndaaCompliant ? 'selected-card' : ''}`}
-                onClick={() => toggleHardwareOption('ndaaCompliant')}
-                style={{
-                  background: config.ndaaCompliant
-                    ? 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))'
-                    : 'rgba(255,255,255,0.04)',
-                  border: config.ndaaCompliant
-                    ? '2px solid #56d3cc'
-                    : '2px solid rgba(255,255,255,0.1)',
-                  borderRadius: '16px',
-                  padding: '32px',
-                  cursor: 'pointer',
-                  position: 'relative',
-                  transition: 'all 0.3s ease'
-                }}
-              >
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  marginBottom: '20px'
-                }}>
-                  <div style={{
-                    width: '64px',
-                    height: '64px',
-                    background: config.ndaaCompliant
-                      ? 'rgba(86, 211, 204, 0.15)'
-                      : 'rgba(255,255,255,0.08)',
-                    borderRadius: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: config.ndaaCompliant ? '#56d3cc' : '#fff'
-                  }}>
-                    <Shield className="w-8 h-8" />
-                  </div>
-                  
-                  {config.ndaaCompliant && (
-                    <CheckCircle style={{
-                      color: '#56d3cc',
-                      width: '28px',
-                      height: '28px'
-                    }} />
-                  )}
-                </div>
-
-                <h3 style={{
-                  fontSize: '22px',
-                  fontWeight: '800',
-                  marginBottom: '10px',
-                  letterSpacing: '-0.5px'
-                }}>
-                  NDAA Compliant Cameras
-                </h3>
-
-                <p style={{
-                  fontSize: '14px',
-                  color: 'rgba(255,255,255,0.65)',
-                  marginBottom: '20px',
-                  lineHeight: '1.6'
-                }}>
-                  Upgrade to NDAA-compliant camera systems required for federal government and critical infrastructure deployments.
-                </p>
-
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                  marginBottom: '24px'
-                }}>
-                  {[
-                    'NDAA Section 889 compliant',
-                    'Approved for federal sites',
-                    'Secure supply chain verified',
-                    'Critical infrastructure ready'
-                  ].map((feature, idx) => (
-                    <div key={idx} style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      fontSize: '13px',
-                      color: 'rgba(255,255,255,0.7)',
-                      fontWeight: '500'
-                    }}>
-                      <div style={{
-                        width: '4px',
-                        height: '4px',
-                        background: config.ndaaCompliant ? '#56d3cc' : 'rgba(255,255,255,0.4)',
-                        borderRadius: '50%'
-                      }}></div>
-                      {feature}
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{
-                  fontSize: '28px',
-                  fontWeight: '900',
-                  color: config.ndaaCompliant ? '#56d3cc' : 'rgba(255,255,255,0.6)'
-                }}>
-                  +${NDAA_MONTHLY.toLocaleString()}/mo
-                </div>
-              </div>
-
-              {/* Night Vision Toggle */}
-              <div
-                className={`option-card ${config.nightVision ? 'selected-card' : ''}`}
-                onClick={() => toggleHardwareOption('nightVision')}
-                style={{
-                  background: config.nightVision
-                    ? 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))'
-                    : 'rgba(255,255,255,0.04)',
-                  border: config.nightVision
-                    ? '2px solid #56d3cc'
-                    : '2px solid rgba(255,255,255,0.1)',
-                  borderRadius: '16px',
-                  padding: '32px',
-                  cursor: 'pointer',
-                  position: 'relative',
-                  transition: 'all 0.3s ease'
-                }}
-              >
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  marginBottom: '20px'
-                }}>
-                  <div style={{
-                    width: '64px',
-                    height: '64px',
-                    background: config.nightVision
-                      ? 'rgba(86, 211, 204, 0.15)'
-                      : 'rgba(255,255,255,0.08)',
-                    borderRadius: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: config.nightVision ? '#56d3cc' : '#fff'
-                  }}>
-                    <Eye className="w-8 h-8" />
-                  </div>
-                  
-                  {config.nightVision && (
-                    <CheckCircle style={{
-                      color: '#56d3cc',
-                      width: '28px',
-                      height: '28px'
-                    }} />
-                  )}
-                </div>
-
-                <h3 style={{
-                  fontSize: '22px',
-                  fontWeight: '800',
-                  marginBottom: '10px',
-                  letterSpacing: '-0.5px'
-                }}>
-                  Long-Range Thermal
-                </h3>
-
-                <p style={{
-                  fontSize: '14px',
-                  color: 'rgba(255,255,255,0.65)',
-                  marginBottom: '20px',
-                  lineHeight: '1.6'
-                }}>
-                  Advanced thermal imaging cameras for complete darkness visibility and extended perimeter coverage.
-                </p>
-
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                  marginBottom: '24px'
-                }}>
-                  {[
-                    'Track movement 1,200+ feet away',
-                    '100% darkness visibility',
-                    'Weather-independent detection',
-                    'Covers 8 football fields'
-                  ].map((feature, idx) => (
-                    <div key={idx} style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      fontSize: '13px',
-                      color: 'rgba(255,255,255,0.7)',
-                      fontWeight: '500'
-                    }}>
-                      <div style={{
-                        width: '4px',
-                        height: '4px',
-                        background: config.nightVision ? '#56d3cc' : 'rgba(255,255,255,0.4)',
-                        borderRadius: '50%'
-                      }}></div>
-                      {feature}
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{
-                  fontSize: '28px',
-                  fontWeight: '900',
-                  color: config.nightVision ? '#56d3cc' : 'rgba(255,255,255,0.6)'
-                }}>
-                  +${NIGHT_VISION_MONTHLY.toLocaleString()}/mo
-                </div>
-              </div>
-
               {/* LPR & SatCom */}
               {[
                 {
@@ -2268,7 +2391,7 @@ function LVTConfigurator() {
         )}
 
         {/* Step 2: Software Packages */}
-        {currentStep === 2 && (
+        {currentStep === 3 && (
           <div>
             <h2 style={{
               fontWeight: '900',
@@ -2432,7 +2555,7 @@ function LVTConfigurator() {
 
 
         {/* Step 3: Lease Term */}
-        {currentStep === 3 && (
+        {currentStep === 4 && (
           <div>
             <h2 style={{
               fontWeight: '700',
@@ -2566,7 +2689,7 @@ function LVTConfigurator() {
         )}
 
         {/* Step 4: Contact Information */}
-        {currentStep === 4 && (
+        {currentStep === 5 && (
           <div>
             <h2 style={{
               fontWeight: '700',
@@ -3141,7 +3264,7 @@ function LVTConfigurator() {
           </div>
         )}
         {/* Step 5: Configuration */}
-        {currentStep === 5 && (
+        {currentStep === 6 && (
           <div>
             <h2 style={{
               fontWeight: '700',
@@ -3961,7 +4084,7 @@ function LVTConfigurator() {
           </div>
         )}
         {/* Step 6: Review */}
-        {currentStep === 6 && (
+        {currentStep === 7 && (
           <div>
             <h2 style={{
               fontWeight: '700',
@@ -4077,6 +4200,41 @@ function LVTConfigurator() {
                   </div>
                 </div>
 
+                {/* Camera Package */}
+                {selectedCamera && (
+                  <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{
+                      fontSize: '11px',
+                      textTransform: 'uppercase',
+                      color: 'rgba(255,255,255,0.5)',
+                      letterSpacing: '1px',
+                      marginBottom: '10px',
+                      fontWeight: '600'
+                    }}>
+                      Camera Package
+                    </div>
+                    <div style={{
+                      fontSize: '16px',
+                      fontWeight: '600',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      gap: '16px'
+                    }}>
+                      <span>{totalUnits} × {selectedCamera.label}</span>
+                      <span style={{ color: '#56d3cc', whiteSpace: 'nowrap' }}>Included</span>
+                    </div>
+                    <div style={{
+                      fontSize: '12px',
+                      color: 'rgba(255,255,255,0.5)',
+                      marginTop: '6px'
+                    }}>
+                      NDAA compliance {config.cameraConfig.ndaaRequired === 'yes' ? 'required' : 'not required'}
+                      {selectedCamera.ndaa ? ' · package is NDAA compliant' : ''}
+                    </div>
+                  </div>
+                )}
+
                 {/* Generators */}
                     {generatorUnits.length > 0 && (
                       <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
@@ -4119,7 +4277,7 @@ function LVTConfigurator() {
                 )}
                 
                 {/* Hardware Options */}
-                {(config.ndaaCompliant || config.nightVision || config.lpr || config.satCom) && (
+                {(config.lpr || config.satCom) && (
                   <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                     <div style={{
                       fontSize: '11px',
@@ -4131,36 +4289,6 @@ function LVTConfigurator() {
                     }}>
                       Hardware Options
                     </div>
-                    {config.ndaaCompliant && (
-                      <div style={{
-                        fontSize: '16px',
-                        fontWeight: '600',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '8px'
-                      }}>
-                        <span>{totalUnits} × NDAA Compliant Cameras</span>
-                        <span style={{ color: '#56d3cc' }}>
-                          +${(NDAA_MONTHLY * totalUnits).toLocaleString()}/mo
-                        </span>
-                      </div>
-                    )}
-                    {config.nightVision && (
-                      <div style={{
-                        fontSize: '16px',
-                        fontWeight: '600',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '8px'
-                      }}>
-                        <span>{totalUnits} × Long-Range Thermal</span>
-                        <span style={{ color: '#56d3cc' }}>
-                          +${(NIGHT_VISION_MONTHLY * totalUnits).toLocaleString()}/mo
-                        </span>
-                      </div>
-                    )}
                     {config.lpr && (
                       <div style={{
                         fontSize: '16px',
@@ -4241,7 +4369,7 @@ function LVTConfigurator() {
                   </div>
                 )}
 
-                {generatorUnits.length === 0 && !config.ndaaCompliant && !config.nightVision && !config.lpr && !config.satCom && config.softwarePackages.length === 0 && (
+                {generatorUnits.length === 0 && !config.lpr && !config.satCom && config.softwarePackages.length === 0 && (
                   <div style={{
                     padding: '24px',
                     background: 'rgba(255,255,255,0.02)',
@@ -4569,7 +4697,7 @@ function LVTConfigurator() {
             ← Back
           </button>
           
-          {currentStep < 6 ? (
+          {currentStep < 7 ? (
             <button
               onClick={() => {
                 if (currentStep === 0 && canProceed()) {
@@ -4831,7 +4959,7 @@ function LVTConfigurator() {
       </main>
 
       {/* Floating Price Summary */}
-      {currentStep > 0 && currentStep < 6 && (
+      {currentStep > 0 && currentStep < 7 && (
         <div style={{
           position: 'fixed',
           top: '140px',
