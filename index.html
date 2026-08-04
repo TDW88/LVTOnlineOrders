@@ -1121,7 +1121,7 @@ function LVTConfigurator() {
   // booleans are booleans, numbers are numbers, repeated things are arrays.
   // Every outbound format is rendered FROM it, so a field is defined once:
   //   buildWebhookPayload()    -> the flat, human-readable object Workato receives
-  //   buildHermesPayload()     -> the Hermes contract consumed by hermes/
+  //   buildHermesPayload()     -> the Hermes contract POSTed to hermes/serve.py
   // ---------------------------------------------------------------------------
 
   const buildOrderModel = ({ orderId, submittedAt }) => {
@@ -1423,24 +1423,83 @@ function LVTConfigurator() {
     }
   });
 
-  // Writes the contract to a file. For the demo Hermes runs locally against the
-  // sandbox, so the payload has to leave the browser somehow; a download is the
-  // least surprising route and needs no backend.
-  const savePayloadToFile = (payload, filename) => {
+  // Posts the contract straight to the Hermes API. hermes/serve.py serves this
+  // portal and exposes the endpoint on the same origin, so a relative URL keeps
+  // the request same-origin and avoids CORS entirely.
+  //
+  // Responses (see hermes/serve.py):
+  //   200 { ok: true,  ...summary }   the Opportunity and Quote were written
+  //   422 { ok: false, rejected: true, code, field, detail }   Hermes refused it
+  //   4xx/5xx { ok: false, error }    bad request, or the pipeline failed
+  const HERMES_ENDPOINT = '/api/order';
+
+  const submitToHermes = async (payload) => {
     try {
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(link.href);
-      return true;
+      const response = await fetch(HERMES_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      let body = null;
+      try {
+        body = await response.json();
+      } catch (parseError) {
+        // A non-JSON body means something other than Hermes answered — most
+        // likely the portal is being served by a plain static file server.
+        return {
+          ok: false,
+          reachable: false,
+          message: 'Hermes did not respond with JSON. Is the portal being served by hermes/serve.py?'
+        };
+      }
+
+      if (response.ok && body && body.ok) {
+        return { ok: true, reachable: true, summary: body };
+      }
+
+      if (body && body.rejected) {
+        return {
+          ok: false,
+          reachable: true,
+          rejected: true,
+          message: `${body.code}${body.field ? ` (${body.field})` : ''}: ${body.detail}`
+        };
+      }
+
+      return {
+        ok: false,
+        reachable: true,
+        message: (body && body.error) || `Hermes returned HTTP ${response.status}.`
+      };
     } catch (error) {
-      console.error('[hermes] payload download failed:', error);
-      return false;
+      // fetch only rejects on a transport failure, so the server is not running
+      console.error('[hermes] request failed:', error);
+      return {
+        ok: false,
+        reachable: false,
+        message: 'Could not reach Hermes. Start it with: python3 -m hermes.serve'
+      };
     }
+  };
+
+  // Reads a Hermes success summary into something worth showing the customer
+  const describeHermesResult = (summary) => {
+    if (!summary) return '';
+    if (summary.dry_run) {
+      return `Dry run — no records written.\nBilling account: ${summary.billing_account}\nUnits: ${summary.total_units}`;
+    }
+    const lines = [];
+    if (summary.opportunity_name) lines.push(`Opportunity: ${summary.opportunity_name}`);
+    if (summary.account_name) lines.push(`Account: ${summary.account_name}`);
+    if (summary.quote_name) lines.push(`Quote: ${summary.quote_name}`);
+    if (typeof summary.quote_net_amount === 'number') {
+      lines.push(`Quote total: $${summary.quote_net_amount.toLocaleString()}`);
+    }
+    if (summary.provisioned) lines.push('A new account structure was provisioned.');
+    if (summary.already_existed) lines.push('An Opportunity for this order already existed.');
+    (summary.warnings || []).forEach(w => lines.push(`Warning: ${w}`));
+    return lines.join('\n');
   };
 
   // Renders the flat, human-readable object the Workato webhook already expects.
@@ -5142,9 +5201,8 @@ function LVTConfigurator() {
                     });
                     const orderData = buildWebhookPayload(orderModel);
 
-                    // Emit the Hermes contract for the local Salesforce pipeline
-                    const hermesPayload = buildHermesPayload(orderModel);
-                    const hermesSaved = savePayloadToFile(hermesPayload, `${orderModel.meta.orderId}.json`);
+                    // File the order with Hermes, which writes the Opportunity and Quote
+                    const hermesResult = await submitToHermes(buildHermesPayload(orderModel));
                     
                     const payload = JSON.stringify(orderData);
                     let submitted = false;
@@ -5174,10 +5232,13 @@ function LVTConfigurator() {
                       console.error('Submission error:', error);
                     } finally {
                       if (submitted) {
+                        const hermesNote = hermesResult.ok
+                          ? `\n\nSalesforce\n${describeHermesResult(hermesResult.summary)}`
+                          : `\n\nSalesforce: not filed — ${hermesResult.message}`;
                         const verificationNote = verified
                           ? ''
                           : '\n\nNote: The request was sent, but the browser could not verify a response due to cross-origin restrictions.';
-                        alert(`Thank you — your order has been submitted!\n\n${totalUnits} Security ${totalUnits === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${hermesSaved ? `\n\nOrder file ${orderData.orderId}.json has been downloaded for Salesforce processing.` : ''}${verificationNote}`);
+                        alert(`Thank you — your order has been submitted!\n\n${totalUnits} Security ${totalUnits === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${hermesNote}${verificationNote}`);
                         
                         // Optional: Reset form or redirect
                         // setCurrentStep(0);
