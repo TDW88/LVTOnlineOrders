@@ -110,6 +110,117 @@ const UNIT_TYPES = [
   }
 ];
 
+// Camera packages. `sku` is the internal SKU that goes into the order payload;
+// `label` is the only text shown to the customer. `capability` is the optional
+// detail line explaining what the cameras can actually see.
+// `ndaa: true` packages are offered to everyone; `ndaa: false` packages are
+// added to the list only when the customer does NOT require NDAA compliance.
+const CAMERA_OPTIONS = [
+  {
+    sku: 'A-IR-PTZ- Base-Axis, NDAA',
+    label: 'Analytics PTZ Camera (Left/Right/Center)',
+    capability: '(C) IR PTZ, 58-Deg FOV, NDAA',
+    ndaa: true
+  },
+  {
+    sku: 'LR Fixed Thermal (L,R), A-IR-PTZ (C), NDAA',
+    label: 'Long-Range Thermal (Left/Right) + PTZ Camera (Center)',
+    capability: '(L,R) Fixed Thermal, up to 1200ft Human, 10-Deg FOV; (C) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; NDAA',
+    ndaa: true
+  },
+  {
+    sku: 'NR Fixed Thermal (L,R), A-IR-PTZ (C), NDAA',
+    label: 'Near-Range Thermal (Left/Right) + PTZ Camera (Center)',
+    capability: '(L,R) Fixed Thermal, up to 300ft, 55-Deg FOV; (C) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; NDAA',
+    ndaa: true
+  },
+  {
+    sku: 'NR/MR A-IR PTZ (L,R), LR Fixed thermal (C), NDAA',
+    label: 'Near/Mid-Range PTZ (Left/Right) + Long-Range Thermal (Center)',
+    capability: '(L,R) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; (C) Fixed Thermal, up to 1200ft Human, 10-Deg FOV; NDAA',
+    ndaa: true
+  },
+  {
+    sku: 'NR/MR A-IR-PTZ (L), NR-Fixed Thermal (R), IR Fisheye w/Analytics (C) NDAA',
+    label: 'Near/Mid-Range PTZ (Left), Near-Range Thermal (Right), Panoramic w/ Analytics (Center)',
+    capability: '(L) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; (R) Fixed Thermal, up to 300ft Human, 55-Deg FOV; (C) IR Fisheye, up to 50ft Human, 360-Deg FOV; NDAA',
+    ndaa: true
+  },
+  {
+    sku: 'NR/MR A-IR-PTZ (L,R), IR Fisheye w/Analytics (C), NDAA',
+    label: 'Near/Mid-Range PTZ (Left/Right) + Panoramic w/ Analytics (Center)',
+    capability: '(L,R) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; (C) IR Fisheye, up to 50ft Human, 360-Deg FOV; NDAA',
+    ndaa: true
+  },
+  {
+    sku: 'NR/MR A-IR-PTZ (L,R), LR-Fixed Thermal (C), NDAA',
+    label: 'Near/Mid-Range PTZ (Left/Right) + Long-Range Thermal (Center)',
+    capability: '(L,R) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; (C) Fixed Thermal, up to 1200ft Human, 10-Deg FOV; NDAA',
+    ndaa: true
+  },
+  // Non-NDAA packages
+  {
+    sku: 'NR BIS (L,R,C)',
+    label: 'Near-Range Thermal + Optical (Left/Right/Center)',
+    capability: null,
+    ndaa: false
+  },
+  {
+    sku: 'NR BIS (L,R), LR-Fixed Thermal (C)',
+    label: 'Near-Range Thermal + Optical (Left/Right) + Long-Range Thermal (Center)',
+    capability: '(L,R) Thermal, Bispectral PTZ, up to 300ft Human, 60-Deg FOV; (C) Fixed Thermal, up to 1200ft Human, 10-Deg FOV',
+    ndaa: false
+  },
+  {
+    sku: 'NR BIS (L,R), LR BIS (C)',
+    label: 'Near-Range Thermal + Optical (Left/Right) + Long-Range Thermal + Optical (Center)',
+    capability: '(L,R) Thermal, Bispectral PTZ, up to 300ft Human, 60-Deg FOV; (C) Thermal, Bispectral PTZ, up to 1200ft Human, 10-Deg FOV',
+    ndaa: false
+  },
+  {
+    sku: 'NR BIS (L,R), IR Fisheye w/Analytics (C)',
+    label: 'Near-Range Thermal + Optical (Left/Right) + Panoramic w/ Analytics (Center)',
+    capability: '(L,R) Thermal, Bispectral PTZ, up to 300ft Human, 60-Deg FOV; (C) IR Fisheye, up to 50ft Human, 360-Deg FOV',
+    ndaa: false
+  },
+  {
+    sku: 'NR BIS (L,R), IR Fisheye (C)',
+    label: 'Near-Range Thermal + Optical (Left/Right) + Panoramic (Center)',
+    capability: '(L,R) Thermal, Bispectral PTZ, up to 300ft Human, 60-Deg FOV; (C) IR Fisheye, No Analytics, 360-Deg FOV',
+    ndaa: false
+  },
+  {
+    sku: 'MR BIS Thermal (L,R,C)',
+    label: 'Mid-Range Thermal + Optical (Left/Right/Center)',
+    capability: '(L,R,C) Thermal, Bispectral PTZ, up to 400ft Human, 37-Deg FOV',
+    ndaa: false
+  },
+  {
+    sku: 'MR BIS (L,R), IR Fisheye w/Analytics (C)',
+    label: 'Mid-Range Thermal + Optical (Left/Right) + Panoramic w/ Analytics (Center)',
+    capability: '(L,R) Thermal, Bispectral PTZ, up to 400ft Human, 37-Deg FOV; (C) IR Fisheye, up to 50ft Human, 360-Deg FOV',
+    ndaa: false
+  },
+  {
+    sku: 'MR BIS (L,R), IR Fisheye (C)',
+    label: 'Mid-Range Thermal + Optical (Left/Right) + Panoramic (Center)',
+    capability: '(L,R) Thermal, Bispectral PTZ, up to 400ft Human, 37-Deg FOV; (C) IR Fisheye, No Analytics, 360-Deg FOV',
+    ndaa: false
+  },
+  {
+    sku: 'LR BIS (L,R), NR BIS (C)',
+    label: 'Long-Range Thermal + Optical (Left/Right) + Near-Range Thermal + Optical (Center)',
+    capability: '(L,R) Thermal Bispectral PTZ, up to 1200ft Human, 10-Deg FOV; (C) Thermal Bispectral PTZ, up to 300ft Human, 60-Deg FOV',
+    ndaa: false
+  },
+  {
+    sku: 'LR BIS (L,R), IR Fisheye w/Analytics (C)',
+    label: 'Long-Range Thermal + Optical (Left/Right) + Panoramic w/ Analytics (Center)',
+    capability: '(L,R) Thermal Bispectral PTZ, up to 1200ft Human, 10-Deg FOV; (C) IR Fisheye, up to 50ft Human, 360-Deg FOV',
+    ndaa: false
+  }
+];
+
 function LVTConfigurator() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -133,8 +244,11 @@ function LVTConfigurator() {
         ]
       }
     ],
-    ndaaCompliant: false,
-    nightVision: false,
+    cameraConfig: {
+      ndaaRequired: null, // null | 'yes' | 'no' — order-level compliance requirement
+      sku: null,          // default SKU applied to every unit
+      overrides: {}       // { [unitKey]: sku } for units that differ from the default
+    },
     lpr: false,
     satCom: false,
     generatorBypass: false, // customer accepts downtime unless externally powered
@@ -153,7 +267,7 @@ function LVTConfigurator() {
       },
       shippingAddresses: [],
       onsiteContact: {
-        sameAsPrimary: true, // defaults to the submitter to avoid redundant input
+        sameAsPrimary: false, // starts unchecked — the user opts in when it is the same person
         name: '',
         phone: ''
       }
@@ -192,8 +306,6 @@ function LVTConfigurator() {
   const GENERATOR_MONTHLY = 1000;
   
   // Hardware options pricing (monthly)
-  const NDAA_MONTHLY = 125;
-  const NIGHT_VISION_MONTHLY = 175;
   const LPR_MONTHLY = 500;
   const SATCOM_MONTHLY = 500;
 
@@ -238,7 +350,7 @@ function LVTConfigurator() {
     { months: 36, label: '36 Months', discount: 0.10 }  // 10% discount
   ];
 
-  const steps = ['Location', 'Hardware', 'Software', 'Lease Term', 'Contact Info', 'Configuration', 'Review'];
+  const steps = ['Location', 'Cameras', 'Hardware', 'Software', 'Lease Term', 'Contact Info', 'Configuration', 'Review'];
 
   const totalUnits = config.locations.reduce((sum, location) => {
     const locationTotal = location.units.reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
@@ -526,12 +638,6 @@ function LVTConfigurator() {
     let perUnitMonthly = 0;
     
     // Add hardware options (applied to all units)
-    if (config.ndaaCompliant) {
-      perUnitMonthly += NDAA_MONTHLY;
-    }
-    if (config.nightVision) {
-      perUnitMonthly += NIGHT_VISION_MONTHLY;
-    }
     if (config.lpr) {
       perUnitMonthly += LPR_MONTHLY;
     }
@@ -593,12 +699,6 @@ function LVTConfigurator() {
     let perUnitMonthly = 0;
     
     // Add hardware options (applied to all units)
-    if (config.ndaaCompliant) {
-      perUnitMonthly += NDAA_MONTHLY;
-    }
-    if (config.nightVision) {
-      perUnitMonthly += NIGHT_VISION_MONTHLY;
-    }
     if (config.lpr) {
       perUnitMonthly += LPR_MONTHLY;
     }
@@ -651,6 +751,39 @@ function LVTConfigurator() {
 
   const toggleHardwareOption = (option) => {
     setConfig(prev => ({ ...prev, [option]: !prev[option] }));
+  };
+
+  const isNdaaCompliantSku = (sku) => {
+    const option = CAMERA_OPTIONS.find(o => o.sku === sku);
+    return !!(option && option.ndaa);
+  };
+
+  const updateCameraConfig = (field, value) => {
+    setConfig(prev => {
+      const next = { ...prev.cameraConfig, [field]: value };
+      // Requiring NDAA invalidates any non-compliant default or override
+      if (field === 'ndaaRequired' && value === 'yes') {
+        if (next.sku && !isNdaaCompliantSku(next.sku)) next.sku = null;
+        next.overrides = Object.fromEntries(
+          Object.entries(next.overrides).filter(([, sku]) => isNdaaCompliantSku(sku))
+        );
+      }
+      return { ...prev, cameraConfig: next };
+    });
+  };
+
+  // Passing an empty value clears the override so the unit follows the default
+  const setCameraOverride = (unitKey, sku) => {
+    setConfig(prev => {
+      const overrides = { ...prev.cameraConfig.overrides };
+      if (!sku) delete overrides[unitKey];
+      else overrides[unitKey] = sku;
+      return { ...prev, cameraConfig: { ...prev.cameraConfig, overrides } };
+    });
+  };
+
+  const clearCameraOverrides = () => {
+    setConfig(prev => ({ ...prev, cameraConfig: { ...prev.cameraConfig, overrides: {} } }));
   };
 
   const toggleSoftwarePackage = (id) => {
@@ -830,10 +963,14 @@ function LVTConfigurator() {
         location.zipCode.length === 5 && location.units.every(unit => unit.quantity > 0)
       );
     }
-    if (currentStep === 1) return true; // Hardware options are optional
-    if (currentStep === 2) return true; // Software packages are optional
-    if (currentStep === 3) return config.leaseTerm !== null; // Lease term required
-    if (currentStep === 4) {
+    if (currentStep === 1) {
+      // The NDAA answer drives which SKUs are offered, so both are required
+      return config.cameraConfig.ndaaRequired !== null && config.cameraConfig.sku !== null;
+    }
+    if (currentStep === 2) return true; // Hardware options are optional
+    if (currentStep === 3) return true; // Software packages are optional
+    if (currentStep === 4) return config.leaseTerm !== null; // Lease term required
+    if (currentStep === 5) {
       // Contact info required
       const { email, phone, companyName, fullName, billingAddress, shippingAddresses } = config.contactInfo;
       const billingValid = billingAddress.street && billingAddress.city && 
@@ -853,7 +990,7 @@ function LVTConfigurator() {
         : !!(onsiteContact.name && onsiteContact.phone);
       return email && phone && companyName && fullName && billingValid && shippingValid && onsiteValid;
     }
-    if (currentStep === 5) {
+    if (currentStep === 6) {
       // Placement map and GPS are optional. ARS requires a monitoring window
       // and two complete contacts when enabled.
       const { ars } = config.siteConfig;
@@ -874,6 +1011,33 @@ function LVTConfigurator() {
   const generatorUnitCount = generatorUnits.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
   // Generators are only billed when the customer has NOT opted to accept downtime
   const billedGeneratorCount = config.generatorBypass ? 0 : generatorUnitCount;
+
+  // Camera packages offered for the current NDAA answer. Requiring NDAA narrows
+  // the list to compliant packages; not requiring it offers everything.
+  const availableCameras = config.cameraConfig.ndaaRequired === 'yes'
+    ? CAMERA_OPTIONS.filter(option => option.ndaa)
+    : CAMERA_OPTIONS;
+  const selectedCamera = CAMERA_OPTIONS.find(option => option.sku === config.cameraConfig.sku) || null;
+
+  // One row per physical unit, for per-unit camera overrides. `key` is stable
+  // across quantity edits except for the units dropped off the end of a line.
+  const cameraUnitList = config.locations
+    .flatMap((location, locationIdx) =>
+      location.units.flatMap(unit =>
+        Array.from({ length: unit.quantity || 0 }, (_, n) => ({
+          key: `${location.id}-${unit.id}-${n + 1}`,
+          locationNumber: locationIdx + 1,
+          zipCode: location.zipCode,
+          unitTypeName: getUnitType(unit.unitType).name
+        }))
+      )
+    )
+    .map((u, i) => ({ ...u, unitNumber: i + 1 }));
+
+  // The default applies unless a unit has an override
+  const cameraSkuForUnit = (unitKey) => config.cameraConfig.overrides[unitKey] || config.cameraConfig.sku;
+  const overriddenUnitCount = cameraUnitList.filter(u => config.cameraConfig.overrides[u.key]).length;
+  const distinctCameraSkus = [...new Set(cameraUnitList.map(u => cameraSkuForUnit(u.key)).filter(Boolean))];
   const baseMonthlyTotal = config.locations.reduce((sum, location) => {
     const locationTotal = location.units.reduce((unitSum, unit) => {
       const unitType = getUnitType(unit.unitType);
@@ -881,6 +1045,386 @@ function LVTConfigurator() {
     }, 0);
     return sum + locationTotal;
   }, 0);
+
+  // ---------------------------------------------------------------------------
+  // Order model
+  //
+  // buildOrderModel() is the single typed representation of a submission:
+  // booleans are booleans, numbers are numbers, repeated things are arrays.
+  // Every outbound format is rendered FROM it, so a field is defined once:
+  //   buildWebhookPayload()    -> the flat, human-readable object Workato receives
+  //   buildSalesforceRecord()  -> Salesforce-shaped fields for CLI import
+  // ---------------------------------------------------------------------------
+
+  // Salesforce constants for orders originating in this configurator
+  const SF_DEFAULTS = {
+    type: 'Existing',
+    leadSource: 'Website',
+    stage: '1',
+    referenceConnection: 'No',
+    quotePrimary: true
+  };
+
+  const addMonths = (date, months) => {
+    const d = new Date(date.getTime());
+    const targetMonth = d.getMonth() + months;
+    const dayOfMonth = d.getDate();
+    d.setDate(1);
+    d.setMonth(targetMonth);
+    // Clamp to the last valid day when the target month is shorter
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    d.setDate(Math.min(dayOfMonth, lastDay));
+    return d;
+  };
+  const toDateOnly = (date) => date.toISOString().split('T')[0];
+
+  const buildOrderModel = ({ orderId, submittedAt }) => {
+    const sc = config.siteConfig;
+    const ci = config.contactInfo;
+    const billing = ci.billingAddress;
+
+    const shipping = ci.shippingAddresses.map(address => {
+      const source = address.sameAsBilling ? billing : address;
+      return {
+        locationZip: address.zipCode,
+        unitCount: unitsByZip[address.zipCode] || 0,
+        sameAsBilling: !!address.sameAsBilling,
+        street: source.street,
+        city: source.city,
+        state: source.state,
+        zip: source.zip
+      };
+    });
+
+    const locations = config.locations.map((location, idx) => ({
+      locationNumber: idx + 1,
+      zipCode: location.zipCode,
+      units: location.units.map(unit => {
+        const unitType = getUnitType(unit.unitType);
+        return {
+          unitTypeId: unit.unitType,
+          unitTypeName: unitType.name,
+          quantity: unit.quantity || 0,
+          needsGenerator: !!(unitType.generatorEligible && unit.needsGenerator),
+          baseMonthlyPerUnit: unitType.baseMonthly
+        };
+      })
+    }));
+
+    // One entry per physical unit, index-aligned with the GPS inputs
+    const gps = gpsUnitList.map((u, i) => {
+      const coord = sc.gpsCoordinates[i] || { lat: '', long: '' };
+      const asNumber = (v) => {
+        const n = parseFloat(v);
+        return v !== '' && !Number.isNaN(n) ? n : null;
+      };
+      return {
+        unitNumber: i + 1,
+        unitTypeName: u.typeName,
+        zipCode: u.zip,
+        latitude: asNumber(coord.lat),
+        longitude: asNumber(coord.long)
+      };
+    });
+
+    const arsTier = sc.ars.enabled === 'yes' && sc.ars.tier ? getArsTier(sc.ars.tier) : null;
+    const leaseTermOption = leaseTerms.find(t => t.months === config.leaseTerm) || null;
+
+    const model = {
+      meta: {
+        orderId,
+        submittedAt: submittedAt.toISOString(),
+        source: 'online-configurator'
+      },
+      account: {
+        companyName: ci.companyName
+      },
+      contacts: {
+        primary: { name: ci.fullName, email: ci.email, phone: ci.phone },
+        onsite: {
+          sameAsPrimary: !!ci.onsiteContact.sameAsPrimary,
+          name: resolvedOnsiteContact.name,
+          phone: resolvedOnsiteContact.phone
+        },
+        arsEscalation: arsTier
+          ? sc.ars.contacts.map((c, i) => ({
+              position: i + 1, name: c.name, email: c.email, phone: c.phone
+            }))
+          : []
+      },
+      addresses: { billing: { ...billing }, shipping },
+      deployment: { totalUnits, locations, gpsCoordinates: gps },
+      cameras: {
+        // null until the customer answers; true/false once they do
+        ndaaRequired: config.cameraConfig.ndaaRequired === null
+          ? null
+          : config.cameraConfig.ndaaRequired === 'yes',
+        // The default package applied to every unit without an override
+        defaultSku: selectedCamera ? selectedCamera.sku : null,
+        defaultLabel: selectedCamera ? selectedCamera.label : null,
+        defaultCapability: selectedCamera ? selectedCamera.capability : null,
+        // True when units do not all resolve to the same package
+        mixed: distinctCameraSkus.length > 1,
+        overriddenUnitCount,
+        perUnit: cameraUnitList.map(u => {
+          const sku = cameraSkuForUnit(u.key);
+          const option = CAMERA_OPTIONS.find(o => o.sku === sku) || null;
+          return {
+            unitNumber: u.unitNumber,
+            locationNumber: u.locationNumber,
+            zipCode: u.zipCode,
+            unitTypeName: u.unitTypeName,
+            sku: sku || null,
+            label: option ? option.label : null,
+            ndaaCompliantPackage: option ? option.ndaa : null,
+            isOverride: !!config.cameraConfig.overrides[u.key]
+          };
+        })
+      },
+      hardware: {
+        lpr: !!config.lpr,
+        satCom: !!config.satCom,
+        generator: {
+          recommendedCount: generatorUnitCount,
+          billedCount: billedGeneratorCount,
+          declined: !!config.generatorBypass,
+          downtimeAccepted: !!config.generatorBypass,
+          monthlyPerGenerator: GENERATOR_MONTHLY
+        }
+      },
+      software: {
+        packages: config.softwarePackages
+          .map(id => softwarePackages.find(p => p.id === id))
+          .filter(Boolean)
+          .map(pkg => ({ id: pkg.id, name: pkg.name, monthlyPerUnit: pkg.monthlyPrice }))
+      },
+      ars: {
+        enabled: sc.ars.enabled === 'yes',
+        tierId: arsTier ? arsTier.value : null,
+        tierLabel: arsTier ? arsTier.label : null,
+        coverage: arsTier ? arsTier.coverage : null,
+        customDetail: arsTier && arsTier.value === 'custom' ? sc.ars.customDetail : null,
+        ratePerUnit: arsTier && arsTier.monthly ? arsTier.monthly : 0,
+        monthlyCharge: arsTier && arsTier.monthly ? arsTier.monthly * totalUnits : 0,
+        quotedSeparately: !!(arsTier && !arsTier.monthly)
+      },
+      site: {
+        placementMap: {
+          fileName: sc.placementMapLater ? null : (sc.placementMapName || null),
+          deferred: !!sc.placementMapLater,
+          // The file itself is not transmitted — only its name. See notes in the PR.
+          fileIncluded: false
+        },
+        schedule: {
+          weekday: { armFrom: sc.securitySchedule.weekdayArm || null, armUntil: sc.securitySchedule.weekdayDisarm || null },
+          weekend: { armFrom: sc.securitySchedule.weekendArm || null, armUntil: sc.securitySchedule.weekendDisarm || null }
+        },
+        deterrence: {
+          strobes: sc.deterrence.strobes, // 'off' | 'night' | '24-7'
+          floodlight: !!sc.deterrence.floodlight,
+          audio: !!sc.deterrence.audio
+        },
+        areasOfConcern: sc.areasOfConcern || null
+      },
+      lease: {
+        termMonths: config.leaseTerm,
+        discountRate: leaseTermOption ? leaseTermOption.discount : 0,
+        baseMonthlyTotal,
+        monthlyPayment: Math.round(calculateMonthlyTotal()),
+        totalContract: calculateContractTotal()
+      }
+    };
+
+    model.salesforce = buildSalesforceRecord(model, submittedAt);
+    return model;
+  };
+
+  // Salesforce-shaped fields. Values this configurator cannot know are null and
+  // listed in `unresolved` rather than guessed — see the notes on each.
+  const buildSalesforceRecord = (model, submittedAt) => {
+    const units = model.deployment.totalUnits;
+    const term = model.lease.termMonths;
+    const unresolved = [];
+
+    // Owner fields come from the Account Owner in Salesforce, not from the form
+    unresolved.push({ field: 'opportunityOwner', reason: 'Set from Account Owner on the Account record' });
+    unresolved.push({ field: 'quote.salesRep', reason: 'Set from Account Owner on the Account record' });
+    // Not collected anywhere in the configurator today
+    unresolved.push({ field: 'quote.paymentSchedule', reason: 'Not collected by the configurator' });
+    unresolved.push({ field: 'quote.termsAndConditionsType', reason: 'Not collected by the configurator' });
+    unresolved.push({ field: 'quote.startDate', reason: 'Not collected — no requested deployment date is captured' });
+    unresolved.push({ field: 'quote.paymentTerms', reason: 'Not collected by the configurator' });
+
+    return {
+      opportunity: {
+        // Derived: adjust the format to match your naming convention
+        name: `${model.account.companyName} - ${units} ${units === 1 ? 'Unit' : 'Units'} - ${term} mo`,
+        primaryContact: model.contacts.primary.name,
+        primaryContactEmail: model.contacts.primary.email,
+        primaryContactPhone: model.contacts.primary.phone,
+        projectPointOfContact: model.contacts.onsite.name,
+        projectPointOfContactPhone: model.contacts.onsite.phone,
+        type: SF_DEFAULTS.type,
+        leadSource: SF_DEFAULTS.leadSource,
+        stage: SF_DEFAULTS.stage,
+        closeDate: toDateOnly(addMonths(submittedAt, 1)),
+        referenceConnection: SF_DEFAULTS.referenceConnection,
+        opportunityOwner: null,
+        amount: model.lease.totalContract
+      },
+      quote: {
+        salesRep: null,
+        primary: SF_DEFAULTS.quotePrimary,
+        paymentSchedule: null,
+        termsAndConditionsType: null,
+        startDate: null,
+        subscriptionTerm: term,
+        paymentTerms: null
+      },
+      unresolved
+    };
+  };
+
+  // Renders the flat, human-readable object the Workato webhook already expects.
+  const buildWebhookPayload = (model) => {
+    const yn = (v) => (v ? 'Yes' : 'No');
+    const addressFull = (a) => `${a.street}, ${a.city}, ${a.state} ${a.zip}`;
+    const timeWindow = (w) => (w.armFrom || w.armUntil) ? `${w.armFrom || '—'} to ${w.armUntil || '—'}` : 'Not set';
+    const strobeLabels = { '24-7': '24/7', night: 'Night', off: 'Off' };
+
+    const unitLines = model.deployment.locations.flatMap(loc =>
+      loc.units.map(unit => ({ loc, unit }))
+    );
+    const shippingByZip = model.addresses.shipping.reduce((acc, a) => {
+      acc[a.locationZip] = a;
+      return acc;
+    }, {});
+
+    return {
+      // Order Info
+      timestamp: model.meta.submittedAt,
+      orderId: model.meta.orderId,
+
+      // Configuration Summary
+      unitCount: model.deployment.totalUnits,
+      baseMonthlyTotal: model.lease.baseMonthlyTotal,
+      deploymentZips: model.deployment.locations.map(l => l.zipCode).join(', '),
+      deploymentDetails: unitLines.map(({ loc, unit }) =>
+        `Location ${loc.locationNumber}: ${unit.quantity} ${unit.quantity === 1 ? 'Unit' : 'Units'} • ${unit.unitTypeName} • Zip ${loc.zipCode}${unit.needsGenerator ? ' (+ Generator)' : ''}`
+      ).join(' | '),
+      unitBreakdown: unitLines.map(({ loc, unit }) => {
+        const ship = shippingByZip[loc.zipCode] || null;
+        return {
+          location: loc.locationNumber,
+          unitType: unit.unitTypeName,
+          quantity: unit.quantity,
+          zipCode: loc.zipCode,
+          needsGenerator: yn(unit.needsGenerator),
+          shippingAddress: ship
+            ? {
+                locationZip: ship.locationZip,
+                unitCount: ship.unitCount,
+                sameAsBilling: yn(ship.sameAsBilling),
+                street: ship.street,
+                city: ship.city,
+                state: ship.state,
+                zip: ship.zip,
+                addressFull: addressFull(ship)
+              }
+            : null
+        };
+      }),
+      generatorsNeeded: model.hardware.generator.recommendedCount,
+
+      // Hardware Options
+      ndaaRequired: model.cameras.ndaaRequired === null ? 'Not answered' : yn(model.cameras.ndaaRequired),
+      // Scalars kept for existing consumers: the SKU when every unit matches,
+      // otherwise 'Mixed' — see cameraSkusByUnit for the authoritative per-unit list
+      cameraSku: model.cameras.mixed ? 'Mixed' : (model.cameras.defaultSku || 'Not selected'),
+      cameraDescriptor: model.cameras.mixed ? 'Mixed — see cameraSkusByUnit' : (model.cameras.defaultLabel || 'Not selected'),
+      cameraDefaultSku: model.cameras.defaultSku || 'Not selected',
+      cameraOverriddenUnits: model.cameras.overriddenUnitCount,
+      cameraSkusByUnit: model.cameras.perUnit.map(u => ({
+        unit: u.unitNumber,
+        location: u.locationNumber,
+        zipCode: u.zipCode,
+        unitType: u.unitTypeName,
+        sku: u.sku || 'Not selected',
+        descriptor: u.label || 'Not selected',
+        isOverride: yn(u.isOverride)
+      })),
+      lpr: yn(model.hardware.lpr),
+      satCom: yn(model.hardware.satCom),
+      generatorDeclined: yn(model.hardware.generator.declined),
+      generatorDowntimeAccepted: model.hardware.generator.declined ? 'Yes' : 'N/A',
+      generatorsBilled: model.hardware.generator.billedCount,
+
+      // Software Packages
+      softwarePackages: model.software.packages.length > 0
+        ? model.software.packages.map(p => p.id).join(', ')
+        : 'None',
+
+      // Site Configuration
+      placementMap: model.site.placementMap.deferred
+        ? 'To be determined later'
+        : (model.site.placementMap.fileName || 'Not provided'),
+      arsEnabled: yn(model.ars.enabled),
+      arsTier: model.ars.tierLabel || 'N/A',
+      arsCoverage: model.ars.coverage || 'N/A',
+      arsCustomDetail: model.ars.customDetail || 'N/A',
+      arsRatePerUnit: model.ars.ratePerUnit,
+      arsMonthlyCharge: model.ars.monthlyCharge,
+      arsContacts: model.contacts.arsEscalation.map(c => ({
+        contact: c.position, name: c.name, email: c.email, phone: c.phone
+      })),
+      gpsCoordinates: model.deployment.gpsCoordinates.length > 0
+        ? model.deployment.gpsCoordinates.map(g =>
+            `Unit ${g.unitNumber} (${g.unitTypeName}${g.zipCode ? `, Zip ${g.zipCode}` : ''}): ${g.latitude !== null ? g.latitude.toFixed(6) : '—'}, ${g.longitude !== null ? g.longitude.toFixed(6) : '—'}`
+          ).join(' | ')
+        : 'None',
+      scheduleWeekday: timeWindow(model.site.schedule.weekday),
+      scheduleWeekend: timeWindow(model.site.schedule.weekend),
+      deterrenceStrobes: strobeLabels[model.site.deterrence.strobes],
+      deterrenceFloodlight: model.site.deterrence.floodlight ? 'On' : 'Off',
+      deterrenceAudio: model.site.deterrence.audio ? 'On' : 'Off',
+      areasOfConcern: model.site.areasOfConcern || 'None provided',
+
+      // Lease Details
+      leaseTerm: model.lease.termMonths + ' months',
+      monthlyPayment: model.lease.monthlyPayment,
+      totalContract: model.lease.totalContract,
+
+      // Contact Information
+      companyName: model.account.companyName,
+      contactName: model.contacts.primary.name,
+      email: model.contacts.primary.email,
+      phone: model.contacts.primary.phone,
+
+      // Onsite Contact
+      onsiteContactSameAsPrimary: yn(model.contacts.onsite.sameAsPrimary),
+      onsiteContactName: model.contacts.onsite.name,
+      onsiteContactPhone: model.contacts.onsite.phone,
+
+      // Billing Address
+      billingStreet: model.addresses.billing.street,
+      billingCity: model.addresses.billing.city,
+      billingState: model.addresses.billing.state,
+      billingZip: model.addresses.billing.zip,
+      billingAddressFull: addressFull(model.addresses.billing),
+
+      // Shipping Addresses
+      shippingAddresses: model.addresses.shipping.map(a => ({
+        locationZip: a.locationZip,
+        unitCount: a.unitCount,
+        sameAsBilling: yn(a.sameAsBilling),
+        street: a.street,
+        city: a.city,
+        state: a.state,
+        zip: a.zip,
+        addressFull: addressFull(a)
+      }))
+    };
+  };
 
   return (
     <div className="app-shell">
@@ -1398,8 +1942,316 @@ function LVTConfigurator() {
           </div>
         )}
 
-        {/* Step 1: Hardware Options */}
+        {/* Step 1: Camera Configuration */}
         {currentStep === 1 && (
+          <div>
+            <h2 style={{
+              fontWeight: '700',
+              marginBottom: '16px',
+              letterSpacing: '-1px',
+              lineHeight: '1.1'
+            }}>
+              Camera <span className="gradient-text">Configuration</span>
+            </h2>
+            <p style={{
+              fontSize: '18px',
+              color: 'rgba(255,255,255,0.8)',
+              marginBottom: '48px',
+              fontWeight: '400',
+              maxWidth: '680px',
+              lineHeight: '1.6'
+            }}>
+              Choose the camera package for your units. Start by telling us whether this deployment requires NDAA-compliant cameras — that determines which packages are available.
+            </p>
+
+            <div style={{
+              maxWidth: '900px',
+              margin: '0 auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '32px'
+            }}>
+              {/* NDAA requirement */}
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '16px',
+                padding: '32px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                  <Shield width={22} height={22} style={{ color: '#56d3cc' }} />
+                  <h3 style={{ fontSize: '20px', fontWeight: '800', color: '#56d3cc' }}>
+                    NDAA Compliance
+                  </h3>
+                </div>
+                <p style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.6)',
+                  marginBottom: '24px',
+                  lineHeight: '1.6'
+                }}>
+                  NDAA Section 889 compliance is required for federal government and many critical infrastructure deployments.
+                </p>
+                <div style={{
+                  fontSize: '13px',
+                  fontWeight: '800',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  marginBottom: '12px',
+                  color: '#fff'
+                }}>
+                  Does this deployment require NDAA-compliant cameras? *
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                  {[
+                    { value: 'yes', label: 'Yes' },
+                    { value: 'no', label: 'No' }
+                  ].map(opt => {
+                    const active = config.cameraConfig.ndaaRequired === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => updateCameraConfig('ndaaRequired', opt.value)}
+                        style={{
+                          padding: '12px 32px',
+                          background: active ? '#56d3cc' : 'rgba(39, 42, 47, 0.6)',
+                          color: active ? '#1b1e23' : '#fff',
+                          border: active ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.15)',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          transition: 'all 0.3s ease'
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Camera package list */}
+              {config.cameraConfig.ndaaRequired === null ? (
+                <div style={{
+                  padding: '40px',
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px dashed rgba(255,255,255,0.15)',
+                  borderRadius: '16px',
+                  textAlign: 'center',
+                  fontSize: '15px',
+                  color: 'rgba(255,255,255,0.55)'
+                }}>
+                  Answer the question above to see the available camera packages.
+                </div>
+              ) : (
+                <div style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: '16px',
+                  padding: '32px'
+                }}>
+                  <h3 style={{
+                    fontSize: '20px',
+                    fontWeight: '800',
+                    marginBottom: '8px',
+                    color: '#56d3cc'
+                  }}>
+                    Camera Package *
+                  </h3>
+                  <p style={{
+                    fontSize: '14px',
+                    color: 'rgba(255,255,255,0.6)',
+                    marginBottom: '24px',
+                    lineHeight: '1.6'
+                  }}>
+                    {config.cameraConfig.ndaaRequired === 'yes'
+                      ? `Showing the ${availableCameras.length} NDAA-compliant packages. Positions are Left, Right, and Center on the camera mast.`
+                      : `Showing all ${availableCameras.length} packages. Positions are Left, Right, and Center on the camera mast.`}
+                  </p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {availableCameras.map(option => {
+                      const active = config.cameraConfig.sku === option.sku;
+                      return (
+                        <button
+                          key={option.sku}
+                          onClick={() => updateCameraConfig('sku', option.sku)}
+                          style={{
+                            width: '100%',
+                            padding: '20px 24px',
+                            background: active ? 'rgba(86, 211, 204, 0.15)' : 'rgba(39, 42, 47, 0.6)',
+                            border: active ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.15)',
+                            borderRadius: '10px',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease',
+                            textAlign: 'left',
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: '16px'
+                          }}
+                        >
+                          <div style={{
+                            width: '20px',
+                            height: '20px',
+                            minWidth: '20px',
+                            marginTop: '2px',
+                            borderRadius: '50%',
+                            border: active ? '6px solid #56d3cc' : '2px solid rgba(255,255,255,0.35)',
+                            background: 'transparent',
+                            transition: 'all 0.2s ease'
+                          }}></div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{
+                              fontSize: '15px',
+                              fontWeight: '700',
+                              color: '#fff',
+                              lineHeight: '1.4',
+                              marginBottom: option.capability ? '6px' : '0'
+                            }}>
+                              {option.label}
+                            </div>
+                            {option.capability && (
+                              <div style={{
+                                fontSize: '12px',
+                                color: 'rgba(255,255,255,0.55)',
+                                lineHeight: '1.5'
+                              }}>
+                                {option.capability}
+                              </div>
+                            )}
+                          </div>
+                          {option.ndaa && (
+                            <div style={{
+                              fontSize: '10px',
+                              fontWeight: '800',
+                              letterSpacing: '0.5px',
+                              color: active ? '#56d3cc' : 'rgba(255,255,255,0.45)',
+                              border: `1px solid ${active ? 'rgba(86,211,204,0.5)' : 'rgba(255,255,255,0.2)'}`,
+                              borderRadius: '4px',
+                              padding: '3px 7px',
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0
+                            }}>
+                              NDAA
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Per-unit overrides — only useful once a default is chosen */}
+              {config.cameraConfig.sku && cameraUnitList.length > 1 && (
+                <div style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: '16px',
+                  padding: '32px'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    gap: '16px',
+                    marginBottom: '8px',
+                    flexWrap: 'wrap'
+                  }}>
+                    <h3 style={{ fontSize: '20px', fontWeight: '800', color: '#56d3cc' }}>
+                      Individual Units <span style={{ fontSize: '13px', fontWeight: '600', color: 'rgba(255,255,255,0.45)' }}>· Optional</span>
+                    </h3>
+                    {overriddenUnitCount > 0 && (
+                      <button
+                        onClick={clearCameraOverrides}
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          borderRadius: '6px',
+                          color: 'rgba(255,255,255,0.7)',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          padding: '6px 12px',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        Reset all to default
+                      </button>
+                    )}
+                  </div>
+                  <p style={{
+                    fontSize: '14px',
+                    color: 'rgba(255,255,255,0.6)',
+                    marginBottom: '24px',
+                    lineHeight: '1.6'
+                  }}>
+                    All {cameraUnitList.length} units use the package above unless you change one here.
+                    {overriddenUnitCount > 0
+                      ? ` ${overriddenUnitCount} ${overriddenUnitCount === 1 ? 'unit differs' : 'units differ'} from the default.`
+                      : ''}
+                  </p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {cameraUnitList.map(unit => {
+                      const override = config.cameraConfig.overrides[unit.key] || '';
+                      return (
+                        <div
+                          key={unit.key}
+                          className="unit-row"
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: '220px 1fr',
+                            gap: '16px',
+                            alignItems: 'center',
+                            padding: '12px 16px',
+                            background: override ? 'rgba(86, 211, 204, 0.06)' : 'rgba(39, 42, 47, 0.4)',
+                            border: override ? '1px solid rgba(86,211,204,0.3)' : '1px solid rgba(255,255,255,0.08)',
+                            borderRadius: '8px'
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontSize: '13px', fontWeight: '800', color: '#fff' }}>
+                              Unit {unit.unitNumber}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>
+                              {unit.unitTypeName}{unit.zipCode ? ` · Zip ${unit.zipCode}` : ''}
+                            </div>
+                          </div>
+                          <select
+                            value={override}
+                            onChange={(e) => setCameraOverride(unit.key, e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '10px 12px',
+                              background: 'rgba(27, 30, 35, 0.9)',
+                              border: override ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.15)',
+                              borderRadius: '6px',
+                              color: '#fff',
+                              fontSize: '13px',
+                              fontWeight: '500',
+                              outline: 'none',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <option value="">Same as default — {selectedCamera ? selectedCamera.label : ''}</option>
+                            {availableCameras.map(option => (
+                              <option key={option.sku} value={option.sku}>{option.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Hardware Options */}
+        {currentStep === 2 && (
           <div>
             <h2 style={{
               fontWeight: '900',
@@ -1576,218 +2428,6 @@ function LVTConfigurator() {
               gridTemplateColumns: 'repeat(2, 1fr)',
               gap: '24px'
             }}>
-              {/* NDAA Compliant Toggle */}
-              <div
-                className={`option-card ${config.ndaaCompliant ? 'selected-card' : ''}`}
-                onClick={() => toggleHardwareOption('ndaaCompliant')}
-                style={{
-                  background: config.ndaaCompliant
-                    ? 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))'
-                    : 'rgba(255,255,255,0.04)',
-                  border: config.ndaaCompliant
-                    ? '2px solid #56d3cc'
-                    : '2px solid rgba(255,255,255,0.1)',
-                  borderRadius: '16px',
-                  padding: '32px',
-                  cursor: 'pointer',
-                  position: 'relative',
-                  transition: 'all 0.3s ease'
-                }}
-              >
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  marginBottom: '20px'
-                }}>
-                  <div style={{
-                    width: '64px',
-                    height: '64px',
-                    background: config.ndaaCompliant
-                      ? 'rgba(86, 211, 204, 0.15)'
-                      : 'rgba(255,255,255,0.08)',
-                    borderRadius: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: config.ndaaCompliant ? '#56d3cc' : '#fff'
-                  }}>
-                    <Shield className="w-8 h-8" />
-                  </div>
-                  
-                  {config.ndaaCompliant && (
-                    <CheckCircle style={{
-                      color: '#56d3cc',
-                      width: '28px',
-                      height: '28px'
-                    }} />
-                  )}
-                </div>
-
-                <h3 style={{
-                  fontSize: '22px',
-                  fontWeight: '800',
-                  marginBottom: '10px',
-                  letterSpacing: '-0.5px'
-                }}>
-                  NDAA Compliant Cameras
-                </h3>
-
-                <p style={{
-                  fontSize: '14px',
-                  color: 'rgba(255,255,255,0.65)',
-                  marginBottom: '20px',
-                  lineHeight: '1.6'
-                }}>
-                  Upgrade to NDAA-compliant camera systems required for federal government and critical infrastructure deployments.
-                </p>
-
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                  marginBottom: '24px'
-                }}>
-                  {[
-                    'NDAA Section 889 compliant',
-                    'Approved for federal sites',
-                    'Secure supply chain verified',
-                    'Critical infrastructure ready'
-                  ].map((feature, idx) => (
-                    <div key={idx} style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      fontSize: '13px',
-                      color: 'rgba(255,255,255,0.7)',
-                      fontWeight: '500'
-                    }}>
-                      <div style={{
-                        width: '4px',
-                        height: '4px',
-                        background: config.ndaaCompliant ? '#56d3cc' : 'rgba(255,255,255,0.4)',
-                        borderRadius: '50%'
-                      }}></div>
-                      {feature}
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{
-                  fontSize: '28px',
-                  fontWeight: '900',
-                  color: config.ndaaCompliant ? '#56d3cc' : 'rgba(255,255,255,0.6)'
-                }}>
-                  +${NDAA_MONTHLY.toLocaleString()}/mo
-                </div>
-              </div>
-
-              {/* Night Vision Toggle */}
-              <div
-                className={`option-card ${config.nightVision ? 'selected-card' : ''}`}
-                onClick={() => toggleHardwareOption('nightVision')}
-                style={{
-                  background: config.nightVision
-                    ? 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))'
-                    : 'rgba(255,255,255,0.04)',
-                  border: config.nightVision
-                    ? '2px solid #56d3cc'
-                    : '2px solid rgba(255,255,255,0.1)',
-                  borderRadius: '16px',
-                  padding: '32px',
-                  cursor: 'pointer',
-                  position: 'relative',
-                  transition: 'all 0.3s ease'
-                }}
-              >
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  marginBottom: '20px'
-                }}>
-                  <div style={{
-                    width: '64px',
-                    height: '64px',
-                    background: config.nightVision
-                      ? 'rgba(86, 211, 204, 0.15)'
-                      : 'rgba(255,255,255,0.08)',
-                    borderRadius: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: config.nightVision ? '#56d3cc' : '#fff'
-                  }}>
-                    <Eye className="w-8 h-8" />
-                  </div>
-                  
-                  {config.nightVision && (
-                    <CheckCircle style={{
-                      color: '#56d3cc',
-                      width: '28px',
-                      height: '28px'
-                    }} />
-                  )}
-                </div>
-
-                <h3 style={{
-                  fontSize: '22px',
-                  fontWeight: '800',
-                  marginBottom: '10px',
-                  letterSpacing: '-0.5px'
-                }}>
-                  Long-Range Thermal
-                </h3>
-
-                <p style={{
-                  fontSize: '14px',
-                  color: 'rgba(255,255,255,0.65)',
-                  marginBottom: '20px',
-                  lineHeight: '1.6'
-                }}>
-                  Advanced thermal imaging cameras for complete darkness visibility and extended perimeter coverage.
-                </p>
-
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                  marginBottom: '24px'
-                }}>
-                  {[
-                    'Track movement 1,200+ feet away',
-                    '100% darkness visibility',
-                    'Weather-independent detection',
-                    'Covers 8 football fields'
-                  ].map((feature, idx) => (
-                    <div key={idx} style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      fontSize: '13px',
-                      color: 'rgba(255,255,255,0.7)',
-                      fontWeight: '500'
-                    }}>
-                      <div style={{
-                        width: '4px',
-                        height: '4px',
-                        background: config.nightVision ? '#56d3cc' : 'rgba(255,255,255,0.4)',
-                        borderRadius: '50%'
-                      }}></div>
-                      {feature}
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{
-                  fontSize: '28px',
-                  fontWeight: '900',
-                  color: config.nightVision ? '#56d3cc' : 'rgba(255,255,255,0.6)'
-                }}>
-                  +${NIGHT_VISION_MONTHLY.toLocaleString()}/mo
-                </div>
-              </div>
-
               {/* LPR & SatCom */}
               {[
                 {
@@ -1927,7 +2567,7 @@ function LVTConfigurator() {
         )}
 
         {/* Step 2: Software Packages */}
-        {currentStep === 2 && (
+        {currentStep === 3 && (
           <div>
             <h2 style={{
               fontWeight: '900',
@@ -2091,7 +2731,7 @@ function LVTConfigurator() {
 
 
         {/* Step 3: Lease Term */}
-        {currentStep === 3 && (
+        {currentStep === 4 && (
           <div>
             <h2 style={{
               fontWeight: '700',
@@ -2225,7 +2865,7 @@ function LVTConfigurator() {
         )}
 
         {/* Step 4: Contact Information */}
-        {currentStep === 4 && (
+        {currentStep === 5 && (
           <div>
             <h2 style={{
               fontWeight: '700',
@@ -2800,7 +3440,7 @@ function LVTConfigurator() {
           </div>
         )}
         {/* Step 5: Configuration */}
-        {currentStep === 5 && (
+        {currentStep === 6 && (
           <div>
             <h2 style={{
               fontWeight: '700',
@@ -3620,7 +4260,7 @@ function LVTConfigurator() {
           </div>
         )}
         {/* Step 6: Review */}
-        {currentStep === 6 && (
+        {currentStep === 7 && (
           <div>
             <h2 style={{
               fontWeight: '700',
@@ -3736,6 +4376,70 @@ function LVTConfigurator() {
                   </div>
                 </div>
 
+                {/* Camera Package */}
+                {selectedCamera && (
+                  <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{
+                      fontSize: '11px',
+                      textTransform: 'uppercase',
+                      color: 'rgba(255,255,255,0.5)',
+                      letterSpacing: '1px',
+                      marginBottom: '10px',
+                      fontWeight: '600'
+                    }}>
+                      Camera Package
+                    </div>
+                    <div style={{
+                      fontSize: '16px',
+                      fontWeight: '600',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      gap: '16px'
+                    }}>
+                      <span>
+                        {totalUnits - overriddenUnitCount} × {selectedCamera.label}
+                        {overriddenUnitCount > 0 && (
+                          <span style={{ color: 'rgba(255,255,255,0.5)', fontWeight: '500' }}> (default)</span>
+                        )}
+                      </span>
+                      <span style={{ color: '#56d3cc', whiteSpace: 'nowrap' }}>Included</span>
+                    </div>
+
+                    {/* Units that differ from the default */}
+                    {cameraUnitList
+                      .filter(u => config.cameraConfig.overrides[u.key])
+                      .map(u => {
+                        const opt = CAMERA_OPTIONS.find(o => o.sku === config.cameraConfig.overrides[u.key]);
+                        return (
+                          <div key={u.key} style={{
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'flex-start',
+                            gap: '16px',
+                            marginTop: '8px'
+                          }}>
+                            <span style={{ color: 'rgba(255,255,255,0.8)' }}>
+                              Unit {u.unitNumber} · {opt ? opt.label : '—'}
+                            </span>
+                            <span style={{ color: '#56d3cc', whiteSpace: 'nowrap' }}>Included</span>
+                          </div>
+                        );
+                      })}
+
+                    <div style={{
+                      fontSize: '12px',
+                      color: 'rgba(255,255,255,0.5)',
+                      marginTop: '6px'
+                    }}>
+                      NDAA compliance {config.cameraConfig.ndaaRequired === 'yes' ? 'required' : 'not required'}
+                      {distinctCameraSkus.length > 1 ? ' · mixed packages across units' : (selectedCamera.ndaa ? ' · package is NDAA compliant' : '')}
+                    </div>
+                  </div>
+                )}
+
                 {/* Generators */}
                     {generatorUnits.length > 0 && (
                       <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
@@ -3778,7 +4482,7 @@ function LVTConfigurator() {
                 )}
                 
                 {/* Hardware Options */}
-                {(config.ndaaCompliant || config.nightVision || config.lpr || config.satCom) && (
+                {(config.lpr || config.satCom) && (
                   <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                     <div style={{
                       fontSize: '11px',
@@ -3790,36 +4494,6 @@ function LVTConfigurator() {
                     }}>
                       Hardware Options
                     </div>
-                    {config.ndaaCompliant && (
-                      <div style={{
-                        fontSize: '16px',
-                        fontWeight: '600',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '8px'
-                      }}>
-                        <span>{totalUnits} × NDAA Compliant Cameras</span>
-                        <span style={{ color: '#56d3cc' }}>
-                          +${(NDAA_MONTHLY * totalUnits).toLocaleString()}/mo
-                        </span>
-                      </div>
-                    )}
-                    {config.nightVision && (
-                      <div style={{
-                        fontSize: '16px',
-                        fontWeight: '600',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '8px'
-                      }}>
-                        <span>{totalUnits} × Long-Range Thermal</span>
-                        <span style={{ color: '#56d3cc' }}>
-                          +${(NIGHT_VISION_MONTHLY * totalUnits).toLocaleString()}/mo
-                        </span>
-                      </div>
-                    )}
                     {config.lpr && (
                       <div style={{
                         fontSize: '16px',
@@ -3900,7 +4574,7 @@ function LVTConfigurator() {
                   </div>
                 )}
 
-                {generatorUnits.length === 0 && !config.ndaaCompliant && !config.nightVision && !config.lpr && !config.satCom && config.softwarePackages.length === 0 && (
+                {generatorUnits.length === 0 && !config.lpr && !config.satCom && config.softwarePackages.length === 0 && (
                   <div style={{
                     padding: '24px',
                     background: 'rgba(255,255,255,0.02)',
@@ -4123,142 +4797,12 @@ function LVTConfigurator() {
                     const monthlyTotal = Math.round(calculateMonthlyTotal());
                     const contractTotal = calculateContractTotal();
                     
-                    const resolvedShippingAddresses = config.contactInfo.shippingAddresses.map(address => {
-                      const source = address.sameAsBilling
-                        ? config.contactInfo.billingAddress
-                        : address;
-                      return {
-                        locationZip: address.zipCode,
-                        unitCount: unitsByZip[address.zipCode] || 0,
-                        sameAsBilling: address.sameAsBilling ? 'Yes' : 'No',
-                        street: source.street,
-                        city: source.city,
-                        state: source.state,
-                        zip: source.zip,
-                        addressFull: `${source.street}, ${source.city}, ${source.state} ${source.zip}`
-                      };
+                    const submittedAt = new Date();
+                    const orderModel = buildOrderModel({
+                      orderId: `LVT-${submittedAt.getTime()}`,
+                      submittedAt
                     });
-                    const shippingByZip = resolvedShippingAddresses.reduce((acc, address) => {
-                      acc[address.locationZip] = address;
-                      return acc;
-                    }, {});
-                    const submittedArsTier = config.siteConfig.ars.enabled === 'yes' && config.siteConfig.ars.tier
-                      ? getArsTier(config.siteConfig.ars.tier)
-                      : null;
-
-                    const orderData = {
-                      // Order Info
-                      timestamp: new Date().toISOString(),
-                      orderId: `LVT-${Date.now()}`,
-                      
-                      // Configuration Summary
-                      unitCount: totalUnits,
-                      baseMonthlyTotal,
-                      deploymentZips: config.locations.map(location => location.zipCode).join(', '),
-                      deploymentDetails: config.locations.flatMap((location, locationIdx) =>
-                        location.units.map(unit =>
-                          `Location ${locationIdx + 1}: ${unit.quantity} ${unit.quantity === 1 ? 'Unit' : 'Units'} • ${getUnitType(unit.unitType).name} • Zip ${location.zipCode}${unit.needsGenerator ? ' (+ Generator)' : ''}`
-                        )
-                      ).join(' | '),
-                      unitBreakdown: config.locations.flatMap((location, locationIdx) => {
-                        const shippingAddress = shippingByZip[location.zipCode] || null;
-                        return location.units.map(unit => ({
-                          location: locationIdx + 1,
-                          unitType: getUnitType(unit.unitType).name,
-                          quantity: unit.quantity || 0,
-                          zipCode: location.zipCode,
-                          needsGenerator: unit.needsGenerator ? 'Yes' : 'No',
-                          shippingAddress
-                        }));
-                      }),
-                      generatorsNeeded: config.locations.reduce((sum, location) => {
-                        const locationGenerators = location.units
-                          .filter(unit => getUnitType(unit.unitType).generatorEligible && unit.needsGenerator)
-                          .reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
-                        return sum + locationGenerators;
-                      }, 0),
-                      
-                      // Hardware Options
-                      ndaaCompliant: config.ndaaCompliant ? 'Yes' : 'No',
-                      nightVision: config.nightVision ? 'Yes' : 'No',
-                      lpr: config.lpr ? 'Yes' : 'No',
-                      satCom: config.satCom ? 'Yes' : 'No',
-                      generatorDeclined: config.generatorBypass ? 'Yes' : 'No',
-                      generatorDowntimeAccepted: config.generatorBypass ? 'Yes' : 'N/A',
-                      generatorsBilled: billedGeneratorCount,
-                      
-                      // Software Packages
-                      softwarePackages: config.softwarePackages.length > 0
-                        ? config.softwarePackages.join(', ')
-                        : 'None',
-
-                      // Site Configuration
-                      placementMap: config.siteConfig.placementMapLater
-                        ? 'To be determined later'
-                        : (config.siteConfig.placementMapName || 'Not provided'),
-                      arsEnabled: config.siteConfig.ars.enabled === 'yes' ? 'Yes' : 'No',
-                      arsTier: submittedArsTier ? submittedArsTier.label : 'N/A',
-                      arsCoverage: submittedArsTier ? submittedArsTier.coverage : 'N/A',
-                      arsCustomDetail: submittedArsTier && submittedArsTier.value === 'custom'
-                        ? config.siteConfig.ars.customDetail
-                        : 'N/A',
-                      arsRatePerUnit: submittedArsTier && submittedArsTier.monthly
-                        ? submittedArsTier.monthly
-                        : 0,
-                      arsMonthlyCharge: submittedArsTier && submittedArsTier.monthly
-                        ? submittedArsTier.monthly * totalUnits
-                        : 0,
-                      arsContacts: config.siteConfig.ars.enabled === 'yes'
-                        ? config.siteConfig.ars.contacts.map((contact, i) => ({
-                            contact: i + 1,
-                            name: contact.name,
-                            email: contact.email,
-                            phone: contact.phone
-                          }))
-                        : [],
-                      gpsCoordinates: gpsUnitList.length > 0
-                        ? gpsUnitList.map((u, i) => {
-                            const c = config.siteConfig.gpsCoordinates[i] || { lat: '', long: '' };
-                            return `Unit ${i + 1} (${u.typeName}${u.zip ? `, Zip ${u.zip}` : ''}): ${c.lat || '—'}, ${c.long || '—'}`;
-                          }).join(' | ')
-                        : 'None',
-                      scheduleWeekday: (config.siteConfig.securitySchedule.weekdayArm || config.siteConfig.securitySchedule.weekdayDisarm)
-                        ? `${config.siteConfig.securitySchedule.weekdayArm || '—'} to ${config.siteConfig.securitySchedule.weekdayDisarm || '—'}`
-                        : 'Not set',
-                      scheduleWeekend: (config.siteConfig.securitySchedule.weekendArm || config.siteConfig.securitySchedule.weekendDisarm)
-                        ? `${config.siteConfig.securitySchedule.weekendArm || '—'} to ${config.siteConfig.securitySchedule.weekendDisarm || '—'}`
-                        : 'Not set',
-                      deterrenceStrobes: { '24-7': '24/7', night: 'Night', off: 'Off' }[config.siteConfig.deterrence.strobes],
-                      deterrenceFloodlight: config.siteConfig.deterrence.floodlight ? 'On' : 'Off',
-                      deterrenceAudio: config.siteConfig.deterrence.audio ? 'On' : 'Off',
-                      areasOfConcern: config.siteConfig.areasOfConcern || 'None provided',
-
-                      // Lease Details
-                      leaseTerm: config.leaseTerm + ' months',
-                      monthlyPayment: monthlyTotal,
-                      totalContract: contractTotal,
-                      
-                      // Contact Information
-                      companyName: config.contactInfo.companyName,
-                      contactName: config.contactInfo.fullName,
-                      email: config.contactInfo.email,
-                      phone: config.contactInfo.phone,
-
-                      // Onsite Contact
-                      onsiteContactSameAsPrimary: config.contactInfo.onsiteContact.sameAsPrimary ? 'Yes' : 'No',
-                      onsiteContactName: resolvedOnsiteContact.name,
-                      onsiteContactPhone: resolvedOnsiteContact.phone,
-                      
-                      // Billing Address
-                      billingStreet: config.contactInfo.billingAddress.street,
-                      billingCity: config.contactInfo.billingAddress.city,
-                      billingState: config.contactInfo.billingAddress.state,
-                      billingZip: config.contactInfo.billingAddress.zip,
-                      billingAddressFull: `${config.contactInfo.billingAddress.street}, ${config.contactInfo.billingAddress.city}, ${config.contactInfo.billingAddress.state} ${config.contactInfo.billingAddress.zip}`,
-                      
-                      // Shipping Addresses
-                      shippingAddresses: resolvedShippingAddresses
-                    };
+                    const orderData = buildWebhookPayload(orderModel);
                     
                     const payload = JSON.stringify(orderData);
                     let submitted = false;
@@ -4358,7 +4902,7 @@ function LVTConfigurator() {
             ← Back
           </button>
           
-          {currentStep < 6 ? (
+          {currentStep < 7 ? (
             <button
               onClick={() => {
                 if (currentStep === 0 && canProceed()) {
@@ -4620,7 +5164,7 @@ function LVTConfigurator() {
       </main>
 
       {/* Floating Price Summary */}
-      {currentStep > 0 && currentStep < 6 && (
+      {currentStep > 0 && currentStep < 7 && (
         <div style={{
           position: 'fixed',
           top: '140px',
