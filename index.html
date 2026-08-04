@@ -93,20 +93,20 @@ const UNIT_TYPES = [
     generatorEligible: false
   },
   {
-    id: 'pole',
-    name: 'Pole Mount Unit',
-    pluralName: 'Pole Mount Units',
-    baseMonthly: 1500,
-    image: 'https://cdn.prod.website-files.com/674d649ddd92d4cd09236107/6838e69664a5f147d98afd9f_Pole-Mount.avif',
-    imageAlt: 'LVT Pole Mount security unit',
-    description: 'Pole mount units bring elevated coverage for lots, campuses, and large perimeters, delivering robust deterrence with a streamlined installation.',
+    id: 'guardgate',
+    name: 'Guardgate',
+    pluralName: 'Guardgates',
+    baseMonthly: 2000,
+    image: 'images/GuardGate-down.png',
+    imageAlt: 'LVT Guardgate trailer-mounted access control unit with solar panels and barrier arm',
+    description: 'Guardgate combines access control with surveillance at the point of entry, pairing a barrier arm with a solar-powered camera mast to manage and record every vehicle entering or leaving your site.',
     needs: [
-      'Elevated coverage over wide areas',
-      'Minimal on-site footprint',
-      'Always-on monitoring for lots or campuses',
-      'Deterrence with long-range visibility'
+      'Controlled vehicle access at entry points',
+      'Record every entry and exit',
+      'Rapid deployment without fixed infrastructure',
+      'Deterrence at the gate line'
     ],
-    generatorEligible: false
+    generatorEligible: true
   }
 ];
 
@@ -151,7 +151,12 @@ function LVTConfigurator() {
         state: '',
         zip: ''
       },
-      shippingAddresses: []
+      shippingAddresses: [],
+      onsiteContact: {
+        sameAsPrimary: true, // defaults to the submitter to avoid redundant input
+        name: '',
+        phone: ''
+      }
     },
     siteConfig: {
       placementMapName: '',
@@ -159,7 +164,8 @@ function LVTConfigurator() {
       gpsCoordinates: [], // one { lat, long } per unit, index-aligned with gpsUnitList
       ars: {
         enabled: null, // null | 'yes' | 'no'
-        hours: null,   // '12' | '24'
+        tier: null,    // 'standard' | 'expanded' | 'custom'
+        customDetail: '', // required when tier is 'custom'
         contacts: [
           { name: '', email: '', phone: '' },
           { name: '', email: '', phone: '' }
@@ -191,8 +197,14 @@ function LVTConfigurator() {
   const LPR_MONTHLY = 500;
   const SATCOM_MONTHLY = 500;
 
-  // Alert Response Services (ARS) pricing (monthly, per site)
-  const ARS_PRICING = { '12': 300, '24': 500 };
+  // Alert Response Services (ARS) tiers — priced monthly, per unit.
+  // 'custom' covers legacy arrangements and is quoted by a rep rather than priced here.
+  const ARS_TIERS = [
+    { value: 'standard', label: 'Standard', coverage: '12 hours of coverage', monthly: 300 },
+    { value: 'expanded', label: 'Expanded', coverage: '24 hours of coverage', monthly: 500 },
+    { value: 'custom', label: 'Custom', coverage: 'Legacy or tailored coverage', monthly: null }
+  ];
+  const getArsTier = (value) => ARS_TIERS.find(tier => tier.value === value) || null;
   
   // Software packages (monthly)
   const softwarePackages = [
@@ -491,7 +503,7 @@ function LVTConfigurator() {
       location.zipCode.length === 5 && location.units.every(unit => unit.quantity > 0)
     );
     if (allZipsValid) {
-      // Check generator requirements for mobile units only
+      // Check generator requirements for generator-eligible unit types
       config.locations.forEach(location => {
         location.units.forEach(unit => {
           checkGeneratorForUnit(location.id, unit.id, location.zipCode);
@@ -548,9 +560,12 @@ function LVTConfigurator() {
       if (pkg) monthlyTotal += pkg.monthlyPrice * unitCount;
     });
 
-    // Add Alert Response Services (flat monthly charge per site)
-    if (config.siteConfig.ars.enabled === 'yes' && config.siteConfig.ars.hours) {
-      monthlyTotal += ARS_PRICING[config.siteConfig.ars.hours] || 0;
+    // Add Alert Response Services (per unit; 'custom' is quoted separately)
+    if (config.siteConfig.ars.enabled === 'yes' && config.siteConfig.ars.tier) {
+      const arsTier = getArsTier(config.siteConfig.ars.tier);
+      if (arsTier && arsTier.monthly) {
+        monthlyTotal += arsTier.monthly * unitCount;
+      }
     }
     
     // Apply lease term discount if selected
@@ -612,9 +627,12 @@ function LVTConfigurator() {
       if (pkg) monthlyTotal += pkg.monthlyPrice * unitCount;
     });
 
-    // Add Alert Response Services (flat monthly charge per site)
-    if (config.siteConfig.ars.enabled === 'yes' && config.siteConfig.ars.hours) {
-      monthlyTotal += ARS_PRICING[config.siteConfig.ars.hours] || 0;
+    // Add Alert Response Services (per unit; 'custom' is quoted separately)
+    if (config.siteConfig.ars.enabled === 'yes' && config.siteConfig.ars.tier) {
+      const arsTier = getArsTier(config.siteConfig.ars.tier);
+      if (arsTier && arsTier.monthly) {
+        monthlyTotal += arsTier.monthly * unitCount;
+      }
     }
     
     // Apply discount for this specific term
@@ -710,6 +728,21 @@ function LVTConfigurator() {
     const file = e.target.files && e.target.files[0];
     updateSiteConfig('placementMapName', file ? file.name : '');
   };
+
+  const updateOnsiteContact = (field, value) => {
+    setConfig(prev => ({
+      ...prev,
+      contactInfo: {
+        ...prev.contactInfo,
+        onsiteContact: { ...prev.contactInfo.onsiteContact, [field]: value }
+      }
+    }));
+  };
+
+  // Resolves to the primary contact when the onsite person is the same
+  const resolvedOnsiteContact = config.contactInfo.onsiteContact.sameAsPrimary
+    ? { name: config.contactInfo.fullName, phone: config.contactInfo.phone }
+    : { name: config.contactInfo.onsiteContact.name, phone: config.contactInfo.onsiteContact.phone };
 
   const updateSalesRep = (field, value) => {
     setSalesRep(prev => ({ ...prev, [field]: value }));
@@ -813,14 +846,21 @@ function LVTConfigurator() {
           return address.street && address.city && address.state && address.zip;
         })
         : false;
-      return email && phone && companyName && fullName && billingValid && shippingValid;
+      // Onsite contact: only required when it is a different person
+      const { onsiteContact } = config.contactInfo;
+      const onsiteValid = onsiteContact.sameAsPrimary
+        ? true
+        : !!(onsiteContact.name && onsiteContact.phone);
+      return email && phone && companyName && fullName && billingValid && shippingValid && onsiteValid;
     }
     if (currentStep === 5) {
       // Placement map and GPS are optional. ARS requires a monitoring window
       // and two complete contacts when enabled.
       const { ars } = config.siteConfig;
       if (ars.enabled !== 'yes') return true;
-      if (!ars.hours) return false;
+      if (!ars.tier) return false;
+      // A custom tier needs a description, otherwise the selection tells sales nothing
+      if (ars.tier === 'custom' && !ars.customDetail.trim()) return false;
       return ars.contacts.every(contact => contact.name && contact.email && contact.phone);
     }
     return true;
@@ -907,7 +947,7 @@ function LVTConfigurator() {
               Surveillance, Deterrence, <br />and Versatility
             </h2>
             <p className="hero-intro">
-              Meet LVT's lineup of intelligent security solutions, each leveraging AI to deter crime automatically. Rapidly-deployable as mobile units, wall mounts, or pole mounts, every unit is expertly configured to match your specific security needs.
+              Meet LVT's lineup of intelligent security solutions, each leveraging AI to deter crime automatically. Rapidly-deployable as mobile units, wall mounts, or Guardgates, every unit is expertly configured to match your specific security needs.
             </p>
 
             <div className="hero-grid">
@@ -918,7 +958,7 @@ function LVTConfigurator() {
                 </h3>
                 
                 <p className="product-copy">
-                  Select the right unit type for each deployment location below. Mobile units support generator backup; wall and pole mounts do not require a generator.
+                  Select the right unit type for each deployment location below. Mobile units and Guardgates support generator backup; wall mounts do not require a generator.
                 </p>
 
                 <p className="needs-title">
@@ -1035,7 +1075,7 @@ function LVTConfigurator() {
                     color: 'rgba(255,255,255,0.7)',
                     lineHeight: '1.6'
                   }}>
-                    Configure unit quantities and deployment locations. Generator requirements apply to mobile units only.
+                    Configure unit quantities and deployment locations. Generator requirements apply to mobile units and Guardgates.
                   </p>
                 </div>
                 
@@ -2646,6 +2686,116 @@ function LVTConfigurator() {
                   );
                 })}
               </div>
+
+              {/* Onsite Contact */}
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '16px',
+                padding: '32px'
+              }}>
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  marginBottom: '8px',
+                  color: '#56d3cc'
+                }}>
+                  Onsite Contact
+                </h3>
+                <p style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.6)',
+                  marginBottom: '20px',
+                  lineHeight: '1.6'
+                }}>
+                  Who should our install team reach when they arrive on site? This can be someone other than you.
+                </p>
+
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  cursor: 'pointer',
+                  marginBottom: config.contactInfo.onsiteContact.sameAsPrimary ? '0' : '24px'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={config.contactInfo.onsiteContact.sameAsPrimary}
+                    onChange={(e) => updateOnsiteContact('sameAsPrimary', e.target.checked)}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                  />
+                  <span style={{ fontSize: '14px', color: 'rgba(255,255,255,0.85)', fontWeight: '600' }}>
+                    Same as the contact above
+                  </span>
+                </label>
+
+                {config.contactInfo.onsiteContact.sameAsPrimary ? (
+                  <div style={{
+                    marginTop: '16px',
+                    padding: '14px 16px',
+                    background: 'rgba(86, 211, 204, 0.08)',
+                    border: '1px solid rgba(86, 211, 204, 0.25)',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    color: 'rgba(255,255,255,0.8)',
+                    lineHeight: '1.5'
+                  }}>
+                    {(config.contactInfo.fullName || config.contactInfo.phone)
+                      ? <span>Using <strong style={{ color: '#fff' }}>{config.contactInfo.fullName || 'the name above'}</strong>{config.contactInfo.phone ? ` · ${config.contactInfo.phone}` : ''}</span>
+                      : 'Fill in the contact information above and it will be used here.'}
+                  </div>
+                ) : (
+                  <div
+                    className="contact-grid"
+                    style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}
+                  >
+                    {[
+                      { label: 'Onsite Contact Name *', field: 'name', type: 'text', placeholder: 'Full Name' },
+                      { label: 'Onsite Phone Number *', field: 'phone', type: 'tel', placeholder: '(555) 555-5555' }
+                    ].map(cell => (
+                      <div key={cell.field}>
+                        <label style={{
+                          display: 'block',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          marginBottom: '8px',
+                          color: 'rgba(255,255,255,0.7)'
+                        }}>
+                          {cell.label}
+                        </label>
+                        <input
+                          type={cell.type}
+                          value={config.contactInfo.onsiteContact[cell.field]}
+                          onChange={(e) => updateOnsiteContact(cell.field, e.target.value)}
+                          placeholder={cell.placeholder}
+                          style={{
+                            width: '100%',
+                            padding: '12px 16px',
+                            background: 'rgba(39, 42, 47, 0.6)',
+                            border: '2px solid rgba(255,255,255,0.15)',
+                            borderRadius: '8px',
+                            color: '#fff',
+                            fontSize: '16px',
+                            fontWeight: '500',
+                            outline: 'none',
+                            transition: 'all 0.3s ease'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.border = '2px solid #56d3cc';
+                            e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                          }}
+                          onBlur={(e) => {
+                            e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                            e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -2969,17 +3119,14 @@ function LVTConfigurator() {
                       Monitoring Coverage *
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: '28px' }}>
-                      {[
-                        { value: '12', label: '12 Hours of Monitoring' },
-                        { value: '24', label: '24 Hours of Monitoring' }
-                      ].map(opt => {
-                        const active = config.siteConfig.ars.hours === opt.value;
+                      {ARS_TIERS.map(tier => {
+                        const active = config.siteConfig.ars.tier === tier.value;
                         return (
                           <button
-                            key={opt.value}
-                            onClick={() => updateArs('hours', opt.value)}
+                            key={tier.value}
+                            onClick={() => updateArs('tier', tier.value)}
                             style={{
-                              flex: '1 1 240px',
+                              flex: '1 1 200px',
                               padding: '18px 24px',
                               background: active ? 'rgba(86, 211, 204, 0.15)' : 'rgba(39, 42, 47, 0.6)',
                               color: '#fff',
@@ -2990,20 +3137,100 @@ function LVTConfigurator() {
                               textAlign: 'left'
                             }}
                           >
-                            <div style={{ fontSize: '15px', fontWeight: '800', marginBottom: '4px' }}>
-                              {opt.label}
+                            <div style={{ fontSize: '15px', fontWeight: '800', marginBottom: '2px' }}>
+                              {tier.label}
                             </div>
                             <div style={{
-                              fontSize: '18px',
-                              fontWeight: '900',
-                              color: active ? '#56d3cc' : 'rgba(255,255,255,0.6)'
+                              fontSize: '12px',
+                              color: 'rgba(255,255,255,0.6)',
+                              marginBottom: '6px'
                             }}>
-                              +${ARS_PRICING[opt.value].toLocaleString()}/mo
+                              {tier.coverage}
                             </div>
+                            {tier.monthly ? (
+                              <React.Fragment>
+                                <div style={{
+                                  fontSize: '18px',
+                                  fontWeight: '900',
+                                  color: active ? '#56d3cc' : 'rgba(255,255,255,0.6)'
+                                }}>
+                                  +${tier.monthly.toLocaleString()}/mo per unit
+                                </div>
+                                <div style={{
+                                  fontSize: '12px',
+                                  color: 'rgba(255,255,255,0.55)',
+                                  marginTop: '2px'
+                                }}>
+                                  {totalUnits} {totalUnits === 1 ? 'unit' : 'units'} · +${(tier.monthly * totalUnits).toLocaleString()}/mo total
+                                </div>
+                              </React.Fragment>
+                            ) : (
+                              <div style={{
+                                fontSize: '14px',
+                                fontWeight: '800',
+                                color: active ? '#56d3cc' : 'rgba(255,255,255,0.6)'
+                              }}>
+                                Quoted by your rep
+                              </div>
+                            )}
                           </button>
                         );
                       })}
                     </div>
+
+                    {/* Custom coverage detail */}
+                    {config.siteConfig.ars.tier === 'custom' && (
+                      <div style={{ marginBottom: '28px' }}>
+                        <label style={{
+                          display: 'block',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          marginBottom: '8px',
+                          color: 'rgba(255,255,255,0.7)'
+                        }}>
+                          Describe Your Coverage *
+                        </label>
+                        <textarea
+                          value={config.siteConfig.ars.customDetail}
+                          onChange={(e) => updateArs('customDetail', e.target.value)}
+                          placeholder="e.g. Existing legacy agreement — monitored 6pm to 6am weekdays, 24 hours on weekends"
+                          rows={3}
+                          style={{
+                            width: '100%',
+                            padding: '14px 16px',
+                            background: 'rgba(39, 42, 47, 0.6)',
+                            border: '2px solid rgba(255,255,255,0.15)',
+                            borderRadius: '8px',
+                            color: '#fff',
+                            fontSize: '16px',
+                            fontWeight: '500',
+                            fontFamily: 'inherit',
+                            lineHeight: '1.6',
+                            outline: 'none',
+                            resize: 'vertical',
+                            transition: 'all 0.3s ease'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.border = '2px solid #56d3cc';
+                            e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                          }}
+                          onBlur={(e) => {
+                            e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                            e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                          }}
+                        />
+                        <div style={{
+                          fontSize: '12px',
+                          color: 'rgba(255,255,255,0.5)',
+                          marginTop: '8px',
+                          lineHeight: '1.5'
+                        }}>
+                          Custom coverage is not priced in this quote — a rep will confirm your rate.
+                        </div>
+                      </div>
+                    )}
 
                     {/* Escalation contacts */}
                     <div style={{
@@ -3699,7 +3926,8 @@ function LVTConfigurator() {
                   const filledGps = gpsUnitList
                     .map((u, i) => ({ u, c: sc.gpsCoordinates[i] || { lat: '', long: '' }, i }))
                     .filter(entry => entry.c.lat || entry.c.long);
-                  const arsOn = sc.ars.enabled === 'yes' && sc.ars.hours;
+                  const arsOn = sc.ars.enabled === 'yes' && sc.ars.tier;
+                  const arsTier = arsOn ? getArsTier(sc.ars.tier) : null;
                   const hasConfig = sc.placementMapName || sc.placementMapLater || filledGps.length > 0 ||
                     hasSchedule || sc.ars.enabled || sc.deterrence.strobes !== 'off' ||
                     sc.deterrence.floodlight || sc.deterrence.audio || sc.areasOfConcern;
@@ -3738,8 +3966,18 @@ function LVTConfigurator() {
                         <div style={rowStyle}>
                           <span>Alert Response Services</span>
                           <span style={{ color: '#56d3cc', textAlign: 'right' }}>
-                            {arsOn ? `${sc.ars.hours} hrs · +$${ARS_PRICING[sc.ars.hours].toLocaleString()}/mo` : 'Not included'}
+                            {!arsOn
+                              ? 'Not included'
+                              : arsTier.monthly
+                                ? `${arsTier.label} · ${totalUnits} × +$${(arsTier.monthly * totalUnits).toLocaleString()}/mo`
+                                : `${arsTier.label} · quoted by rep`}
                           </span>
+                        </div>
+                      )}
+                      {arsOn && sc.ars.tier === 'custom' && sc.ars.customDetail && (
+                        <div style={{ marginTop: '4px', marginBottom: '8px' }}>
+                          <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>Custom ARS Coverage</div>
+                          <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{sc.ars.customDetail}</div>
                         </div>
                       )}
                       {arsOn && sc.ars.contacts.map((contact, i) => (
@@ -3904,6 +4142,9 @@ function LVTConfigurator() {
                       acc[address.locationZip] = address;
                       return acc;
                     }, {});
+                    const submittedArsTier = config.siteConfig.ars.enabled === 'yes' && config.siteConfig.ars.tier
+                      ? getArsTier(config.siteConfig.ars.tier)
+                      : null;
 
                     const orderData = {
                       // Order Info
@@ -3956,11 +4197,16 @@ function LVTConfigurator() {
                         ? 'To be determined later'
                         : (config.siteConfig.placementMapName || 'Not provided'),
                       arsEnabled: config.siteConfig.ars.enabled === 'yes' ? 'Yes' : 'No',
-                      arsMonitoringHours: config.siteConfig.ars.enabled === 'yes' && config.siteConfig.ars.hours
-                        ? `${config.siteConfig.ars.hours} hours`
+                      arsTier: submittedArsTier ? submittedArsTier.label : 'N/A',
+                      arsCoverage: submittedArsTier ? submittedArsTier.coverage : 'N/A',
+                      arsCustomDetail: submittedArsTier && submittedArsTier.value === 'custom'
+                        ? config.siteConfig.ars.customDetail
                         : 'N/A',
-                      arsMonthlyCharge: config.siteConfig.ars.enabled === 'yes' && config.siteConfig.ars.hours
-                        ? ARS_PRICING[config.siteConfig.ars.hours]
+                      arsRatePerUnit: submittedArsTier && submittedArsTier.monthly
+                        ? submittedArsTier.monthly
+                        : 0,
+                      arsMonthlyCharge: submittedArsTier && submittedArsTier.monthly
+                        ? submittedArsTier.monthly * totalUnits
                         : 0,
                       arsContacts: config.siteConfig.ars.enabled === 'yes'
                         ? config.siteConfig.ars.contacts.map((contact, i) => ({
@@ -3997,6 +4243,11 @@ function LVTConfigurator() {
                       contactName: config.contactInfo.fullName,
                       email: config.contactInfo.email,
                       phone: config.contactInfo.phone,
+
+                      // Onsite Contact
+                      onsiteContactSameAsPrimary: config.contactInfo.onsiteContact.sameAsPrimary ? 'Yes' : 'No',
+                      onsiteContactName: resolvedOnsiteContact.name,
+                      onsiteContactPhone: resolvedOnsiteContact.phone,
                       
                       // Billing Address
                       billingStreet: config.contactInfo.billingAddress.street,
