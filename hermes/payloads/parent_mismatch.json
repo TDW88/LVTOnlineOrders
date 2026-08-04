@@ -1,0 +1,29 @@
+{
+  "_comment": "Negative test: both UUIDs resolve to real Accounts, but the location is not a child of the billing account. Must fail LOCATION_PARENT_MISMATCH. This is the check that guards against the partially-orphaned mapping table.",
+  "order_id": "HERMES-TEST-PARENTMISMATCH",
+  "submitted_at": "2026-08-04T16:20:00Z",
+  "submitted_by": {
+    "email": "admin@brasfieldgorrie.com",
+    "company_name": "Brasfield & Gorrie",
+    "lvt_customer_id": "338654e0-4f4a-c8d9-b7e9-c7f7446318bd"
+  },
+  "order": {
+    "term_months": 12,
+    "po_number": null,
+    "locations": [
+      {
+        "lvt_location_id": "026a87b5-ecd1-c58a-c5ce-4ac71a215051",
+        "zip_code": "29602",
+        "units": [
+          { "unit_type": "mobile", "quantity": 1, "needs_generator": false }
+        ]
+      }
+    ],
+    "hardware_options": { "ndaa_compliant": true, "night_vision": false },
+    "software_packages": []
+  },
+  "contacts": {
+    "billing":  { "name": "", "email": "", "phone": "" },
+    "shipping": { "name": "", "email": "", "phone": "" }
+  }
+}

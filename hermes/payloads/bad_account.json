@@ -1,0 +1,29 @@
+{
+  "_comment": "Negative test: lvt_customer_id is a well-formed UUID that matches no Account. Must fail ACCOUNT_NOT_FOUND and create zero records.",
+  "order_id": "HERMES-TEST-BADACCT",
+  "submitted_at": "2026-08-04T16:20:00Z",
+  "submitted_by": {
+    "email": "nobody@example.com",
+    "company_name": "Does Not Exist",
+    "lvt_customer_id": "00000000-0000-4000-8000-000000000000"
+  },
+  "order": {
+    "term_months": 12,
+    "po_number": null,
+    "locations": [
+      {
+        "lvt_location_id": "64fe394f-eee6-269c-d810-08133aef8258",
+        "zip_code": "30120",
+        "units": [
+          { "unit_type": "mobile", "quantity": 1, "needs_generator": false }
+        ]
+      }
+    ],
+    "hardware_options": { "ndaa_compliant": true, "night_vision": false },
+    "software_packages": []
+  },
+  "contacts": {
+    "billing":  { "name": "", "email": "", "phone": "" },
+    "shipping": { "name": "", "email": "", "phone": "" }
+  }
+}
