@@ -1,0 +1,172 @@
+{
+  "_comment": [
+    "Pinned Salesforce IDs for the Hermes v1 golden path.",
+    "Verified live against sandbox lvt--partial (org 00DVE00000AUWRJ2A5) on 2026-08-04.",
+    "A sandbox refresh may invalidate every ID in this file. Re-verify with tools/verify_pins.py.",
+    "Options are pinned BY ID, never by name: several SBQQ__ProductOption__c rows under this",
+    "bundle share identical OptionalSKU names (e.g. SBQQ__Number__c 20 appears twice)."
+  ],
+
+  "org": {
+    "alias": "sandbox",
+    "expected_org_id": "00DVE00000AUWRJ2A5",
+    "expected_is_sandbox": true
+  },
+
+  "opportunity_defaults": {
+    "_note": "Exact Opportunity picklist values, verified against the org. No flow populates LeadSource on insert - every Hermes order had it null before this was set explicitly.",
+    "record_type_developer_name": "Inside_Sales",
+    "_stage_note": "Four org validation rules constrain how the stage is set, and together they dictate the whole sequence: (1) 'New Opportunities cannot be created beyond Stage 1' - cannot insert at a late stage; (2) 'Please select a Primary Contact' - cannot advance without a primary contact role; (3) 'You must have a primary quote to progress this opportunity beyond the 4 - Proposal Delivered stage' - the quote must exist first; (4) 'Please only move forward one stage at a time' - no jumping. So: insert at creation_stage_name, attach the contact, build the quote and lines, then walk stage_progression one step at a time up to stage_name.",
+    "creation_stage_name": "2 - Discovery / Qualification",
+    "stage_name": "6 - Verbal Commit",
+
+    "_apex_test_note": "Apex_Test__c=true bypasses ONLY the 'one stage at a time' rule, letting the stage jump straight to the target in a single update instead of walking every intermediate stage. Verified: it does NOT bypass the create-beyond-stage-1, primary-contact, primary-quote or units rules - those still have to be satisfied properly. The flag is set for the jump and cleared immediately afterwards, so finished records are not left marked as Apex test data (no other opportunity in the org carries it). Set use_apex_test_bypass=false to fall back to walking stage_progression.",
+    "use_apex_test_bypass": true,
+    "clear_apex_test_after_jump": true,
+
+    "stage_progression": [
+      "1 - Target Identified",
+      "2 - Discovery / Qualification",
+      "3 - Solution Scoped",
+      "4 - Business Consideration / Negotiation",
+      "5 - Procurement",
+      "6 - Verbal Commit"
+    ],
+    "type": "Existing Business",
+    "lead_source": "Website",
+    "close_date_offset_days": 90,
+    "unit_count_field": "of_Units_in_Pipeline__c",
+    "external_id_field": "External_Id__c"
+  },
+
+  "pricebook": {
+    "id": "01s4W000000cXoeQAE",
+    "name": "Standard Price Book"
+  },
+
+  "bundle": {
+    "product_id": "01tUm00000BQfT5IAL",
+    "name": "MSU + Wall Mounts",
+    "product_code": "LVT Bundle",
+    "_note": "Bundle head, BASEUNIT and HEADUNIT all list at $0. All recurring value sits on FORM FACTOR SUBSCRIPTION and MODULE lines."
+  },
+
+  "base_units": {
+    "mobile": {
+      "option_id": "a1PUm0000049izKMAQ",
+      "name": "Mobile Mounting Structure - Solar - White",
+      "list_price": 0
+    },
+    "mobile_with_generator": {
+      "option_id": "a1PUm0000049izLMAQ",
+      "name": "Mobile Mounting Structure - Solar - SMART GENERATOR - White",
+      "list_price": 0
+    },
+    "wall": {
+      "option_id": "a1PUm0000049izMMAQ",
+      "name": "Universal Pole/Wall Mount-AC",
+      "list_price": 0
+    }
+  },
+
+  "form_factor_subscriptions": {
+    "_note": "Matrix of {MSU, MSU Fuel Cell, Wall/Pole, Wall Extended, GuardGate} x {LVT Managed, Customer Owned, SW Subscription, Service Plan}. v1 uses LVT Managed because the portal models a monthly lease. CPQ admin should confirm this is the right commercial model.",
+    "mobile": {
+      "option_id": "a1PUm0000049j21MAA",
+      "name": "MSU - LVT Managed",
+      "list_price": 2833.333333
+    },
+    "wall": {
+      "option_id": "a1PUm0000049j22MAA",
+      "name": "Wall / Pole Mount LVT Managed",
+      "list_price": 2083.33
+    }
+  },
+
+  "head_units": {
+    "_note": "18 of 59 HEADUNIT options are NDAA. Axis hardware is NDAA-compliant, Dahua is not, which is what the portal's ndaa_compliant toggle actually selects between.",
+    "ndaa": {
+      "option_id": "a1PUm0000049j2QMAQ",
+      "name": "A-IR-PTZ- Base-Axis, NDAA",
+      "list_price": 0
+    },
+    "non_ndaa": {
+      "option_id": "a1PUm0000049j2WMAQ",
+      "name": "D-IR-PTZ- Base-Dahua",
+      "list_price": 0
+    }
+  },
+
+  "bundle_option_fees": {
+    "_note": "Fees that ARE configured options of the bundle, so they attach under the bundle head like any other option. One-time charges, NOT extended over the term. Pinned by option id because ProductCode is ambiguous - two distinct products share the code 'Setup Fee' ($400 and $1,800 for Live Unit - Surround).",
+    "setup_fee": {
+      "option_id": "a1PUm0000049izNMAQ",
+      "name": "Setup Fee",
+      "product_id": "01t4W00000B3AK2QAN",
+      "list_price": 400,
+      "one_time": true
+    }
+  },
+
+  "standalone_fees": {
+    "_note": "Round-trip shipping is NOT a configured option of this bundle - the only shipping option under 'LVT Bundle' is One-Way. On real quotes in this org these products appear as standalone top-level lines (SBQQ__RequiredBy__c and SBQQ__ProductOption__c both null, 156 lines that way), so we match that rather than altering the product catalog. One-time, quantity tracks unit count.",
+    "round_trip_shipping_fee": {
+      "by_unit_type": {
+        "mobile": {
+          "product_id": "01tUm00000F3xFpIAJ",
+          "name": "Round-Trip Shipping Fee",
+          "list_price": 2000
+        },
+        "wall": {
+          "product_id": "01tUm00000F3xMHIAZ",
+          "name": "Wall / Pole Round-Trip Shipping Fee",
+          "list_price": 1000
+        }
+      },
+      "one_time": true
+    }
+  },
+
+  "software_modules": {
+    "_note": "Keyed by the portal's DISPLAY NAME, not its internal id. Portal ids are misleading: 'alert-management' displays as 'Intelligent Investigations', and a separate legacy 'Alert Management' module also exists in CPQ.",
+    "Intelligent Deterrence": {
+      "option_id": "a1PUm0000049j25MAA",
+      "portal_id": "detect-deter",
+      "list_price": 500
+    },
+    "Intelligent Investigations": {
+      "option_id": "a1PUm0000049izTMAQ",
+      "portal_id": "alert-management",
+      "list_price": 500
+    },
+    "Intelligent Safety": {
+      "option_id": "a1PUm000007XOQvMAO",
+      "portal_id": "enterprise",
+      "list_price": 500
+    }
+  },
+
+  "unmappable_portal_options": {
+    "_note": "Portal fields with no CPQ counterpart. They are carried in the payload for the rep but produce no quote lines. Do not silently invent lines for these.",
+    "night_vision": "IR/thermal capability is inherent to the HEADUNIT choice; there is no separate night-vision SKU or $175 uplift.",
+    "generator_surcharge": "Handled by selecting the SMART GENERATOR base unit, not a $1000 add-on line.",
+    "ndaa_surcharge": "Handled by HEADUNIT selection (Axis vs Dahua), not a $125 add-on line."
+  },
+
+  "golden_path": {
+    "_note": "Verified resolvable pair that traverses Location_Account_UUID_Mapping__c. Most mapping rows in this sandbox do NOT resolve to Accounts; this pair does.",
+    "billing_account": {
+      "id": "001VE00000wyH9nYAE",
+      "name": "Brasfield & Gorrie- GA",
+      "lvt_customer_id": "338654e0-4f4a-c8d9-b7e9-c7f7446318bd",
+      "record_type": "1 - Top/Mid Account"
+    },
+    "location_account": {
+      "id": "001VE00000wyUAZYA2",
+      "name": "Brasfield & Gorrie - Cartersville GA",
+      "lvt_location_id": "64fe394f-eee6-269c-d810-08133aef8258",
+      "record_type": "2 - Location Account",
+      "parent_id": "001VE00000wyH9nYAE"
+    }
+  }
+}

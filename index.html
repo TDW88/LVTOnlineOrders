@@ -44,7 +44,7 @@ const UNIT_TYPES = [
     id: 'mobile',
     name: 'Mobile Security Unit',
     pluralName: 'Mobile Security Units',
-    baseMonthly: 2000,
+    baseMonthly: 1600,
     image: 'https://cdn.prod.website-files.com/674d649ddd92d4cd09236107/68c180ba911caf0351e75fde_81d8df77eec8c23c496c2124ef88fd43_liveunit2%201%402x.avif',
     imageAlt: 'LVT Mobile Security Unit with solar panel and camera mast',
     description: "LVT's mobile units are a versatile, rapidly deployable solution to a wide range of security needs. Each self-contained unit includes solar panels, cellular connectivity, powerful lighting, a loud speaker, and a configurable selection of high-end cameras.",
@@ -119,8 +119,33 @@ function LVTConfigurator() {
         zip: ''
       },
       shippingAddresses: []
+    },
+    siteConfig: {
+      placementMapName: '',
+      gpsCoordinates: [], // one { lat, long } per unit, index-aligned with gpsUnitList
+      securitySchedule: {
+        weekdayArm: '',
+        weekdayDisarm: '',
+        weekendArm: '',
+        weekendDisarm: ''
+      },
+      deterrence: {
+        strobes: 'off', // 'off' | 'night' | '24-7'
+        floodlight: false,
+        audio: false
+      },
+      areasOfConcern: ''
     }
   });
+
+  // Order submission is deliberately separate from the "Request Demo" path above it.
+  // Requesting a demo is a marketing enquiry; submitting an order produces a real
+  // Salesforce Opportunity and CPQ Quote, so it gets an explicit confirmation gate.
+  const [showOrderConfirm, setShowOrderConfirm] = useState(false);
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [placedOrderId, setPlacedOrderId] = useState(null);
+  const [orderResult, setOrderResult] = useState(null);
+  const [orderError, setOrderError] = useState(null);
 
   const getUnitType = (unitTypeId) => UNIT_TYPES.find(type => type.id === unitTypeId) || UNIT_TYPES[0];
   
@@ -135,40 +160,54 @@ function LVTConfigurator() {
   const softwarePackages = [
     {
       id: 'detect-deter',
-      name: 'Detect & Deter',
-      monthlyPrice: 320,
+      name: 'Intelligent Deterrence',
+      monthlyPrice: 500,
       description: 'AI-powered intrusion detection with automated deterrence (strobes, spotlights, audio warnings)',
       features: ['Real-time threat detection', 'Automated audio warnings', 'Strobe & spotlight activation', 'Custom alert rules']
     },
     {
       id: 'alert-management',
-      name: 'Alert Management',
-      monthlyPrice: 160,
+      name: 'Intelligent Investigations',
+      monthlyPrice: 500,
       description: 'Advanced alert routing and response workflow management',
       features: ['Multi-channel alerts (SMS, email, push)', 'Alert escalation workflows', 'Response tracking', 'Integration with security teams']
     },
     {
       id: 'enterprise',
-      name: 'Enterprise Management',
-      monthlyPrice: 160,
-      description: 'Fleet-wide management and analytics for multiple units',
+      name: 'Intelligent Safety',
+      monthlyPrice: 500,
+      description: 'SafeNow integration site-wide, the ability to arm and disarm the unit from an approved mobile device',
       features: ['Centralized dashboard', 'Multi-site management', 'Advanced analytics & reporting', 'Custom user permissions', 'API access']
     }
   ];
 
-  // Lease term options
+  // Lease term options.
+  // Discounts are 0 across the board in v1 and that is deliberate. Orders placed here
+  // flow straight into a Salesforce quote at list price; quoting at list is what makes
+  // that automation safe to run without a rep in the loop. Discounting and unit-price
+  // overrides are a separate initiative with their own approval story.
   const leaseTerms = [
     { months: 12, label: '12 Months', discount: 0 },
-    { months: 24, label: '24 Months', discount: 0.05 }, // 5% discount
-    { months: 36, label: '36 Months', discount: 0.10 }  // 10% discount
+    { months: 24, label: '24 Months', discount: 0 },
+    { months: 36, label: '36 Months', discount: 0 }
   ];
 
-  const steps = ['Location', 'Hardware', 'Software', 'Lease Term', 'Contact Info', 'Review'];
+  const steps = ['Location', 'Hardware', 'Software', 'Lease Term', 'Contact Info', 'Configuration', 'Review'];
 
   const totalUnits = config.locations.reduce((sum, location) => {
     const locationTotal = location.units.reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
     return sum + locationTotal;
   }, 0);
+
+  // One GPS entry per physical unit selected in Step 1 (expanded by quantity)
+  const gpsUnitList = config.locations.flatMap(location =>
+    location.units.flatMap(unit =>
+      Array.from({ length: unit.quantity || 0 }, () => ({
+        typeName: getUnitType(unit.unitType).name,
+        zip: location.zipCode
+      }))
+    )
+  );
 
   const uniqueLocationZips = [
     ...new Set(config.locations.map(location => location.zipCode).filter(zip => zip.length === 5))
@@ -530,6 +569,174 @@ function LVTConfigurator() {
     return calculateMonthlyTotal() * config.leaseTerm;
   };
 
+  // --- Hermes order contract -------------------------------------------------
+  //
+  // The seam between this portal and the deterministic script that writes the
+  // Salesforce Opportunity + CPQ Quote (see hermes/). The script validates this
+  // payload, resolves the UUIDs, and refuses the order outright if anything is
+  // ambiguous - it never guesses at an account.
+  //
+  // DEMO LIMITATION: this portal has no authentication, so it cannot prove who is
+  // ordering. One known sandbox account is pinned below so the existing-customer path
+  // stays demonstrable. Production needs an authenticated VMS admin session supplying
+  // these ids; do not ship the pinned pair.
+  //
+  // Any OTHER company name is treated as a new customer: no ids are sent, and Hermes
+  // provisions the account structure rather than filing the order under the pinned
+  // account. That provisioning mints LVT ids that VMS does not know about, so a new
+  // account arrives flagged for reconciliation.
+  const HERMES_DEMO_ACCOUNT = {
+    companyName: 'Brasfield & Gorrie',
+    lvt_customer_id: '338654e0-4f4a-c8d9-b7e9-c7f7446318bd', // Brasfield & Gorrie- GA
+    lvt_location_id: '64fe394f-eee6-269c-d810-08133aef8258'  // ...- Cartersville GA
+  };
+
+  const isPinnedDemoAccount = () =>
+    (config.contactInfo.companyName || '').trim().toLowerCase() ===
+    HERMES_DEMO_ACCOUNT.companyName.toLowerCase();
+
+  // Portal package ids do not match the CPQ product names, and CPQ also carries a
+  // legacy module whose name collides with one of ours. Send the display name so the
+  // script resolves against the right product.
+  const hermesSoftwareNames = () =>
+    config.softwarePackages
+      .map(id => (softwarePackages.find(pkg => pkg.id === id) || {}).name)
+      .filter(Boolean);
+
+  const buildHermesPayload = (orderId) => ({
+    order_id: orderId,
+    submitted_at: new Date().toISOString(),
+    submitted_by: {
+      email: config.contactInfo.email,
+      company_name: config.contactInfo.companyName,
+      // Null for anyone but the pinned demo account, which is what tells Hermes to
+      // provision a new account instead of filing the order under an existing one.
+      lvt_customer_id: isPinnedDemoAccount() ? HERMES_DEMO_ACCOUNT.lvt_customer_id : null,
+      billing_address: {
+        street: config.contactInfo.billingAddress.street,
+        city: config.contactInfo.billingAddress.city,
+        state: config.contactInfo.billingAddress.state,
+        zip: config.contactInfo.billingAddress.zip
+      }
+    },
+    order: {
+      term_months: config.leaseTerm,
+      po_number: null,
+      // v1 targets a single location. Every configured unit is attributed to it rather
+      // than inventing a UUID per zip code we cannot resolve.
+      locations: [
+        {
+          lvt_location_id: isPinnedDemoAccount() ? HERMES_DEMO_ACCOUNT.lvt_location_id : null,
+          zip_code: (config.locations[0] || {}).zipCode || null,
+          units: config.locations.flatMap(location =>
+            location.units.map(unit => ({
+              unit_type: unit.unitType === 'mobile' ? 'mobile' : 'wall',
+              quantity: unit.quantity,
+              needs_generator: unit.unitType === 'mobile' && !!unit.needsGenerator
+            }))
+          )
+        }
+      ],
+      hardware_options: {
+        ndaa_compliant: !!config.ndaaCompliant,
+        // Carried for the rep only. There is no night-vision SKU in CPQ; IR/thermal
+        // capability is inherent to the head unit that gets selected.
+        night_vision: !!config.nightVision
+      },
+      software_packages: hermesSoftwareNames()
+    },
+    contacts: {
+      billing: {
+        name: config.contactInfo.fullName,
+        email: config.contactInfo.email,
+        phone: config.contactInfo.phone
+      },
+      shipping: {
+        name: config.contactInfo.fullName,
+        email: config.contactInfo.email,
+        phone: config.contactInfo.phone
+      }
+    },
+    site_config: config.siteConfig,
+    // Displayed figures travel with the order so a rep can see what the customer was
+    // shown. They are NOT inputs to pricing - the quote is built at CPQ list price.
+    portal_estimate: {
+      monthly: Math.round(calculateMonthlyTotal()),
+      contract_total: Math.round(calculateContractTotal()),
+      disclaimer: 'Non-binding estimate. The Salesforce quote is priced from the CPQ price book and will differ.'
+    }
+  });
+
+  // Writes the contract to a file. For the demo the Hermes script runs locally against
+  // the sandbox, so the payload has to leave the browser somehow; a download is the
+  // least surprising route and needs no backend.
+  const savePayloadToFile = (payload, filename) => {
+    try {
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+      return true;
+    } catch (error) {
+      console.error('[hermes] payload download failed:', error);
+      return false;
+    }
+  };
+
+  // POSTs the order to the local Hermes service, which creates the Opportunity and CPQ
+  // Quote in Salesforce and returns the record ids. Requires `python3 -m hermes.serve`
+  // rather than a plain static file server - a bare http.server cannot run the script,
+  // so in that case we fall back to downloading the payload so the order isn't lost.
+  const submitOrder = async () => {
+    if (isPlacingOrder) return;
+    setIsPlacingOrder(true);
+    setOrderError(null);
+
+    // Same id the script upserts the Opportunity on, so resubmitting a given order
+    // updates it rather than creating a duplicate.
+    const orderId = `LVT-${Date.now()}`;
+    const payload = buildHermesPayload(orderId);
+    console.log('[hermes] submitting order:', payload);
+
+    try {
+      const response = await fetch('/api/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (response.ok && data && data.ok) {
+        console.log('[hermes] created:', data);
+        setOrderResult(data);
+        setPlacedOrderId(data.order_id || orderId);
+        setShowOrderConfirm(false);
+      } else if (data && data.rejected) {
+        // The script refused the order and wrote nothing. Surface why, and keep the
+        // dialog open so it can be retried once the cause is fixed.
+        setOrderError(`Order refused — ${data.code}: ${data.detail}`);
+      } else {
+        setOrderError((data && data.error) || `Submission failed (HTTP ${response.status}).`);
+      }
+    } catch (error) {
+      console.error('[hermes] order service unreachable:', error);
+      const saved = savePayloadToFile(payload, `${orderId}.json`);
+      setOrderError(
+        (saved
+          ? 'Order service unreachable, so the payload was downloaded instead. '
+          : 'Order service unreachable and the payload could not be downloaded. ') +
+        'Start it with: python3 -m hermes.serve'
+      );
+    } finally {
+      setIsPlacingOrder(false);
+    }
+  };
+
   const toggleHardwareOption = (option) => {
     setConfig(prev => ({ ...prev, [option]: !prev[option] }));
   };
@@ -576,6 +783,47 @@ function LVTConfigurator() {
         )
       }
     }));
+  };
+
+  const updateSiteConfig = (field, value) => {
+    setConfig(prev => ({
+      ...prev,
+      siteConfig: { ...prev.siteConfig, [field]: value }
+    }));
+  };
+
+  const updateSecuritySchedule = (field, value) => {
+    setConfig(prev => ({
+      ...prev,
+      siteConfig: {
+        ...prev.siteConfig,
+        securitySchedule: { ...prev.siteConfig.securitySchedule, [field]: value }
+      }
+    }));
+  };
+
+  const updateDeterrence = (field, value) => {
+    setConfig(prev => ({
+      ...prev,
+      siteConfig: {
+        ...prev.siteConfig,
+        deterrence: { ...prev.siteConfig.deterrence, [field]: value }
+      }
+    }));
+  };
+
+  const handlePlacementMapChange = (e) => {
+    const file = e.target.files && e.target.files[0];
+    updateSiteConfig('placementMapName', file ? file.name : '');
+  };
+
+  const updateGpsCoordinate = (index, field, value) => {
+    setConfig(prev => {
+      const list = [...prev.siteConfig.gpsCoordinates];
+      while (list.length <= index) list.push({ lat: '', long: '' });
+      list[index] = { ...list[index], [field]: value };
+      return { ...prev, siteConfig: { ...prev.siteConfig, gpsCoordinates: list } };
+    });
   };
 
   const canProceed = () => {
@@ -2238,8 +2486,506 @@ function LVTConfigurator() {
             </div>
           </div>
         )}
-        {/* Step 5: Review */}
+        {/* Step 5: Configuration */}
         {currentStep === 5 && (
+          <div>
+            <h2 style={{
+              fontWeight: '700',
+              marginBottom: '16px',
+              letterSpacing: '-1px',
+              lineHeight: '1.1'
+            }}>
+              Site <span className="gradient-text">Configuration</span>
+            </h2>
+            <p style={{
+              fontSize: '18px',
+              color: 'rgba(255,255,255,0.8)',
+              marginBottom: '64px',
+              fontWeight: '400',
+              maxWidth: '640px',
+              lineHeight: '1.6'
+            }}>
+              Help us dial in your deployment. Share your site layout, set your arming schedule, choose your deterrence behavior, and flag any specific concerns.
+            </p>
+
+            <div style={{
+              maxWidth: '800px',
+              margin: '0 auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '32px'
+            }}>
+              {/* Section 1: Placement Map */}
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '16px',
+                padding: '32px'
+              }}>
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  marginBottom: '8px',
+                  color: '#56d3cc'
+                }}>
+                  Placement Map
+                </h3>
+                <p style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.6)',
+                  marginBottom: '24px',
+                  lineHeight: '1.6'
+                }}>
+                  Upload an aerial or satellite view of your site so we can confirm expected unit placement and camera coverage.
+                </p>
+                <label
+                  htmlFor="placement-map-upload"
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    padding: '32px',
+                    background: 'rgba(39, 42, 47, 0.4)',
+                    border: '2px dashed rgba(86, 211, 204, 0.4)',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    transition: 'all 0.3s ease'
+                  }}
+                  onMouseOver={(e) => { e.currentTarget.style.border = '2px dashed #56d3cc'; e.currentTarget.style.background = 'rgba(86, 211, 204, 0.06)'; }}
+                  onMouseOut={(e) => { e.currentTarget.style.border = '2px dashed rgba(86, 211, 204, 0.4)'; e.currentTarget.style.background = 'rgba(39, 42, 47, 0.4)'; }}
+                >
+                  <div style={{ fontSize: '16px', fontWeight: '700', color: '#56d3cc' }}>
+                    {config.siteConfig.placementMapName ? 'Change file' : 'Click to upload'}
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.5)' }}>
+                    Aerial image or PDF (PNG, JPG, PDF)
+                  </div>
+                  <input
+                    id="placement-map-upload"
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={handlePlacementMapChange}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+                {config.siteConfig.placementMapName && (
+                  <div style={{
+                    marginTop: '16px',
+                    padding: '12px 16px',
+                    background: 'rgba(86, 211, 204, 0.1)',
+                    border: '1px solid rgba(86, 211, 204, 0.3)',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '12px'
+                  }}>
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#fff', wordBreak: 'break-all' }}>
+                      {config.siteConfig.placementMapName}
+                    </span>
+                    <button
+                      onClick={() => updateSiteConfig('placementMapName', '')}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'rgba(255,255,255,0.6)',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        fontWeight: '700',
+                        flexShrink: 0
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Section 2: GPS Coordinates */}
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '16px',
+                padding: '32px'
+              }}>
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  marginBottom: '8px',
+                  color: '#56d3cc'
+                }}>
+                  GPS Coordinates
+                </h3>
+                <p style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.6)',
+                  marginBottom: '24px',
+                  lineHeight: '1.6'
+                }}>
+                  Provide the latitude and longitude for each unit to confirm exact placement. One entry is shown for each of your {gpsUnitList.length} {gpsUnitList.length === 1 ? 'unit' : 'units'} selected in Step 1.
+                </p>
+
+                {gpsUnitList.length === 0 ? (
+                  <div style={{
+                    padding: '20px',
+                    background: 'rgba(255,255,255,0.02)',
+                    borderRadius: '12px',
+                    textAlign: 'center',
+                    fontSize: '14px',
+                    color: 'rgba(255,255,255,0.6)'
+                  }}>
+                    Add units in Step 1 to set GPS coordinates.
+                  </div>
+                ) : (
+                  gpsUnitList.map((u, idx) => {
+                    const coord = config.siteConfig.gpsCoordinates[idx] || { lat: '', long: '' };
+                    return (
+                      <div key={idx} style={{ marginBottom: '24px' }}>
+                        <div style={{
+                          fontSize: '13px',
+                          fontWeight: '800',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          marginBottom: '12px',
+                          color: '#fff'
+                        }}>
+                          Unit {idx + 1}
+                          <span style={{
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            textTransform: 'none',
+                            letterSpacing: '0',
+                            color: 'rgba(255,255,255,0.5)',
+                            marginLeft: '8px'
+                          }}>
+                            {u.typeName}{u.zip ? ` · Zip ${u.zip}` : ''}
+                          </span>
+                        </div>
+                        <div
+                          className="contact-grid"
+                          style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}
+                        >
+                          {[
+                            { label: 'Latitude', field: 'lat', placeholder: 'e.g. 40.7128' },
+                            { label: 'Longitude', field: 'long', placeholder: 'e.g. -111.8910' }
+                          ].map(cell => (
+                            <div key={cell.field}>
+                              <label style={{
+                                display: 'block',
+                                fontSize: '12px',
+                                fontWeight: '700',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.5px',
+                                marginBottom: '8px',
+                                color: 'rgba(255,255,255,0.7)'
+                              }}>
+                                {cell.label}
+                              </label>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={coord[cell.field]}
+                                onChange={(e) => updateGpsCoordinate(idx, cell.field, e.target.value)}
+                                placeholder={cell.placeholder}
+                                style={{
+                                  width: '100%',
+                                  padding: '12px 16px',
+                                  background: 'rgba(39, 42, 47, 0.6)',
+                                  border: '2px solid rgba(255,255,255,0.15)',
+                                  borderRadius: '8px',
+                                  color: '#fff',
+                                  fontSize: '16px',
+                                  fontWeight: '500',
+                                  outline: 'none',
+                                  transition: 'all 0.3s ease'
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.border = '2px solid #56d3cc';
+                                  e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                                }}
+                                onBlur={(e) => {
+                                  e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                                  e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Section 3: Security Schedule */}
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '16px',
+                padding: '32px'
+              }}>
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  marginBottom: '8px',
+                  color: '#56d3cc'
+                }}>
+                  Security Schedule
+                </h3>
+                <p style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.6)',
+                  marginBottom: '24px',
+                  lineHeight: '1.6'
+                }}>
+                  Set the window during which the unit should be armed. You can set separate hours for weekdays and weekends.
+                </p>
+
+                {[
+                  { label: 'Weekdays', arm: 'weekdayArm', disarm: 'weekdayDisarm' },
+                  { label: 'Weekends', arm: 'weekendArm', disarm: 'weekendDisarm' }
+                ].map(row => (
+                  <div key={row.label} style={{ marginBottom: '24px' }}>
+                    <div style={{
+                      fontSize: '13px',
+                      fontWeight: '800',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                      marginBottom: '12px',
+                      color: '#fff'
+                    }}>
+                      {row.label}
+                    </div>
+                    <div
+                      className="contact-grid"
+                      style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}
+                    >
+                      {[
+                        { label: 'Armed From', field: row.arm },
+                        { label: 'Armed Until', field: row.disarm }
+                      ].map(cell => (
+                        <div key={cell.field}>
+                          <label style={{
+                            display: 'block',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px',
+                            marginBottom: '8px',
+                            color: 'rgba(255,255,255,0.7)'
+                          }}>
+                            {cell.label}
+                          </label>
+                          <input
+                            type="time"
+                            value={config.siteConfig.securitySchedule[cell.field]}
+                            onChange={(e) => updateSecuritySchedule(cell.field, e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '12px 16px',
+                              background: 'rgba(39, 42, 47, 0.6)',
+                              border: '2px solid rgba(255,255,255,0.15)',
+                              borderRadius: '8px',
+                              color: '#fff',
+                              fontSize: '16px',
+                              fontWeight: '500',
+                              outline: 'none',
+                              transition: 'all 0.3s ease',
+                              colorScheme: 'dark'
+                            }}
+                            onFocus={(e) => {
+                              e.target.style.border = '2px solid #56d3cc';
+                              e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                            }}
+                            onBlur={(e) => {
+                              e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                              e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Section 4: Deterrence */}
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '16px',
+                padding: '32px'
+              }}>
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  marginBottom: '8px',
+                  color: '#56d3cc'
+                }}>
+                  Deterrence
+                </h3>
+                <p style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.6)',
+                  marginBottom: '24px',
+                  lineHeight: '1.6'
+                }}>
+                  Choose how the unit actively deters intruders. These settings are optional and can be adjusted after deployment.
+                </p>
+
+                {/* Strobes */}
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{
+                    fontSize: '13px',
+                    fontWeight: '800',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    marginBottom: '12px',
+                    color: '#fff'
+                  }}>
+                    Strobes
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                    {[
+                      { value: '24-7', label: 'Strobes 24/7' },
+                      { value: 'night', label: 'Strobes Night' },
+                      { value: 'off', label: 'Strobes Off' }
+                    ].map(opt => {
+                      const active = config.siteConfig.deterrence.strobes === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          onClick={() => updateDeterrence('strobes', opt.value)}
+                          style={{
+                            padding: '12px 24px',
+                            background: active ? '#56d3cc' : 'rgba(39, 42, 47, 0.6)',
+                            color: active ? '#1b1e23' : '#fff',
+                            border: active ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.15)',
+                            borderRadius: '8px',
+                            fontSize: '14px',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease'
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Floodlight & Audio ON/OFF toggles */}
+                {[
+                  { label: 'Floodlight', field: 'floodlight' },
+                  { label: 'Audio Deterrence', field: 'audio' }
+                ].map(toggle => (
+                  <div key={toggle.field} style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '16px 0',
+                    borderTop: '1px solid rgba(255,255,255,0.08)'
+                  }}>
+                    <div style={{
+                      fontSize: '15px',
+                      fontWeight: '700',
+                      color: '#fff'
+                    }}>
+                      {toggle.label}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {[
+                        { value: true, label: 'On' },
+                        { value: false, label: 'Off' }
+                      ].map(opt => {
+                        const active = config.siteConfig.deterrence[toggle.field] === opt.value;
+                        return (
+                          <button
+                            key={opt.label}
+                            onClick={() => updateDeterrence(toggle.field, opt.value)}
+                            style={{
+                              padding: '10px 24px',
+                              background: active ? '#56d3cc' : 'rgba(39, 42, 47, 0.6)',
+                              color: active ? '#1b1e23' : '#fff',
+                              border: active ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.15)',
+                              borderRadius: '8px',
+                              fontSize: '14px',
+                              fontWeight: '700',
+                              cursor: 'pointer',
+                              transition: 'all 0.3s ease'
+                            }}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Section 5: Areas of Concern */}
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '16px',
+                padding: '32px'
+              }}>
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  marginBottom: '8px',
+                  color: '#56d3cc'
+                }}>
+                  Areas of Concern
+                </h3>
+                <p style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.6)',
+                  marginBottom: '24px',
+                  lineHeight: '1.6'
+                }}>
+                  Tell us about any specific concerns for this site — problem areas, prior incidents, blind spots, or anything else we should know.
+                </p>
+                <textarea
+                  value={config.siteConfig.areasOfConcern}
+                  onChange={(e) => updateSiteConfig('areasOfConcern', e.target.value)}
+                  placeholder="e.g. Recurring theft near the north loading dock after hours; poor lighting along the east fence line..."
+                  rows={5}
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
+                    background: 'rgba(39, 42, 47, 0.6)',
+                    border: '2px solid rgba(255,255,255,0.15)',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    fontSize: '16px',
+                    fontWeight: '500',
+                    fontFamily: 'inherit',
+                    lineHeight: '1.6',
+                    outline: 'none',
+                    resize: 'vertical',
+                    transition: 'all 0.3s ease'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.border = '2px solid #56d3cc';
+                    e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                    e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Step 6: Review */}
+        {currentStep === 6 && (
           <div>
             <h2 style={{
               fontWeight: '700',
@@ -2499,8 +3245,89 @@ function LVTConfigurator() {
                     </p>
                   </div>
                 )}
+
+                {/* Site Configuration */}
+                {(() => {
+                  const sc = config.siteConfig;
+                  const strobeLabel = { '24-7': '24/7', night: 'Night', off: 'Off' }[sc.deterrence.strobes];
+                  const hasSchedule = sc.securitySchedule.weekdayArm || sc.securitySchedule.weekdayDisarm ||
+                    sc.securitySchedule.weekendArm || sc.securitySchedule.weekendDisarm;
+                  const filledGps = gpsUnitList
+                    .map((u, i) => ({ u, c: sc.gpsCoordinates[i] || { lat: '', long: '' }, i }))
+                    .filter(entry => entry.c.lat || entry.c.long);
+                  const hasConfig = sc.placementMapName || filledGps.length > 0 || hasSchedule ||
+                    sc.deterrence.strobes !== 'off' || sc.deterrence.floodlight || sc.deterrence.audio ||
+                    sc.areasOfConcern;
+                  if (!hasConfig) return null;
+                  const rowStyle = {
+                    fontSize: '15px',
+                    fontWeight: '600',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '16px',
+                    marginBottom: '8px'
+                  };
+                  const fmtWindow = (arm, disarm) => (arm || disarm) ? `${arm || '—'} to ${disarm || '—'}` : 'Not set';
+                  return (
+                    <div>
+                      <div style={{
+                        fontSize: '11px',
+                        textTransform: 'uppercase',
+                        color: 'rgba(255,255,255,0.5)',
+                        letterSpacing: '1px',
+                        marginBottom: '10px',
+                        fontWeight: '600'
+                      }}>
+                        Site Configuration
+                      </div>
+                      {sc.placementMapName && (
+                        <div style={rowStyle}>
+                          <span>Placement Map</span>
+                          <span style={{ color: '#56d3cc', wordBreak: 'break-all', textAlign: 'right' }}>{sc.placementMapName}</span>
+                        </div>
+                      )}
+                      {filledGps.length > 0 && filledGps.map(entry => (
+                        <div key={entry.i} style={rowStyle}>
+                          <span>Unit {entry.i + 1} GPS</span>
+                          <span style={{ color: '#56d3cc', textAlign: 'right' }}>{entry.c.lat || '—'}, {entry.c.long || '—'}</span>
+                        </div>
+                      ))}
+                      {hasSchedule && (
+                        <React.Fragment>
+                          <div style={rowStyle}>
+                            <span>Armed (Weekdays)</span>
+                            <span style={{ color: '#56d3cc' }}>{fmtWindow(sc.securitySchedule.weekdayArm, sc.securitySchedule.weekdayDisarm)}</span>
+                          </div>
+                          <div style={rowStyle}>
+                            <span>Armed (Weekends)</span>
+                            <span style={{ color: '#56d3cc' }}>{fmtWindow(sc.securitySchedule.weekendArm, sc.securitySchedule.weekendDisarm)}</span>
+                          </div>
+                        </React.Fragment>
+                      )}
+                      <div style={rowStyle}>
+                        <span>Strobes</span>
+                        <span style={{ color: '#56d3cc' }}>{strobeLabel}</span>
+                      </div>
+                      <div style={rowStyle}>
+                        <span>Floodlight</span>
+                        <span style={{ color: '#56d3cc' }}>{sc.deterrence.floodlight ? 'On' : 'Off'}</span>
+                      </div>
+                      <div style={rowStyle}>
+                        <span>Audio Deterrence</span>
+                        <span style={{ color: '#56d3cc' }}>{sc.deterrence.audio ? 'On' : 'Off'}</span>
+                      </div>
+                      {sc.areasOfConcern && (
+                        <div style={{ marginTop: '12px' }}>
+                          <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>Areas of Concern</div>
+                          <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{sc.areasOfConcern}</div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
-              
+
               <div
                 className="review-summary-card"
                 style={{
@@ -2552,7 +3379,21 @@ function LVTConfigurator() {
                 }}>
                   ${calculateContractTotal().toLocaleString()} total contract
                 </div>
-                
+
+                {/* The figures above are computed from this page's own rate table, not
+                    from the LVT price book that the formal quote is built against. The
+                    two do not currently agree, so saying so here is the honest option. */}
+                <div style={{
+                  fontSize: '12px',
+                  lineHeight: '1.5',
+                  color: 'rgba(255,255,255,0.55)',
+                  marginBottom: '24px',
+                  marginTop: '-16px'
+                }}>
+                  Estimate only, not a binding quote. Your formal quote is priced from
+                  the current LVT price book and may differ from the figures shown.
+                </div>
+
                 <button
                   disabled={isSubmitting}
                   style={{
@@ -2592,7 +3433,35 @@ function LVTConfigurator() {
                     
                     const monthlyTotal = Math.round(calculateMonthlyTotal());
                     const contractTotal = calculateContractTotal();
-                    
+
+                    // One id shared by the webhook payload and the Hermes contract, so
+                    // an order can be traced across both. Hermes upserts the
+                    // Opportunity on this value, which is what makes a resubmission
+                    // idempotent rather than duplicating the order.
+                    const orderId = `LVT-${Date.now()}`;
+                    const hermesPayload = buildHermesPayload(orderId);
+
+                    // For the demo the script is run locally against the sandbox, so
+                    // the payload needs to reach a file. Logging it as well makes a
+                    // rejected order diagnosable without re-submitting.
+                    console.log('[hermes] order contract:', hermesPayload);
+                    const downloadHermesPayload = () => {
+                      try {
+                        const blob = new Blob([JSON.stringify(hermesPayload, null, 2)],
+                                              { type: 'application/json' });
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(blob);
+                        link.download = `${orderId}.json`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(link.href);
+                      } catch (downloadError) {
+                        // A blocked download must not make a submitted order look failed.
+                        console.error('[hermes] payload download failed:', downloadError);
+                      }
+                    };
+
                     const resolvedShippingAddresses = config.contactInfo.shippingAddresses.map(address => {
                       const source = address.sameAsBilling
                         ? config.contactInfo.billingAddress
@@ -2616,8 +3485,13 @@ function LVTConfigurator() {
                     const orderData = {
                       // Order Info
                       timestamp: new Date().toISOString(),
-                      orderId: `LVT-${Date.now()}`,
-                      
+                      orderId,
+
+                      // The deterministic contract consumed by hermes/. Kept as a
+                      // nested object rather than flattened so the script can be fed
+                      // it verbatim.
+                      hermes: hermesPayload,
+
                       // Configuration Summary
                       unitCount: totalUnits,
                       baseMonthlyTotal,
@@ -2650,10 +3524,29 @@ function LVTConfigurator() {
                       nightVision: config.nightVision ? 'Yes' : 'No',
                       
                       // Software Packages
-                      softwarePackages: config.softwarePackages.length > 0 
-                        ? config.softwarePackages.join(', ') 
+                      softwarePackages: config.softwarePackages.length > 0
+                        ? config.softwarePackages.join(', ')
                         : 'None',
-                      
+
+                      // Site Configuration
+                      placementMap: config.siteConfig.placementMapName || 'Not provided',
+                      gpsCoordinates: gpsUnitList.length > 0
+                        ? gpsUnitList.map((u, i) => {
+                            const c = config.siteConfig.gpsCoordinates[i] || { lat: '', long: '' };
+                            return `Unit ${i + 1} (${u.typeName}${u.zip ? `, Zip ${u.zip}` : ''}): ${c.lat || '—'}, ${c.long || '—'}`;
+                          }).join(' | ')
+                        : 'None',
+                      scheduleWeekday: (config.siteConfig.securitySchedule.weekdayArm || config.siteConfig.securitySchedule.weekdayDisarm)
+                        ? `${config.siteConfig.securitySchedule.weekdayArm || '—'} to ${config.siteConfig.securitySchedule.weekdayDisarm || '—'}`
+                        : 'Not set',
+                      scheduleWeekend: (config.siteConfig.securitySchedule.weekendArm || config.siteConfig.securitySchedule.weekendDisarm)
+                        ? `${config.siteConfig.securitySchedule.weekendArm || '—'} to ${config.siteConfig.securitySchedule.weekendDisarm || '—'}`
+                        : 'Not set',
+                      deterrenceStrobes: { '24-7': '24/7', night: 'Night', off: 'Off' }[config.siteConfig.deterrence.strobes],
+                      deterrenceFloodlight: config.siteConfig.deterrence.floodlight ? 'On' : 'Off',
+                      deterrenceAudio: config.siteConfig.deterrence.audio ? 'On' : 'Off',
+                      areasOfConcern: config.siteConfig.areasOfConcern || 'None provided',
+
                       // Lease Details
                       leaseTerm: config.leaseTerm + ' months',
                       monthlyPayment: monthlyTotal,
@@ -2707,7 +3600,8 @@ function LVTConfigurator() {
                         const verificationNote = verified
                           ? ''
                           : '\n\nNote: The request was sent, but the browser could not verify a response due to cross-origin restrictions.';
-                        alert(`Thank you for your lease request!\n\n${totalUnits} Security ${totalUnits === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${verificationNote}`);
+                        downloadHermesPayload();
+                        alert(`Thank you for your lease request!\n\n${totalUnits} Security ${totalUnits === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nEstimated Monthly: $${monthlyTotal.toLocaleString()}\nEstimated Contract Total: $${contractTotal.toLocaleString()}\n\nFigures shown are a non-binding estimate. Your formal quote is priced from the current LVT price book and may differ.\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${verificationNote}`);
                         
                         // Optional: Reset form or redirect
                         // setCurrentStep(0);
@@ -2721,7 +3615,103 @@ function LVTConfigurator() {
                 >
                   {isSubmitting ? 'Submitting...' : 'Request Demo'}
                 </button>
-                
+
+                {/* Placing an order writes real records downstream, so it is a distinct
+                    action from the demo enquiry above and never fires on a single click. */}
+                <button
+                  disabled={isPlacingOrder || !!placedOrderId}
+                  onClick={() => setShowOrderConfirm(true)}
+                  style={{
+                    width: '100%',
+                    padding: '18px',
+                    background: 'transparent',
+                    color: placedOrderId ? 'rgba(255,255,255,0.4)' : '#56d3cc',
+                    border: `2px solid ${placedOrderId ? 'rgba(255,255,255,0.15)' : '#56d3cc'}`,
+                    borderRadius: '10px',
+                    fontSize: '16px',
+                    fontWeight: '800',
+                    cursor: (isPlacingOrder || placedOrderId) ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.3s ease',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    marginBottom: '16px'
+                  }}
+                  onMouseOver={(e) => {
+                    if (!isPlacingOrder && !placedOrderId) {
+                      e.currentTarget.style.background = 'rgba(86, 211, 204, 0.12)';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  {placedOrderId ? 'Order Submitted' : 'Submit Order'}
+                </button>
+
+                {placedOrderId && (
+                  <div style={{
+                    fontSize: '13px',
+                    lineHeight: '1.6',
+                    color: '#56d3cc',
+                    textAlign: 'center',
+                    marginBottom: '16px'
+                  }}>
+                    Order <strong>{placedOrderId}</strong> submitted.
+                    {orderResult && orderResult.quote_name && (
+                      <>
+                        <br />
+                        Quote <strong>{orderResult.quote_name}</strong>
+                        {typeof orderResult.quote_net_amount === 'number' && (
+                          <> — ${orderResult.quote_net_amount.toLocaleString()}</>
+                        )}
+                        {orderResult.already_existed && <> (existing order updated)</>}
+                      </>
+                    )}
+                    {orderResult && orderResult.primary_contact && (
+                      <>
+                        <br />
+                        Primary contact <strong>{orderResult.primary_contact}</strong>
+                        {orderResult.primary_contact_created && <> (new contact created)</>}
+                      </>
+                    )}
+                    {orderResult && orderResult.account_name && (
+                      <>
+                        <br />
+                        Account <strong>{orderResult.account_name}</strong>
+                        {orderResult.provisioned
+                          && orderResult.provisioned.billing_account_created
+                          && <> (new account created)</>}
+                      </>
+                    )}
+                    {orderResult && orderResult.provisioned
+                      && orderResult.provisioned.needs_vms_reconciliation && (
+                      <div style={{
+                        color: '#e0b341',
+                        fontSize: '12px',
+                        marginTop: '8px',
+                        textAlign: 'left'
+                      }}>
+                        This account was created from the portal. Its LVT identifiers were
+                        generated here and are not yet known to VMS, so it needs
+                        reconciling with the customer's real VMS record.
+                      </div>
+                    )}
+                    {orderResult && orderResult.dry_run && (
+                      <><br />Dry run — validated and resolved, nothing written.</>
+                    )}
+                    {orderResult && (orderResult.warnings || []).map((warning, idx) => (
+                      <div key={idx} style={{
+                        color: '#e0b341',
+                        fontSize: '12px',
+                        marginTop: '8px',
+                        textAlign: 'left'
+                      }}>
+                        {warning}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div style={{
                   fontSize: '12px',
                   color: 'rgba(255,255,255,0.6)',
@@ -2774,7 +3764,7 @@ function LVTConfigurator() {
             ← Back
           </button>
           
-          {currentStep < 5 ? (
+          {currentStep < 6 ? (
             <button
               onClick={() => {
                 if (currentStep === 0 && canProceed()) {
@@ -2844,7 +3834,7 @@ function LVTConfigurator() {
       </main>
 
       {/* Floating Price Summary */}
-      {currentStep > 0 && currentStep < 5 && (
+      {currentStep > 0 && currentStep < 6 && (
         <div style={{
           position: 'fixed',
           top: '140px',
@@ -2865,7 +3855,7 @@ function LVTConfigurator() {
             letterSpacing: '0.5px',
             fontWeight: '600'
           }}>
-            {config.leaseTerm ? `Monthly (${config.leaseTerm} mo. lease)` : 'Estimated Monthly'}
+            {config.leaseTerm ? `Est. monthly (${config.leaseTerm} mo. lease)` : 'Estimated Monthly'}
           </div>
           <div style={{
             fontSize: '32px',
@@ -2881,9 +3871,120 @@ function LVTConfigurator() {
               color: 'rgba(255,255,255,0.6)',
               marginTop: '8px'
             }}>
-              ${calculateContractTotal().toLocaleString()} total
+              ${calculateContractTotal().toLocaleString()} est. total
             </div>
           )}
+        </div>
+      )}
+
+      {/* Order confirmation. Rendered at the component root so it overlays everything
+          regardless of which step is showing. */}
+      {showOrderConfirm && (
+        <div
+          role="presentation"
+          onClick={() => !isPlacingOrder && setShowOrderConfirm(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            zIndex: 1000
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="order-confirm-title"
+            // Stop clicks inside the dialog from reaching the backdrop's dismiss handler.
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#1b1e23',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: '14px',
+              padding: '32px',
+              maxWidth: '440px',
+              width: '100%',
+              boxShadow: '0 24px 64px rgba(0,0,0,0.5)'
+            }}
+          >
+            <h3
+              id="order-confirm-title"
+              style={{
+                margin: '0 0 12px',
+                fontSize: '22px',
+                fontWeight: '800',
+                color: '#fff'
+              }}
+            >
+              Submit this order?
+            </h3>
+
+            <p style={{
+              margin: '0 0 28px',
+              fontSize: '14px',
+              lineHeight: '1.6',
+              color: 'rgba(255,255,255,0.7)'
+            }}>
+              {totalUnits} {totalUnits === 1 ? 'unit' : 'units'}
+              {config.leaseTerm ? ` on a ${config.leaseTerm} month lease` : ''}. Pricing is
+              confirmed on your formal quote and may differ from the estimate shown.
+            </p>
+
+            {orderError && (
+              <div style={{
+                fontSize: '13px',
+                lineHeight: '1.5',
+                color: '#ff8a8a',
+                background: 'rgba(255, 90, 90, 0.1)',
+                border: '1px solid rgba(255, 90, 90, 0.3)',
+                borderRadius: '8px',
+                padding: '12px 14px',
+                marginBottom: '20px'
+              }}>
+                {orderError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => setShowOrderConfirm(false)}
+                disabled={isPlacingOrder}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  background: 'transparent',
+                  color: 'rgba(255,255,255,0.8)',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '10px',
+                  fontSize: '14px',
+                  fontWeight: '700',
+                  cursor: isPlacingOrder ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitOrder}
+                disabled={isPlacingOrder}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  background: isPlacingOrder ? 'rgba(86, 211, 204, 0.5)' : '#56d3cc',
+                  color: '#1b1e23',
+                  border: 'none',
+                  borderRadius: '10px',
+                  fontSize: '14px',
+                  fontWeight: '800',
+                  cursor: isPlacingOrder ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {isPlacingOrder ? 'Submitting...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
