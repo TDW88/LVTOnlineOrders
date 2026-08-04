@@ -116,106 +116,48 @@ const UNIT_TYPES = [
 // `ndaa: true` packages are offered to everyone; `ndaa: false` packages are
 // added to the list only when the customer does NOT require NDAA compliance.
 const CAMERA_OPTIONS = [
+  // NDAA-compliant: the two best-selling Axis configurations (sales ranks 4 and 5).
+  // Both are near/mid range, so there is no range ladder on the NDAA side — the
+  // choice is whether the center position is a PTZ or a 360-Deg panoramic.
   {
-    sku: 'A-IR-PTZ- Base-Axis, NDAA',
-    label: 'Analytics PTZ Camera (Left/Right/Center)',
-    capability: '(C) IR PTZ, 58-Deg FOV, NDAA',
+    name: 'Analytics PTZ (All Positions)',
+    sku: 'NR/MR A-IR-PTZ (L,R,C), NDAA',
+    label: 'Near/Mid-Range PTZ (Left/Right/Center)',
+    coverage: 'PTZ detection to ~300 ft on all three positions',
+    capability: '(L,R,C) IR PTZ, up to 300ft Human at widest, 58-Deg FOV, NDAA',
     ndaa: true
   },
   {
-    sku: 'LR Fixed Thermal (L,R), A-IR-PTZ (C), NDAA',
-    label: 'Long-Range Thermal (Left/Right) + PTZ Camera (Center)',
-    capability: '(L,R) Fixed Thermal, up to 1200ft Human, 10-Deg FOV; (C) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; NDAA',
-    ndaa: true
-  },
-  {
-    sku: 'NR Fixed Thermal (L,R), A-IR-PTZ (C), NDAA',
-    label: 'Near-Range Thermal (Left/Right) + PTZ Camera (Center)',
-    capability: '(L,R) Fixed Thermal, up to 300ft, 55-Deg FOV; (C) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; NDAA',
-    ndaa: true
-  },
-  {
-    sku: 'NR/MR A-IR PTZ (L,R), LR Fixed thermal (C), NDAA',
-    label: 'Near/Mid-Range PTZ (Left/Right) + Long-Range Thermal (Center)',
-    capability: '(L,R) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; (C) Fixed Thermal, up to 1200ft Human, 10-Deg FOV; NDAA',
-    ndaa: true
-  },
-  {
-    sku: 'NR/MR A-IR-PTZ (L), NR-Fixed Thermal (R), IR Fisheye w/Analytics (C) NDAA',
-    label: 'Near/Mid-Range PTZ (Left), Near-Range Thermal (Right), Panoramic w/ Analytics (Center)',
-    capability: '(L) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; (R) Fixed Thermal, up to 300ft Human, 55-Deg FOV; (C) IR Fisheye, up to 50ft Human, 360-Deg FOV; NDAA',
-    ndaa: true
-  },
-  {
+    name: 'Analytics PTZ + Panoramic',
     sku: 'NR/MR A-IR-PTZ (L,R), IR Fisheye w/Analytics (C), NDAA',
     label: 'Near/Mid-Range PTZ (Left/Right) + Panoramic w/ Analytics (Center)',
+    coverage: 'PTZ to ~300 ft on left/right, plus 360-Deg panoramic center',
     capability: '(L,R) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; (C) IR Fisheye, up to 50ft Human, 360-Deg FOV; NDAA',
     ndaa: true
   },
+  // Non-NDAA: one architecture across three range tiers — bispectral PTZ on
+  // left/right plus panoramic with analytics in the center.
   {
-    sku: 'NR/MR A-IR-PTZ (L,R), LR-Fixed Thermal (C), NDAA',
-    label: 'Near/Mid-Range PTZ (Left/Right) + Long-Range Thermal (Center)',
-    capability: '(L,R) IR PTZ, up to 300ft Human at widest, 58-Deg FOV; (C) Fixed Thermal, up to 1200ft Human, 10-Deg FOV; NDAA',
-    ndaa: true
-  },
-  // Non-NDAA packages
-  {
-    sku: 'NR BIS (L,R,C)',
-    label: 'Near-Range Thermal + Optical (Left/Right/Center)',
-    capability: null,
-    ndaa: false
-  },
-  {
-    sku: 'NR BIS (L,R), LR-Fixed Thermal (C)',
-    label: 'Near-Range Thermal + Optical (Left/Right) + Long-Range Thermal (Center)',
-    capability: '(L,R) Thermal, Bispectral PTZ, up to 300ft Human, 60-Deg FOV; (C) Fixed Thermal, up to 1200ft Human, 10-Deg FOV',
-    ndaa: false
-  },
-  {
-    sku: 'NR BIS (L,R), LR BIS (C)',
-    label: 'Near-Range Thermal + Optical (Left/Right) + Long-Range Thermal + Optical (Center)',
-    capability: '(L,R) Thermal, Bispectral PTZ, up to 300ft Human, 60-Deg FOV; (C) Thermal, Bispectral PTZ, up to 1200ft Human, 10-Deg FOV',
-    ndaa: false
-  },
-  {
+    name: 'Near Range',
     sku: 'NR BIS (L,R), IR Fisheye w/Analytics (C)',
     label: 'Near-Range Thermal + Optical (Left/Right) + Panoramic w/ Analytics (Center)',
+    coverage: 'Detection to ~300 ft, plus 360-Deg panoramic',
     capability: '(L,R) Thermal, Bispectral PTZ, up to 300ft Human, 60-Deg FOV; (C) IR Fisheye, up to 50ft Human, 360-Deg FOV',
     ndaa: false
   },
   {
-    sku: 'NR BIS (L,R), IR Fisheye (C)',
-    label: 'Near-Range Thermal + Optical (Left/Right) + Panoramic (Center)',
-    capability: '(L,R) Thermal, Bispectral PTZ, up to 300ft Human, 60-Deg FOV; (C) IR Fisheye, No Analytics, 360-Deg FOV',
-    ndaa: false
-  },
-  {
-    sku: 'MR BIS Thermal (L,R,C)',
-    label: 'Mid-Range Thermal + Optical (Left/Right/Center)',
-    capability: '(L,R,C) Thermal, Bispectral PTZ, up to 400ft Human, 37-Deg FOV',
-    ndaa: false
-  },
-  {
+    name: 'Mid Range',
     sku: 'MR BIS (L,R), IR Fisheye w/Analytics (C)',
     label: 'Mid-Range Thermal + Optical (Left/Right) + Panoramic w/ Analytics (Center)',
+    coverage: 'Detection to ~400 ft, plus 360-Deg panoramic',
     capability: '(L,R) Thermal, Bispectral PTZ, up to 400ft Human, 37-Deg FOV; (C) IR Fisheye, up to 50ft Human, 360-Deg FOV',
     ndaa: false
   },
   {
-    sku: 'MR BIS (L,R), IR Fisheye (C)',
-    label: 'Mid-Range Thermal + Optical (Left/Right) + Panoramic (Center)',
-    capability: '(L,R) Thermal, Bispectral PTZ, up to 400ft Human, 37-Deg FOV; (C) IR Fisheye, No Analytics, 360-Deg FOV',
-    ndaa: false
-  },
-  {
-    sku: 'LR BIS (L,R), NR BIS (C)',
-    label: 'Long-Range Thermal + Optical (Left/Right) + Near-Range Thermal + Optical (Center)',
-    capability: '(L,R) Thermal Bispectral PTZ, up to 1200ft Human, 10-Deg FOV; (C) Thermal Bispectral PTZ, up to 300ft Human, 60-Deg FOV',
-    ndaa: false
-  },
-  {
+    name: 'Long Range',
     sku: 'LR BIS (L,R), IR Fisheye w/Analytics (C)',
     label: 'Long-Range Thermal + Optical (Left/Right) + Panoramic w/ Analytics (Center)',
+    coverage: 'Detection to ~1200 ft, plus 360-Deg panoramic',
     capability: '(L,R) Thermal Bispectral PTZ, up to 1200ft Human, 10-Deg FOV; (C) IR Fisheye, up to 50ft Human, 360-Deg FOV',
     ndaa: false
   }
@@ -761,11 +703,13 @@ function LVTConfigurator() {
   const updateCameraConfig = (field, value) => {
     setConfig(prev => {
       const next = { ...prev.cameraConfig, [field]: value };
-      // Requiring NDAA invalidates any non-compliant default or override
-      if (field === 'ndaaRequired' && value === 'yes') {
-        if (next.sku && !isNdaaCompliantSku(next.sku)) next.sku = null;
+      // Each mode has its own packages, so changing the answer invalidates any
+      // default or override belonging to the other mode
+      if (field === 'ndaaRequired' && value !== null) {
+        const wantNdaa = value === 'yes';
+        if (next.sku && isNdaaCompliantSku(next.sku) !== wantNdaa) next.sku = null;
         next.overrides = Object.fromEntries(
-          Object.entries(next.overrides).filter(([, sku]) => isNdaaCompliantSku(sku))
+          Object.entries(next.overrides).filter(([, sku]) => isNdaaCompliantSku(sku) === wantNdaa)
         );
       }
       return { ...prev, cameraConfig: next };
@@ -1014,9 +958,10 @@ function LVTConfigurator() {
 
   // Camera packages offered for the current NDAA answer. Requiring NDAA narrows
   // the list to compliant packages; not requiring it offers everything.
-  const availableCameras = config.cameraConfig.ndaaRequired === 'yes'
-    ? CAMERA_OPTIONS.filter(option => option.ndaa)
-    : CAMERA_OPTIONS;
+  // Each compliance mode offers exactly one package per range tier
+  const availableCameras = config.cameraConfig.ndaaRequired === null
+    ? []
+    : CAMERA_OPTIONS.filter(option => option.ndaa === (config.cameraConfig.ndaaRequired === 'yes'));
   const selectedCamera = CAMERA_OPTIONS.find(option => option.sku === config.cameraConfig.sku) || null;
 
   // One row per physical unit, for per-unit camera overrides. `key` is stable
@@ -1161,6 +1106,7 @@ function LVTConfigurator() {
           : config.cameraConfig.ndaaRequired === 'yes',
         // The default package applied to every unit without an override
         defaultSku: selectedCamera ? selectedCamera.sku : null,
+        defaultOptionName: selectedCamera ? selectedCamera.name : null,
         defaultLabel: selectedCamera ? selectedCamera.label : null,
         defaultCapability: selectedCamera ? selectedCamera.capability : null,
         // True when units do not all resolve to the same package
@@ -1175,6 +1121,7 @@ function LVTConfigurator() {
             zipCode: u.zipCode,
             unitTypeName: u.unitTypeName,
             sku: sku || null,
+            optionName: option ? option.name : null,
             label: option ? option.label : null,
             ndaaCompliantPackage: option ? option.ndaa : null,
             isOverride: !!config.cameraConfig.overrides[u.key]
@@ -1343,6 +1290,7 @@ function LVTConfigurator() {
       cameraSku: model.cameras.mixed ? 'Mixed' : (model.cameras.defaultSku || 'Not selected'),
       cameraDescriptor: model.cameras.mixed ? 'Mixed — see cameraSkusByUnit' : (model.cameras.defaultLabel || 'Not selected'),
       cameraDefaultSku: model.cameras.defaultSku || 'Not selected',
+      cameraOptionName: model.cameras.mixed ? 'Mixed' : (model.cameras.defaultOptionName || 'Not selected'),
       cameraOverriddenUnits: model.cameras.overriddenUnitCount,
       cameraSkusByUnit: model.cameras.perUnit.map(u => ({
         unit: u.unitNumber,
@@ -1350,6 +1298,7 @@ function LVTConfigurator() {
         zipCode: u.zipCode,
         unitType: u.unitTypeName,
         sku: u.sku || 'Not selected',
+        optionName: u.optionName || 'Not selected',
         descriptor: u.label || 'Not selected',
         isOverride: yn(u.isOverride)
       })),
@@ -2066,8 +2015,8 @@ function LVTConfigurator() {
                     lineHeight: '1.6'
                   }}>
                     {config.cameraConfig.ndaaRequired === 'yes'
-                      ? `Showing the ${availableCameras.length} NDAA-compliant packages. Positions are Left, Right, and Center on the camera mast.`
-                      : `Showing all ${availableCameras.length} packages. Positions are Left, Right, and Center on the camera mast.`}
+                      ? 'Our two most-requested NDAA configurations. Both cover near/mid range — choose whether the center position is a PTZ or a 360-Deg panoramic. Positions are Left, Right, and Center on the camera mast.'
+                      : 'Choose the detection range you need. Positions are Left, Right, and Center on the camera mast.'}
                   </p>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -2103,9 +2052,27 @@ function LVTConfigurator() {
                           }}></div>
                           <div style={{ flex: 1 }}>
                             <div style={{
-                              fontSize: '15px',
-                              fontWeight: '700',
-                              color: '#fff',
+                              fontSize: '17px',
+                              fontWeight: '800',
+                              color: active ? '#56d3cc' : '#fff',
+                              lineHeight: '1.3',
+                              marginBottom: '2px'
+                            }}>
+                              {option.name}
+                            </div>
+                            {option.coverage && (
+                              <div style={{
+                                fontSize: '13px',
+                                fontWeight: '600',
+                                color: 'rgba(255,255,255,0.75)',
+                                marginBottom: '6px'
+                              }}>
+                                {option.coverage}
+                              </div>
+                            )}
+                            <div style={{
+                              fontSize: '13px',
+                              color: 'rgba(255,255,255,0.6)',
                               lineHeight: '1.4',
                               marginBottom: option.capability ? '6px' : '0'
                             }}>
@@ -2113,8 +2080,8 @@ function LVTConfigurator() {
                             </div>
                             {option.capability && (
                               <div style={{
-                                fontSize: '12px',
-                                color: 'rgba(255,255,255,0.55)',
+                                fontSize: '11px',
+                                color: 'rgba(255,255,255,0.45)',
                                 lineHeight: '1.5'
                               }}>
                                 {option.capability}
@@ -2235,9 +2202,9 @@ function LVTConfigurator() {
                               cursor: 'pointer'
                             }}
                           >
-                            <option value="">Same as default — {selectedCamera ? selectedCamera.label : ''}</option>
+                            <option value="">Same as default — {selectedCamera ? selectedCamera.name : ''}</option>
                             {availableCameras.map(option => (
-                              <option key={option.sku} value={option.sku}>{option.label}</option>
+                              <option key={option.sku} value={option.sku}>{option.name} · {option.coverage}</option>
                             ))}
                           </select>
                         </div>
@@ -4398,7 +4365,7 @@ function LVTConfigurator() {
                       gap: '16px'
                     }}>
                       <span>
-                        {totalUnits - overriddenUnitCount} × {selectedCamera.label}
+                        {totalUnits - overriddenUnitCount} × {selectedCamera.name} · {selectedCamera.label}
                         {overriddenUnitCount > 0 && (
                           <span style={{ color: 'rgba(255,255,255,0.5)', fontWeight: '500' }}> (default)</span>
                         )}
@@ -4422,7 +4389,7 @@ function LVTConfigurator() {
                             marginTop: '8px'
                           }}>
                             <span style={{ color: 'rgba(255,255,255,0.8)' }}>
-                              Unit {u.unitNumber} · {opt ? opt.label : '—'}
+                              Unit {u.unitNumber} · {opt ? `${opt.name} · ${opt.label}` : '—'}
                             </span>
                             <span style={{ color: '#56d3cc', whiteSpace: 'nowrap' }}>Included</span>
                           </div>
