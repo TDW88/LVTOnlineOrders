@@ -163,6 +163,40 @@ const CAMERA_OPTIONS = [
   }
 ];
 
+// Per-location intrusion detection / deterrence configuration
+const ANNOUNCEMENT_OPTIONS = [
+  { value: 'classical', label: 'Royalty free classical music' },
+  { value: 'safety-recorded', label: 'For your safety, area being recorded' },
+  { value: 'parking-recorded', label: 'Parking lot being recorded' }
+];
+
+const ANNOUNCEMENT_SCHEDULES = [
+  { value: 'security-hours', label: 'During security schedule hours' },
+  { value: 'off-hours', label: 'During off hours (opposite of security schedule)' },
+  { value: '24-7', label: '24/7' }
+];
+
+const DETECTION_RESPONSES = [
+  { field: 'intelligentDeterrence', label: 'Intelligent Deterrence' },
+  { field: 'strobe', label: 'Strobe Light' },
+  { field: 'floodlight', label: 'Flood Light' },
+  { field: 'audible', label: 'Trespassing audible' }
+];
+
+const makeLocationConfig = () => ({
+  intrusionDetection: null,   // 'yes' | 'no'
+  idleStrobe: null,           // 'on' | 'off' — asked either way
+  schedule: { armFrom: '06:00', armUntil: '18:00' },
+  specialDays: { allHolidays: false, writeInEnabled: false, writeIn: '' },
+  announcement: null,
+  announcementSchedule: null,
+  detect: { human: false, vehicle: false },
+  trigger: null,              // 'loiter' | 'immediate'
+  loiterSeconds: 30,
+  detectWhere: '',
+  response: { intelligentDeterrence: false, strobe: false, floodlight: false, audible: false }
+});
+
 function LVTConfigurator() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -227,17 +261,8 @@ function LVTConfigurator() {
           { name: '', email: '', phone: '' }
         ]
       },
-      securitySchedule: {
-        weekdayArm: '',
-        weekdayDisarm: '',
-        weekendArm: '',
-        weekendDisarm: ''
-      },
-      deterrence: {
-        strobes: 'off', // 'off' | 'night' | '24-7'
-        floodlight: false,
-        audio: false
-      },
+      // Keyed by location id — one analytics configuration per deployment location
+      locationConfigs: { 1: makeLocationConfig() },
       areasOfConcern: ''
     }
   });
@@ -779,30 +804,122 @@ function LVTConfigurator() {
     }));
   };
 
+  // Keep one analytics config per location as locations are added or removed
+  useEffect(() => {
+    setConfig(prev => {
+      const next = {};
+      let changed = false;
+      prev.locations.forEach(location => {
+        next[location.id] = prev.siteConfig.locationConfigs[location.id] || makeLocationConfig();
+        if (!prev.siteConfig.locationConfigs[location.id]) changed = true;
+      });
+      if (!changed && Object.keys(next).length === Object.keys(prev.siteConfig.locationConfigs).length) {
+        return prev;
+      }
+      return { ...prev, siteConfig: { ...prev.siteConfig, locationConfigs: next } };
+    });
+  }, [config.locations.map(l => l.id).join(',')]);
+
+  const getLocationConfig = (locationId) =>
+    config.siteConfig.locationConfigs[locationId] || makeLocationConfig();
+
+  // path is a dot path within the location config, e.g. 'schedule.armFrom'
+  const updateLocationConfig = (locationId, path, value) => {
+    setConfig(prev => {
+      const current = prev.siteConfig.locationConfigs[locationId] || makeLocationConfig();
+      const parts = path.split('.');
+      const updated = { ...current };
+      let cursor = updated;
+      for (let i = 0; i < parts.length - 1; i++) {
+        cursor[parts[i]] = { ...cursor[parts[i]] };
+        cursor = cursor[parts[i]];
+      }
+      cursor[parts[parts.length - 1]] = value;
+      return {
+        ...prev,
+        siteConfig: {
+          ...prev.siteConfig,
+          locationConfigs: { ...prev.siteConfig.locationConfigs, [locationId]: updated }
+        }
+      };
+    });
+  };
+
+  const copyLocationConfig = (fromLocationId, toLocationId) => {
+    setConfig(prev => {
+      const source = prev.siteConfig.locationConfigs[fromLocationId];
+      if (!source) return prev;
+      return {
+        ...prev,
+        siteConfig: {
+          ...prev.siteConfig,
+          locationConfigs: {
+            ...prev.siteConfig.locationConfigs,
+            [toLocationId]: JSON.parse(JSON.stringify(source))
+          }
+        }
+      };
+    });
+  };
+
+  // Alerting hours are capped by the ARS tier: Standard buys 12 hours of
+  // coverage a day, Expanded and Custom are unlimited.
+  const arsMaxAlertingMinutes = () => {
+    const { ars } = config.siteConfig;
+    if (ars.enabled === 'yes' && ars.tier === 'standard') return 12 * 60;
+    return null;
+  };
+
+  const scheduleMinutes = (schedule) => {
+    if (!schedule.armFrom || !schedule.armUntil) return null;
+    const toMin = (t) => {
+      const [h, m] = t.split(':').map(Number);
+      return h * 60 + m;
+    };
+    const diff = (toMin(schedule.armUntil) - toMin(schedule.armFrom) + 1440) % 1440;
+    return diff === 0 ? 1440 : diff; // identical times read as always armed
+  };
+
+  const formatMinutes = (mins) => {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return m === 0 ? `${h} hr` : `${h} hr ${m} min`;
+  };
+
+  const scheduleExceedsArsCap = (schedule) => {
+    const cap = arsMaxAlertingMinutes();
+    const mins = scheduleMinutes(schedule);
+    return cap !== null && mins !== null && mins > cap;
+  };
+
+  // Selecting the Intelligent Deterrence software package fixes the response
+  const intelligentDeterrenceIncluded = config.softwarePackages.includes('detect-deter');
+
+  const locationConfigComplete = (locationId) => {
+    const lc = getLocationConfig(locationId);
+    if (!lc.idleStrobe) return false;
+    if (lc.intrusionDetection === null) return false;
+    if (lc.intrusionDetection === 'no') return true;
+    // Security schedule
+    if (!lc.schedule.armFrom || !lc.schedule.armUntil) return false;
+    if (scheduleExceedsArsCap(lc.schedule)) return false;
+    if (lc.specialDays.writeInEnabled && !lc.specialDays.writeIn.trim()) return false;
+    // Announcements are optional, but a choice needs a schedule
+    if (lc.announcement && !lc.announcementSchedule) return false;
+    // Detection functionality
+    if (!lc.detect.human && !lc.detect.vehicle) return false;
+    if (!lc.trigger) return false;
+    if (lc.trigger === 'loiter' && !(lc.loiterSeconds >= 1 && lc.loiterSeconds <= 100)) return false;
+    if (!lc.detectWhere.trim()) return false;
+    const r = lc.response;
+    if (!(intelligentDeterrenceIncluded || r.intelligentDeterrence || r.strobe || r.floodlight || r.audible)) return false;
+    return true;
+  };
+
   const updateSiteConfig = (field, value) => {
     setConfig(prev => ({
       ...prev,
       siteConfig: { ...prev.siteConfig, [field]: value }
-    }));
-  };
-
-  const updateSecuritySchedule = (field, value) => {
-    setConfig(prev => ({
-      ...prev,
-      siteConfig: {
-        ...prev.siteConfig,
-        securitySchedule: { ...prev.siteConfig.securitySchedule, [field]: value }
-      }
-    }));
-  };
-
-  const updateDeterrence = (field, value) => {
-    setConfig(prev => ({
-      ...prev,
-      siteConfig: {
-        ...prev.siteConfig,
-        deterrence: { ...prev.siteConfig.deterrence, [field]: value }
-      }
     }));
   };
 
@@ -940,14 +1057,16 @@ function LVTConfigurator() {
       return email && phone && companyName && fullName && billingValid && shippingValid && onsiteValid;
     }
     if (currentStep === 6) {
-      // Placement map and GPS are optional. ARS requires a monitoring window
-      // and two complete contacts when enabled.
+      // Placement map and GPS are optional. Every location needs its analytics
+      // configuration, and ARS needs a tier plus two contacts when enabled.
       const { ars } = config.siteConfig;
-      if (ars.enabled !== 'yes') return true;
-      if (!ars.tier) return false;
-      // A custom tier needs a description, otherwise the selection tells sales nothing
-      if (ars.tier === 'custom' && !ars.customDetail.trim()) return false;
-      return ars.contacts.every(contact => contact.name && contact.email && contact.phone);
+      if (ars.enabled === 'yes') {
+        if (!ars.tier) return false;
+        // A custom tier needs a description, otherwise the selection tells sales nothing
+        if (ars.tier === 'custom' && !ars.customDetail.trim()) return false;
+        if (!ars.contacts.every(contact => contact.name && contact.email && contact.phone)) return false;
+      }
+      return config.locations.every(location => locationConfigComplete(location.id));
     }
     return true;
   };
@@ -1168,13 +1287,35 @@ function LVTConfigurator() {
           fileIncluded: false
         },
         schedule: {
-          weekday: { armFrom: sc.securitySchedule.weekdayArm || null, armUntil: sc.securitySchedule.weekdayDisarm || null },
-          weekend: { armFrom: sc.securitySchedule.weekendArm || null, armUntil: sc.securitySchedule.weekendDisarm || null }
-        },
-        deterrence: {
-          strobes: sc.deterrence.strobes, // 'off' | 'night' | '24-7'
-          floodlight: !!sc.deterrence.floodlight,
-          audio: !!sc.deterrence.audio
+          perLocation: config.locations.map((location, idx) => {
+            const lc = sc.locationConfigs[location.id] || makeLocationConfig();
+            const on = lc.intrusionDetection === 'yes';
+            return {
+              locationNumber: idx + 1,
+              zipCode: location.zipCode,
+              intrusionDetection: lc.intrusionDetection === null ? null : on,
+              idleStrobeLight: lc.idleStrobe,
+              schedule: on ? { armFrom: lc.schedule.armFrom || null, armUntil: lc.schedule.armUntil || null } : null,
+              alertingMinutesPerDay: on ? scheduleMinutes(lc.schedule) : null,
+              specialDays: on ? {
+                allAnnualHolidays: !!lc.specialDays.allHolidays,
+                writeIn: lc.specialDays.writeInEnabled ? (lc.specialDays.writeIn || null) : null
+              } : null,
+              announcement: on && lc.announcement ? {
+                type: lc.announcement,
+                schedule: lc.announcementSchedule
+              } : null,
+              detection: on ? {
+                objects: [lc.detect.human ? 'Human' : null, lc.detect.vehicle ? 'Vehicle' : null].filter(Boolean),
+                trigger: lc.trigger,
+                loiterSeconds: lc.trigger === 'loiter' ? lc.loiterSeconds : null,
+                zones: lc.detectWhere || null,
+                response: intelligentDeterrenceIncluded
+                  ? ['Intelligent Deterrence']
+                  : DETECTION_RESPONSES.filter(r => lc.response[r.field]).map(r => r.label)
+              } : null
+            };
+          })
         },
         areasOfConcern: sc.areasOfConcern || null
       },
@@ -1241,8 +1382,6 @@ function LVTConfigurator() {
   const buildWebhookPayload = (model) => {
     const yn = (v) => (v ? 'Yes' : 'No');
     const addressFull = (a) => `${a.street}, ${a.city}, ${a.state} ${a.zip}`;
-    const timeWindow = (w) => (w.armFrom || w.armUntil) ? `${w.armFrom || '—'} to ${w.armUntil || '—'}` : 'Not set';
-    const strobeLabels = { '24-7': '24/7', night: 'Night', off: 'Off' };
 
     const unitLines = model.deployment.locations.flatMap(loc =>
       loc.units.map(unit => ({ loc, unit }))
@@ -1336,11 +1475,24 @@ function LVTConfigurator() {
             `Unit ${g.unitNumber} (${g.unitTypeName}${g.zipCode ? `, Zip ${g.zipCode}` : ''}): ${g.latitude !== null ? g.latitude.toFixed(6) : '—'}, ${g.longitude !== null ? g.longitude.toFixed(6) : '—'}`
           ).join(' | ')
         : 'None',
-      scheduleWeekday: timeWindow(model.site.schedule.weekday),
-      scheduleWeekend: timeWindow(model.site.schedule.weekend),
-      deterrenceStrobes: strobeLabels[model.site.deterrence.strobes],
-      deterrenceFloodlight: model.site.deterrence.floodlight ? 'On' : 'Off',
-      deterrenceAudio: model.site.deterrence.audio ? 'On' : 'Off',
+      locationAnalytics: model.site.schedule.perLocation.map(l => ({
+        location: l.locationNumber,
+        zipCode: l.zipCode,
+        intrusionDetection: l.intrusionDetection === null ? 'Not answered' : (l.intrusionDetection ? 'Yes' : 'No'),
+        idleStrobeLight: l.idleStrobeLight ? (l.idleStrobeLight === 'on' ? 'On' : 'Off') : 'Not answered',
+        armedFrom: l.schedule ? l.schedule.armFrom : 'N/A',
+        armedUntil: l.schedule ? l.schedule.armUntil : 'N/A',
+        alertingHoursPerDay: l.alertingMinutesPerDay !== null ? +(l.alertingMinutesPerDay / 60).toFixed(2) : 'N/A',
+        allAnnualHolidays: l.specialDays ? (l.specialDays.allAnnualHolidays ? 'Yes' : 'No') : 'N/A',
+        specialDaysWriteIn: l.specialDays && l.specialDays.writeIn ? l.specialDays.writeIn : 'None',
+        announcement: l.announcement ? l.announcement.type : 'None',
+        announcementSchedule: l.announcement ? l.announcement.schedule : 'N/A',
+        detectObjects: l.detection ? l.detection.objects.join(', ') : 'N/A',
+        alertTrigger: l.detection ? l.detection.trigger : 'N/A',
+        loiterSeconds: l.detection && l.detection.loiterSeconds !== null ? l.detection.loiterSeconds : 'N/A',
+        detectionZones: l.detection ? (l.detection.zones || 'Not specified') : 'N/A',
+        detectionResponse: l.detection ? l.detection.response.join(', ') : 'N/A'
+      })),
       areasOfConcern: model.site.areasOfConcern || 'None provided',
 
       // Lease Details
@@ -3430,7 +3582,7 @@ function LVTConfigurator() {
               maxWidth: '640px',
               lineHeight: '1.6'
             }}>
-              Help us dial in your deployment. Share your site layout, set your arming schedule, choose your deterrence behavior, and flag any specific concerns.
+              Set up alert response and, for each location, how the units detect and deter. Placement and GPS at the bottom are optional.
             </p>
 
             <div style={{
@@ -3440,215 +3592,7 @@ function LVTConfigurator() {
               flexDirection: 'column',
               gap: '32px'
             }}>
-              {/* Section 1: Security Schedule */}
-              <div style={{
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: '16px',
-                padding: '32px'
-              }}>
-                <h3 style={{
-                  fontSize: '20px',
-                  fontWeight: '800',
-                  marginBottom: '8px',
-                  color: '#56d3cc'
-                }}>
-                  Security Schedule
-                </h3>
-                <p style={{
-                  fontSize: '14px',
-                  color: 'rgba(255,255,255,0.6)',
-                  marginBottom: '24px',
-                  lineHeight: '1.6'
-                }}>
-                  Set the window during which the unit should be armed. You can set separate hours for weekdays and weekends.
-                </p>
-
-                {[
-                  { label: 'Weekdays', arm: 'weekdayArm', disarm: 'weekdayDisarm' },
-                  { label: 'Weekends', arm: 'weekendArm', disarm: 'weekendDisarm' }
-                ].map(row => (
-                  <div key={row.label} style={{ marginBottom: '24px' }}>
-                    <div style={{
-                      fontSize: '13px',
-                      fontWeight: '800',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.5px',
-                      marginBottom: '12px',
-                      color: '#fff'
-                    }}>
-                      {row.label}
-                    </div>
-                    <div
-                      className="contact-grid"
-                      style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}
-                    >
-                      {[
-                        { label: 'Armed From', field: row.arm },
-                        { label: 'Armed Until', field: row.disarm }
-                      ].map(cell => (
-                        <div key={cell.field}>
-                          <label style={{
-                            display: 'block',
-                            fontSize: '12px',
-                            fontWeight: '700',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.5px',
-                            marginBottom: '8px',
-                            color: 'rgba(255,255,255,0.7)'
-                          }}>
-                            {cell.label}
-                          </label>
-                          <input
-                            type="time"
-                            value={config.siteConfig.securitySchedule[cell.field]}
-                            onChange={(e) => updateSecuritySchedule(cell.field, e.target.value)}
-                            style={{
-                              width: '100%',
-                              padding: '12px 16px',
-                              background: 'rgba(39, 42, 47, 0.6)',
-                              border: '2px solid rgba(255,255,255,0.15)',
-                              borderRadius: '8px',
-                              color: '#fff',
-                              fontSize: '16px',
-                              fontWeight: '500',
-                              outline: 'none',
-                              transition: 'all 0.3s ease',
-                              colorScheme: 'dark'
-                            }}
-                            onFocus={(e) => {
-                              e.target.style.border = '2px solid #56d3cc';
-                              e.target.style.background = 'rgba(86, 211, 204, 0.08)';
-                            }}
-                            onBlur={(e) => {
-                              e.target.style.border = '2px solid rgba(255,255,255,0.15)';
-                              e.target.style.background = 'rgba(39, 42, 47, 0.6)';
-                            }}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Section 2: Deterrence */}
-              <div style={{
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: '16px',
-                padding: '32px'
-              }}>
-                <h3 style={{
-                  fontSize: '20px',
-                  fontWeight: '800',
-                  marginBottom: '8px',
-                  color: '#56d3cc'
-                }}>
-                  Deterrence
-                </h3>
-                <p style={{
-                  fontSize: '14px',
-                  color: 'rgba(255,255,255,0.6)',
-                  marginBottom: '24px',
-                  lineHeight: '1.6'
-                }}>
-                  Choose how the unit actively deters intruders. These settings are optional and can be adjusted after deployment.
-                </p>
-
-                {/* Strobes */}
-                <div style={{ marginBottom: '24px' }}>
-                  <div style={{
-                    fontSize: '13px',
-                    fontWeight: '800',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    marginBottom: '12px',
-                    color: '#fff'
-                  }}>
-                    Strobes
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-                    {[
-                      { value: '24-7', label: 'Strobes 24/7' },
-                      { value: 'night', label: 'Strobes Night' },
-                      { value: 'off', label: 'Strobes Off' }
-                    ].map(opt => {
-                      const active = config.siteConfig.deterrence.strobes === opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          onClick={() => updateDeterrence('strobes', opt.value)}
-                          style={{
-                            padding: '12px 24px',
-                            background: active ? '#56d3cc' : 'rgba(39, 42, 47, 0.6)',
-                            color: active ? '#1b1e23' : '#fff',
-                            border: active ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.15)',
-                            borderRadius: '8px',
-                            fontSize: '14px',
-                            fontWeight: '700',
-                            cursor: 'pointer',
-                            transition: 'all 0.3s ease'
-                          }}
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Floodlight & Audio ON/OFF toggles */}
-                {[
-                  { label: 'Floodlight', field: 'floodlight' },
-                  { label: 'Audio Deterrence', field: 'audio' }
-                ].map(toggle => (
-                  <div key={toggle.field} style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '16px 0',
-                    borderTop: '1px solid rgba(255,255,255,0.08)'
-                  }}>
-                    <div style={{
-                      fontSize: '15px',
-                      fontWeight: '700',
-                      color: '#fff'
-                    }}>
-                      {toggle.label}
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      {[
-                        { value: true, label: 'On' },
-                        { value: false, label: 'Off' }
-                      ].map(opt => {
-                        const active = config.siteConfig.deterrence[toggle.field] === opt.value;
-                        return (
-                          <button
-                            key={opt.label}
-                            onClick={() => updateDeterrence(toggle.field, opt.value)}
-                            style={{
-                              padding: '10px 24px',
-                              background: active ? '#56d3cc' : 'rgba(39, 42, 47, 0.6)',
-                              color: active ? '#1b1e23' : '#fff',
-                              border: active ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.15)',
-                              borderRadius: '8px',
-                              fontSize: '14px',
-                              fontWeight: '700',
-                              cursor: 'pointer',
-                              transition: 'all 0.3s ease'
-                            }}
-                          >
-                            {opt.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Section 3: Alert Response Services (ARS) */}
+              {/* Section 1: Alert Response Services (ARS) */}
               <div style={{
                 background: 'rgba(255,255,255,0.03)',
                 border: '1px solid rgba(255,255,255,0.12)',
@@ -3930,7 +3874,321 @@ function LVTConfigurator() {
                 )}
               </div>
 
-              {/* Section 4: Areas of Concern */}
+              {/* Section 2: Intrusion Detection & Deterrence, per location */}
+              {config.locations.map((location, locationIdx) => {
+                const lc = getLocationConfig(location.id);
+                const otherFilled = config.locations.filter(other =>
+                  other.id !== location.id && getLocationConfig(other.id).intrusionDetection !== null
+                );
+                const overCap = scheduleExceedsArsCap(lc.schedule);
+                const mins = scheduleMinutes(lc.schedule);
+                const cap = arsMaxAlertingMinutes();
+                const upd = (path, value) => updateLocationConfig(location.id, path, value);
+                const pill = (active, onClick, label, key, disabled) => (
+                  <button
+                    key={key}
+                    onClick={disabled ? undefined : onClick}
+                    disabled={disabled}
+                    style={{
+                      padding: '10px 22px',
+                      background: active ? '#56d3cc' : 'rgba(39, 42, 47, 0.6)',
+                      color: disabled ? 'rgba(255,255,255,0.35)' : (active ? '#1b1e23' : '#fff'),
+                      border: active ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.15)',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      fontWeight: '700',
+                      cursor: disabled ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.3s ease',
+                      opacity: disabled && !active ? 0.5 : 1
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+                const check = (checked, onClick, label, key, disabled) => (
+                  <label
+                    key={key}
+                    onClick={disabled ? undefined : onClick}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '10px',
+                      cursor: disabled ? 'not-allowed' : 'pointer',
+                      opacity: disabled ? 0.55 : 1
+                    }}
+                  >
+                    <div style={{
+                      width: '20px', height: '20px', minWidth: '20px', borderRadius: '5px',
+                      border: checked ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.35)',
+                      background: checked ? '#56d3cc' : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      {checked && (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1b1e23" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5L20 7"/></svg>
+                      )}
+                    </div>
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#fff' }}>{label}</span>
+                  </label>
+                );
+                const subhead = (text) => (
+                  <div style={{
+                    fontSize: '13px', fontWeight: '800', textTransform: 'uppercase',
+                    letterSpacing: '0.5px', marginBottom: '10px', color: '#fff'
+                  }}>{text}</div>
+                );
+                const helper = (text) => (
+                  <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.55)', marginBottom: '12px', lineHeight: '1.5' }}>{text}</p>
+                );
+                const block = { marginBottom: '28px' };
+
+                return (
+                  <div key={location.id} style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: '16px',
+                    padding: '32px'
+                  }}>
+                    <div style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                      gap: '16px', flexWrap: 'wrap', marginBottom: '24px'
+                    }}>
+                      <div>
+                        <h3 style={{ fontSize: '20px', fontWeight: '800', color: '#56d3cc' }}>
+                          Location {locationIdx + 1}
+                          {location.zipCode ? <span style={{ fontSize: '14px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}> · Zip {location.zipCode}</span> : null}
+                        </h3>
+                        <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.55)', marginTop: '4px' }}>
+                          Intrusion detection and deterrence for this location
+                        </p>
+                      </div>
+                      {otherFilled.length > 0 && (
+                        <select
+                          value=""
+                          onChange={(e) => { if (e.target.value) copyLocationConfig(Number(e.target.value), location.id); }}
+                          style={{
+                            padding: '9px 12px', background: 'rgba(27, 30, 35, 0.9)',
+                            border: '2px solid rgba(255,255,255,0.15)', borderRadius: '6px',
+                            color: '#fff', fontSize: '13px', fontWeight: '600', cursor: 'pointer'
+                          }}
+                        >
+                          <option value="">Copy settings from…</option>
+                          {otherFilled.map(other => {
+                            const idx = config.locations.findIndex(l => l.id === other.id);
+                            return <option key={other.id} value={other.id}>Location {idx + 1}{other.zipCode ? ` · Zip ${other.zipCode}` : ''}</option>;
+                          })}
+                        </select>
+                      )}
+                    </div>
+
+                    {/* Intrusion detection */}
+                    <div style={block}>
+                      {subhead('Intrusion detection & deterrence *')}
+                      {helper('Are you wanting to utilize intrusion detection and deterrence for this location (also known as alerts/analytics)?')}
+                      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                        {pill(lc.intrusionDetection === 'yes', () => upd('intrusionDetection', 'yes'), 'Yes', 'y')}
+                        {pill(lc.intrusionDetection === 'no', () => upd('intrusionDetection', 'no'), 'No', 'n')}
+                      </div>
+                    </div>
+
+                    {/* Idle strobe — asked either way */}
+                    <div style={{ ...block, paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                      {subhead('Idle strobe light *')}
+                      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                        {pill(lc.idleStrobe === 'on', () => upd('idleStrobe', 'on'), 'On', 'on')}
+                        {pill(lc.idleStrobe === 'off', () => upd('idleStrobe', 'off'), 'Off', 'off')}
+                      </div>
+                    </div>
+
+                    {lc.intrusionDetection === 'yes' && (
+                      <div style={{ paddingTop: '24px', borderTop: '1px solid rgba(255,255,255,0.15)' }}>
+                        <div style={{
+                          fontSize: '15px', fontWeight: '800', color: '#56d3cc',
+                          marginBottom: '20px', letterSpacing: '-0.2px'
+                        }}>
+                          Analytic Configurations
+                        </div>
+
+                        {/* Security schedule */}
+                        <div style={block}>
+                          {subhead('Security schedule *')}
+                          {helper('When the unit should be armed — ideally when there is no activity expected at the location.')}
+                          <div className="contact-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                            {[
+                              { label: 'Armed From', field: 'schedule.armFrom', value: lc.schedule.armFrom },
+                              { label: 'Armed Until', field: 'schedule.armUntil', value: lc.schedule.armUntil }
+                            ].map(cell => (
+                              <div key={cell.field}>
+                                <label style={{
+                                  display: 'block', fontSize: '12px', fontWeight: '700',
+                                  textTransform: 'uppercase', letterSpacing: '0.5px',
+                                  marginBottom: '8px', color: 'rgba(255,255,255,0.7)'
+                                }}>{cell.label}</label>
+                                <input
+                                  type="time"
+                                  value={cell.value}
+                                  onChange={(e) => upd(cell.field, e.target.value)}
+                                  style={{
+                                    width: '100%', padding: '12px 16px',
+                                    background: 'rgba(39, 42, 47, 0.6)',
+                                    border: overCap ? '2px solid #e8746a' : '2px solid rgba(255,255,255,0.15)',
+                                    borderRadius: '8px', color: '#fff', fontSize: '16px',
+                                    fontWeight: '500', outline: 'none', colorScheme: 'dark'
+                                  }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{
+                            fontSize: '12px', marginTop: '10px', lineHeight: '1.5',
+                            color: overCap ? '#e8746a' : 'rgba(255,255,255,0.5)'
+                          }}>
+                            {mins !== null ? `${formatMinutes(mins)} of alerting per day` : 'Set both times'}
+                            {cap !== null && ` · Standard ARS allows up to ${formatMinutes(cap)}`}
+                            {overCap && ' — shorten the window or move to Expanded ARS'}
+                          </div>
+                        </div>
+
+                        {/* Special days */}
+                        <div style={block}>
+                          {subhead('Any special days please list')}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {check(lc.specialDays.allHolidays, () => upd('specialDays.allHolidays', !lc.specialDays.allHolidays), 'All annual recurring holidays', 'hol')}
+                            {check(lc.specialDays.writeInEnabled, () => upd('specialDays.writeInEnabled', !lc.specialDays.writeInEnabled), 'Write in', 'wi')}
+                          </div>
+                          {lc.specialDays.writeInEnabled && (
+                            <textarea
+                              value={lc.specialDays.writeIn}
+                              onChange={(e) => upd('specialDays.writeIn', e.target.value)}
+                              placeholder="e.g. Company shutdown Dec 24 – Jan 2; quarterly inventory weekends"
+                              rows={2}
+                              style={{
+                                width: '100%', marginTop: '12px', padding: '12px 14px',
+                                background: 'rgba(39, 42, 47, 0.6)', border: '2px solid rgba(255,255,255,0.15)',
+                                borderRadius: '8px', color: '#fff', fontSize: '15px',
+                                fontFamily: 'inherit', lineHeight: '1.5', outline: 'none', resize: 'vertical'
+                              }}
+                            />
+                          )}
+                        </div>
+
+                        {/* Announcements */}
+                        <div style={block}>
+                          {subhead('Announcements')}
+                          {helper('Optional. Choose an announcement to play at this location.')}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {ANNOUNCEMENT_OPTIONS.map(opt => (
+                              <label
+                                key={opt.value}
+                                onClick={() => {
+                                  const next = lc.announcement === opt.value ? null : opt.value;
+                                  upd('announcement', next);
+                                  if (!next) upd('announcementSchedule', null);
+                                }}
+                                style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
+                              >
+                                <div style={{
+                                  width: '18px', height: '18px', minWidth: '18px', borderRadius: '50%',
+                                  border: lc.announcement === opt.value ? '5px solid #56d3cc' : '2px solid rgba(255,255,255,0.35)'
+                                }}></div>
+                                <span style={{ fontSize: '14px', fontWeight: '600', color: '#fff' }}>{opt.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                          {lc.announcement && (
+                            <div style={{ marginTop: '18px' }}>
+                              {subhead('Schedule of announcement *')}
+                              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                                {ANNOUNCEMENT_SCHEDULES.map(opt =>
+                                  pill(lc.announcementSchedule === opt.value, () => upd('announcementSchedule', opt.value), opt.label, opt.value)
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Detection functionality */}
+                        <div style={{ paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                          {subhead('Detection functionality *')}
+
+                          <div style={{ marginBottom: '20px' }}>
+                            {helper('What would you like to detect?')}
+                            <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+                              {check(lc.detect.human, () => upd('detect.human', !lc.detect.human), 'Human', 'h')}
+                              {check(lc.detect.vehicle, () => upd('detect.vehicle', !lc.detect.vehicle), 'Vehicle', 'v')}
+                            </div>
+                          </div>
+
+                          <div style={{ marginBottom: '20px' }}>
+                            {helper('When would you like an object to trigger an alert?')}
+                            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                              {pill(lc.trigger === 'loiter', () => upd('trigger', 'loiter'), 'Loiter time', 'lt')}
+                              {pill(lc.trigger === 'immediate', () => upd('trigger', 'immediate'), 'Immediate detection', 'imm')}
+                            </div>
+                            {lc.trigger === 'loiter' && (
+                              <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="100"
+                                  value={lc.loiterSeconds}
+                                  onChange={(e) => upd('loiterSeconds', Math.max(1, Math.min(100, Number(e.target.value) || 1)))}
+                                  style={{
+                                    width: '110px', padding: '10px 14px', background: 'rgba(39, 42, 47, 0.6)',
+                                    border: '2px solid rgba(255,255,255,0.15)', borderRadius: '8px',
+                                    color: '#fff', fontSize: '15px', fontWeight: '600', outline: 'none'
+                                  }}
+                                />
+                                <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)' }}>
+                                  seconds on location before alerting (1–100)
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div style={{ marginBottom: '20px' }}>
+                            {helper('Where on the location are you wanting to detect said objects?')}
+                            <textarea
+                              value={lc.detectWhere}
+                              onChange={(e) => upd('detectWhere', e.target.value)}
+                              placeholder="e.g. perimeter, entrances/exits, parking stalls, entire location, building front"
+                              rows={2}
+                              style={{
+                                width: '100%', padding: '12px 14px', background: 'rgba(39, 42, 47, 0.6)',
+                                border: '2px solid rgba(255,255,255,0.15)', borderRadius: '8px',
+                                color: '#fff', fontSize: '15px', fontFamily: 'inherit',
+                                lineHeight: '1.5', outline: 'none', resize: 'vertical'
+                              }}
+                            />
+                          </div>
+
+                          <div>
+                            {helper('How would you like the unit to perform once an object is detected?')}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                              {DETECTION_RESPONSES.map(opt => {
+                                const isID = opt.field === 'intelligentDeterrence';
+                                const forced = intelligentDeterrenceIncluded;
+                                const checked = forced ? isID : lc.response[opt.field];
+                                return check(
+                                  checked,
+                                  () => upd(`response.${opt.field}`, !lc.response[opt.field]),
+                                  opt.label,
+                                  opt.field,
+                                  forced
+                                );
+                              })}
+                            </div>
+                            {intelligentDeterrenceIncluded && (
+                              <div style={{ fontSize: '12px', color: 'rgba(86, 211, 204, 0.85)', marginTop: '10px', lineHeight: '1.5' }}>
+                                Intelligent Deterrence is included in your software packages, so it handles the response automatically.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Section 3: Areas of Concern */}
               <div style={{
                 background: 'rgba(255,255,255,0.03)',
                 border: '1px solid rgba(255,255,255,0.12)',
@@ -3983,7 +4241,7 @@ function LVTConfigurator() {
                   }}
                 />
               </div>
-              {/* Section 5: Placement Map */}
+              {/* Section 4: Placement Map */}
               <div style={{
                 background: 'rgba(255,255,255,0.03)',
                 border: '1px solid rgba(255,255,255,0.12)',
@@ -4112,7 +4370,7 @@ function LVTConfigurator() {
                 </div>
               </div>
 
-              {/* Section 6: GPS Coordinates */}
+              {/* Section 5: GPS Coordinates */}
               <div style={{
                 background: 'rgba(255,255,255,0.03)',
                 border: '1px solid rgba(255,255,255,0.12)',
@@ -4566,17 +4824,16 @@ function LVTConfigurator() {
                 {/* Site Configuration */}
                 {(() => {
                   const sc = config.siteConfig;
-                  const strobeLabel = { '24-7': '24/7', night: 'Night', off: 'Off' }[sc.deterrence.strobes];
-                  const hasSchedule = sc.securitySchedule.weekdayArm || sc.securitySchedule.weekdayDisarm ||
-                    sc.securitySchedule.weekendArm || sc.securitySchedule.weekendDisarm;
+                  const configuredLocations = config.locations
+                    .map((location, idx) => ({ location, idx, lc: getLocationConfig(location.id) }))
+                    .filter(entry => entry.lc.intrusionDetection !== null || entry.lc.idleStrobe);
                   const filledGps = gpsUnitList
                     .map((u, i) => ({ u, c: sc.gpsCoordinates[i] || { lat: '', long: '' }, i }))
                     .filter(entry => entry.c.lat || entry.c.long);
                   const arsOn = sc.ars.enabled === 'yes' && sc.ars.tier;
                   const arsTier = arsOn ? getArsTier(sc.ars.tier) : null;
                   const hasConfig = sc.placementMapName || sc.placementMapLater || filledGps.length > 0 ||
-                    hasSchedule || sc.ars.enabled || sc.deterrence.strobes !== 'off' ||
-                    sc.deterrence.floodlight || sc.deterrence.audio || sc.areasOfConcern;
+                    configuredLocations.length > 0 || sc.ars.enabled || sc.areasOfConcern;
                   if (!hasConfig) return null;
                   const rowStyle = {
                     fontSize: '15px',
@@ -4642,30 +4899,72 @@ function LVTConfigurator() {
                           <span style={{ color: '#56d3cc', textAlign: 'right' }}>{entry.c.lat || '—'}, {entry.c.long || '—'}</span>
                         </div>
                       ))}
-                      {hasSchedule && (
-                        <React.Fragment>
-                          <div style={rowStyle}>
-                            <span>Armed (Weekdays)</span>
-                            <span style={{ color: '#56d3cc' }}>{fmtWindow(sc.securitySchedule.weekdayArm, sc.securitySchedule.weekdayDisarm)}</span>
+                      {configuredLocations.map(({ location, idx, lc }) => (
+                        <div key={location.id} style={{ marginTop: '10px', marginBottom: '6px' }}>
+                          <div style={{ fontSize: '14px', fontWeight: '700', marginBottom: '4px' }}>
+                            Location {idx + 1}{location.zipCode ? ` · Zip ${location.zipCode}` : ''}
                           </div>
                           <div style={rowStyle}>
-                            <span>Armed (Weekends)</span>
-                            <span style={{ color: '#56d3cc' }}>{fmtWindow(sc.securitySchedule.weekendArm, sc.securitySchedule.weekendDisarm)}</span>
+                            <span>Intrusion detection</span>
+                            <span style={{ color: '#56d3cc' }}>
+                              {lc.intrusionDetection === null ? 'Not answered' : (lc.intrusionDetection === 'yes' ? 'Yes' : 'No')}
+                            </span>
                           </div>
-                        </React.Fragment>
-                      )}
-                      <div style={rowStyle}>
-                        <span>Strobes</span>
-                        <span style={{ color: '#56d3cc' }}>{strobeLabel}</span>
-                      </div>
-                      <div style={rowStyle}>
-                        <span>Floodlight</span>
-                        <span style={{ color: '#56d3cc' }}>{sc.deterrence.floodlight ? 'On' : 'Off'}</span>
-                      </div>
-                      <div style={rowStyle}>
-                        <span>Audio Deterrence</span>
-                        <span style={{ color: '#56d3cc' }}>{sc.deterrence.audio ? 'On' : 'Off'}</span>
-                      </div>
+                          <div style={rowStyle}>
+                            <span>Idle strobe light</span>
+                            <span style={{ color: '#56d3cc' }}>
+                              {lc.idleStrobe ? (lc.idleStrobe === 'on' ? 'On' : 'Off') : 'Not answered'}
+                            </span>
+                          </div>
+                          {lc.intrusionDetection === 'yes' && (
+                            <React.Fragment>
+                              <div style={rowStyle}>
+                                <span>Armed</span>
+                                <span style={{ color: '#56d3cc' }}>
+                                  {fmtWindow(lc.schedule.armFrom, lc.schedule.armUntil)}
+                                  {scheduleMinutes(lc.schedule) !== null ? ` (${formatMinutes(scheduleMinutes(lc.schedule))})` : ''}
+                                </span>
+                              </div>
+                              <div style={rowStyle}>
+                                <span>Detecting</span>
+                                <span style={{ color: '#56d3cc' }}>
+                                  {[lc.detect.human ? 'Human' : null, lc.detect.vehicle ? 'Vehicle' : null].filter(Boolean).join(', ') || '—'}
+                                </span>
+                              </div>
+                              <div style={rowStyle}>
+                                <span>Alert trigger</span>
+                                <span style={{ color: '#56d3cc' }}>
+                                  {lc.trigger === 'loiter' ? `Loiter ${lc.loiterSeconds}s` : (lc.trigger === 'immediate' ? 'Immediate' : '—')}
+                                </span>
+                              </div>
+                              <div style={rowStyle}>
+                                <span>Response</span>
+                                <span style={{ color: '#56d3cc', textAlign: 'right' }}>
+                                  {(intelligentDeterrenceIncluded
+                                    ? ['Intelligent Deterrence']
+                                    : DETECTION_RESPONSES.filter(r => lc.response[r.field]).map(r => r.label)
+                                  ).join(', ') || '—'}
+                                </span>
+                              </div>
+                              {lc.announcement && (
+                                <div style={rowStyle}>
+                                  <span>Announcement</span>
+                                  <span style={{ color: '#56d3cc', textAlign: 'right' }}>
+                                    {(ANNOUNCEMENT_OPTIONS.find(o => o.value === lc.announcement) || {}).label}
+                                    {lc.announcementSchedule ? ` · ${(ANNOUNCEMENT_SCHEDULES.find(o => o.value === lc.announcementSchedule) || {}).label}` : ''}
+                                  </span>
+                                </div>
+                              )}
+                              {lc.detectWhere && (
+                                <div style={rowStyle}>
+                                  <span>Detection zones</span>
+                                  <span style={{ color: '#56d3cc', textAlign: 'right' }}>{lc.detectWhere}</span>
+                                </div>
+                              )}
+                            </React.Fragment>
+                          )}
+                        </div>
+                      ))}
                       {sc.areasOfConcern && (
                         <div style={{ marginTop: '12px' }}>
                           <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>Areas of Concern</div>
