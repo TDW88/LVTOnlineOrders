@@ -97,7 +97,7 @@ const UNIT_TYPES = [
     name: 'Guardgate',
     pluralName: 'Guardgates',
     baseMonthly: 2000,
-    image: 'images/guardgate.jpg',
+    image: 'images/GuardGate-down.png',
     imageAlt: 'LVT Guardgate trailer-mounted access control unit with solar panels and barrier arm',
     description: 'Guardgate combines access control with surveillance at the point of entry, pairing a barrier arm with a solar-powered camera mast to manage and record every vehicle entering or leaving your site.',
     needs: [
@@ -106,7 +106,7 @@ const UNIT_TYPES = [
       'Rapid deployment without fixed infrastructure',
       'Deterrence at the gate line'
     ],
-    generatorEligible: false
+    generatorEligible: true
   }
 ];
 
@@ -503,7 +503,7 @@ function LVTConfigurator() {
       location.zipCode.length === 5 && location.units.every(unit => unit.quantity > 0)
     );
     if (allZipsValid) {
-      // Check generator requirements for mobile units only
+      // Check generator requirements for generator-eligible unit types
       config.locations.forEach(location => {
         location.units.forEach(unit => {
           checkGeneratorForUnit(location.id, unit.id, location.zipCode);
@@ -958,7 +958,7 @@ function LVTConfigurator() {
                 </h3>
                 
                 <p className="product-copy">
-                  Select the right unit type for each deployment location below. Mobile units support generator backup; wall mounts and Guardgates do not require a generator.
+                  Select the right unit type for each deployment location below. Mobile units and Guardgates support generator backup; wall mounts do not require a generator.
                 </p>
 
                 <p className="needs-title">
@@ -1075,7 +1075,7 @@ function LVTConfigurator() {
                     color: 'rgba(255,255,255,0.7)',
                     lineHeight: '1.6'
                   }}>
-                    Configure unit quantities and deployment locations. Generator requirements apply to mobile units only.
+                    Configure unit quantities and deployment locations. Generator requirements apply to mobile units and Guardgates.
                   </p>
                 </div>
                 
