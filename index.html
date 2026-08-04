@@ -39,6 +39,26 @@
       </svg>
     );
 
+    const ScanLine = (props) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={props.width || 24} height={props.height || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={props.style}>
+        <path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>
+      </svg>
+    );
+
+    const Satellite = (props) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={props.width || 24} height={props.height || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={props.style}>
+        <path d="M13 7 9 3 5 7l4 4"/><path d="m17 11 4 4-4 4-4-4"/><path d="m8 12 4 4"/><path d="m16 8-4-4"/><path d="M12 16a4 4 0 0 0 4-4"/><path d="M20 12a8 8 0 0 1-8 8"/>
+      </svg>
+    );
+
+    const Headset = (props) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width={props.width || 24} height={props.height || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={props.style}>
+        <path d="M3 14v-3a9 9 0 0 1 18 0v3"/><path d="M3 14a2 2 0 0 1 2-2h1v6H5a2 2 0 0 1-2-2Z"/><path d="M21 14a2 2 0 0 0-2-2h-1v6h1a2 2 0 0 0 2-2Z"/><path d="M18 18v1a3 3 0 0 1-3 3h-3"/>
+      </svg>
+    );
+
+const WEBHOOK_URL = 'https://webhooks.workato.com/webhooks/rest/6a7e39d0-1da9-4e30-8ab7-b7c732cbcb0f/order';
+
 const UNIT_TYPES = [
   {
     id: 'mobile',
@@ -93,6 +113,16 @@ const UNIT_TYPES = [
 function LVTConfigurator() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // "Talk to a sales rep" helper form — shown on every step, separate from the order
+  const [salesRep, setSalesRep] = useState({
+    open: false,
+    name: '',
+    email: '',
+    phone: '',
+    question: '',
+    submitting: false,
+    submitted: false
+  });
   const [config, setConfig] = useState({
     locations: [
       {
@@ -105,6 +135,9 @@ function LVTConfigurator() {
     ],
     ndaaCompliant: false,
     nightVision: false,
+    lpr: false,
+    satCom: false,
+    generatorBypass: false, // customer accepts downtime unless externally powered
     softwarePackages: [],
     leaseTerm: null, // in months: 12, 24, 36
     contactInfo: {
@@ -122,7 +155,16 @@ function LVTConfigurator() {
     },
     siteConfig: {
       placementMapName: '',
+      placementMapLater: false, // "Placement map will be determined later"
       gpsCoordinates: [], // one { lat, long } per unit, index-aligned with gpsUnitList
+      ars: {
+        enabled: null, // null | 'yes' | 'no'
+        hours: null,   // '12' | '24'
+        contacts: [
+          { name: '', email: '', phone: '' },
+          { name: '', email: '', phone: '' }
+        ]
+      },
       securitySchedule: {
         weekdayArm: '',
         weekdayDisarm: '',
@@ -146,6 +188,11 @@ function LVTConfigurator() {
   // Hardware options pricing (monthly)
   const NDAA_MONTHLY = 125;
   const NIGHT_VISION_MONTHLY = 175;
+  const LPR_MONTHLY = 500;
+  const SATCOM_MONTHLY = 500;
+
+  // Alert Response Services (ARS) pricing (monthly, per site)
+  const ARS_PRICING = { '12': 300, '24': 500 };
   
   // Software packages (monthly)
   const softwarePackages = [
@@ -473,6 +520,12 @@ function LVTConfigurator() {
     if (config.nightVision) {
       perUnitMonthly += NIGHT_VISION_MONTHLY;
     }
+    if (config.lpr) {
+      perUnitMonthly += LPR_MONTHLY;
+    }
+    if (config.satCom) {
+      perUnitMonthly += SATCOM_MONTHLY;
+    }
     
     // Calculate base cost for all units
     let monthlyTotal = baseMonthlyTotal + (perUnitMonthly * unitCount);
@@ -484,13 +537,21 @@ function LVTConfigurator() {
         .reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
       return sum + locationGenerators;
     }, 0);
-    monthlyTotal += generatorCount * GENERATOR_MONTHLY;
+    // Skipped when the customer opts to accept downtime instead of a generator
+    if (!config.generatorBypass) {
+      monthlyTotal += generatorCount * GENERATOR_MONTHLY;
+    }
     
     // Add software packages (per unit)
     config.softwarePackages.forEach(id => {
       const pkg = softwarePackages.find(p => p.id === id);
       if (pkg) monthlyTotal += pkg.monthlyPrice * unitCount;
     });
+
+    // Add Alert Response Services (flat monthly charge per site)
+    if (config.siteConfig.ars.enabled === 'yes' && config.siteConfig.ars.hours) {
+      monthlyTotal += ARS_PRICING[config.siteConfig.ars.hours] || 0;
+    }
     
     // Apply lease term discount if selected
     if (config.leaseTerm) {
@@ -523,6 +584,12 @@ function LVTConfigurator() {
     if (config.nightVision) {
       perUnitMonthly += NIGHT_VISION_MONTHLY;
     }
+    if (config.lpr) {
+      perUnitMonthly += LPR_MONTHLY;
+    }
+    if (config.satCom) {
+      perUnitMonthly += SATCOM_MONTHLY;
+    }
     
     // Calculate base cost for all units
     let monthlyTotal = baseMonthlyTotal + (perUnitMonthly * unitCount);
@@ -534,13 +601,21 @@ function LVTConfigurator() {
         .reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
       return sum + locationGenerators;
     }, 0);
-    monthlyTotal += generatorCount * GENERATOR_MONTHLY;
+    // Skipped when the customer opts to accept downtime instead of a generator
+    if (!config.generatorBypass) {
+      monthlyTotal += generatorCount * GENERATOR_MONTHLY;
+    }
     
     // Add software packages (per unit)
     config.softwarePackages.forEach(id => {
       const pkg = softwarePackages.find(p => p.id === id);
       if (pkg) monthlyTotal += pkg.monthlyPrice * unitCount;
     });
+
+    // Add Alert Response Services (flat monthly charge per site)
+    if (config.siteConfig.ars.enabled === 'yes' && config.siteConfig.ars.hours) {
+      monthlyTotal += ARS_PRICING[config.siteConfig.ars.hours] || 0;
+    }
     
     // Apply discount for this specific term
     const term = leaseTerms.find(t => t.months === termMonths);
@@ -636,6 +711,77 @@ function LVTConfigurator() {
     updateSiteConfig('placementMapName', file ? file.name : '');
   };
 
+  const updateSalesRep = (field, value) => {
+    setSalesRep(prev => ({ ...prev, [field]: value }));
+  };
+
+  const salesRepValid = salesRep.name.trim() && salesRep.email.trim();
+
+  const submitSalesRepRequest = async () => {
+    if (!salesRepValid || salesRep.submitting) return;
+    setSalesRep(prev => ({ ...prev, submitting: true }));
+
+    const payload = JSON.stringify({
+      formType: 'sales_rep_inquiry',
+      timestamp: new Date().toISOString(),
+      name: salesRep.name,
+      email: salesRep.email,
+      phone: salesRep.phone,
+      question: salesRep.question,
+      // Where in the flow they asked for help
+      stepNumber: currentStep + 1,
+      stepName: steps[currentStep]
+    });
+
+    try {
+      await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+        credentials: 'omit'
+      });
+    } catch (error) {
+      // Cross-origin fallback — the request still reaches the endpoint
+      try {
+        await fetch(WEBHOOK_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+          body: payload
+        });
+      } catch (fallbackError) {
+        console.error('Sales rep request error:', fallbackError);
+      }
+    } finally {
+      setSalesRep(prev => ({ ...prev, submitting: false, submitted: true }));
+    }
+  };
+
+  const updateArs = (field, value) => {
+    setConfig(prev => ({
+      ...prev,
+      siteConfig: {
+        ...prev.siteConfig,
+        ars: { ...prev.siteConfig.ars, [field]: value }
+      }
+    }));
+  };
+
+  const updateArsContact = (index, field, value) => {
+    setConfig(prev => ({
+      ...prev,
+      siteConfig: {
+        ...prev.siteConfig,
+        ars: {
+          ...prev.siteConfig.ars,
+          contacts: prev.siteConfig.ars.contacts.map((contact, i) =>
+            i === index ? { ...contact, [field]: value } : contact
+          )
+        }
+      }
+    }));
+  };
+
   const updateGpsCoordinate = (index, field, value) => {
     setConfig(prev => {
       const list = [...prev.siteConfig.gpsCoordinates];
@@ -669,6 +815,14 @@ function LVTConfigurator() {
         : false;
       return email && phone && companyName && fullName && billingValid && shippingValid;
     }
+    if (currentStep === 5) {
+      // Placement map and GPS are optional. ARS requires a monitoring window
+      // and two complete contacts when enabled.
+      const { ars } = config.siteConfig;
+      if (ars.enabled !== 'yes') return true;
+      if (!ars.hours) return false;
+      return ars.contacts.every(contact => contact.name && contact.email && contact.phone);
+    }
     return true;
   };
 
@@ -678,6 +832,8 @@ function LVTConfigurator() {
       .map(unit => ({ ...unit, locationId: location.id, locationZip: location.zipCode }))
   );
   const generatorUnitCount = generatorUnits.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+  // Generators are only billed when the customer has NOT opted to accept downtime
+  const billedGeneratorCount = config.generatorBypass ? 0 : generatorUnitCount;
   const baseMonthlyTotal = config.locations.reduce((sum, location) => {
     const locationTotal = location.units.reduce((unitSum, unit) => {
       const unitType = getUnitType(unit.unitType);
@@ -1268,7 +1424,7 @@ function LVTConfigurator() {
                       marginBottom: '12px',
                       letterSpacing: '-0.3px'
                     }}>
-                      Smart Generator Backup Recommended
+                      Smart Generator Backup Required
                     </h3>
                     <p style={{
                       fontSize: '14px',
@@ -1276,7 +1432,7 @@ function LVTConfigurator() {
                       lineHeight: '1.6',
                       marginBottom: '16px'
                     }}>
-                      Based on your deployment locations, {generatorUnitCount} of your {totalUnits} {totalUnits === 1 ? 'unit requires' : 'units require'} smart generator backup for optimal uptime:
+                      Solar conditions at your deployment {generatorUnitCount === 1 ? 'location' : 'locations'} cannot sustain continuous operation year-round. {generatorUnitCount} of your {totalUnits} {generatorUnitCount === 1 ? 'unit requires' : 'units require'} smart generator backup to stay online:
                     </p>
                     <div style={{
                       display: 'flex',
@@ -1306,14 +1462,67 @@ function LVTConfigurator() {
                       color: '#56d3cc',
                       whiteSpace: 'nowrap'
                     }}>
-                      +${(GENERATOR_MONTHLY * generatorUnitCount).toLocaleString()}
+                      +${(GENERATOR_MONTHLY * billedGeneratorCount).toLocaleString()}
                     </div>
                     <div style={{
                       fontSize: '11px',
                       color: 'rgba(255,255,255,0.6)',
                       marginTop: '4px'
                     }}>
-                      {generatorUnitCount} {generatorUnitCount === 1 ? 'generator' : 'generators'}
+                      {config.generatorBypass
+                        ? 'Declined'
+                        : `${generatorUnitCount} ${generatorUnitCount === 1 ? 'generator' : 'generators'}`}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Generator bypass — requires accepting downtime */}
+                <div
+                  onClick={() => toggleHardwareOption('generatorBypass')}
+                  style={{
+                    marginTop: '24px',
+                    paddingTop: '20px',
+                    borderTop: '1px solid rgba(255,255,255,0.15)',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '14px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div style={{
+                    width: '22px',
+                    height: '22px',
+                    minWidth: '22px',
+                    marginTop: '2px',
+                    borderRadius: '5px',
+                    border: config.generatorBypass ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.35)',
+                    background: config.generatorBypass ? '#56d3cc' : 'transparent',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease'
+                  }}>
+                    {config.generatorBypass && (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1b1e23" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m5 12 5 5L20 7"/>
+                      </svg>
+                    )}
+                  </div>
+                  <div>
+                    <div style={{
+                      fontSize: '14px',
+                      fontWeight: '700',
+                      color: '#fff',
+                      marginBottom: '4px'
+                    }}>
+                      Skip the generator — I accept the downtime
+                    </div>
+                    <div style={{
+                      fontSize: '13px',
+                      color: 'rgba(255,255,255,0.6)',
+                      lineHeight: '1.5'
+                    }}>
+                      I understand {generatorUnitCount === 1 ? 'this unit' : 'these units'} will lose power and stop recording during periods of insufficient solar charge unless connected to external power.
                     </div>
                   </div>
                 </div>
@@ -1538,6 +1747,141 @@ function LVTConfigurator() {
                   +${NIGHT_VISION_MONTHLY.toLocaleString()}/mo
                 </div>
               </div>
+
+              {/* LPR & SatCom */}
+              {[
+                {
+                  field: 'lpr',
+                  title: 'LPR (License Plate Reader)',
+                  Icon: ScanLine,
+                  price: LPR_MONTHLY,
+                  description: 'Automatically capture and log license plates entering and leaving your site, with searchable history.',
+                  features: [
+                    'Automatic plate capture & logging',
+                    'Searchable vehicle history',
+                    'Hotlist and watchlist alerts',
+                    'Entry and exit tracking'
+                  ]
+                },
+                {
+                  field: 'satCom',
+                  title: 'SatCom',
+                  Icon: Satellite,
+                  price: SATCOM_MONTHLY,
+                  description: 'For remote areas with minimum cellular coverage',
+                  features: [
+                    'Satellite uplink connectivity',
+                    'Operates beyond cellular range',
+                    'Automatic cellular failover',
+                    'Full remote site visibility'
+                  ]
+                }
+              ].map(option => {
+                const selected = config[option.field];
+                const OptionIcon = option.Icon;
+                return (
+                  <div
+                    key={option.field}
+                    className={`option-card ${selected ? 'selected-card' : ''}`}
+                    onClick={() => toggleHardwareOption(option.field)}
+                    style={{
+                      background: selected
+                        ? 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))'
+                        : 'rgba(255,255,255,0.04)',
+                      border: selected
+                        ? '2px solid #56d3cc'
+                        : '2px solid rgba(255,255,255,0.1)',
+                      borderRadius: '16px',
+                      padding: '32px',
+                      cursor: 'pointer',
+                      position: 'relative',
+                      transition: 'all 0.3s ease'
+                    }}
+                  >
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      marginBottom: '20px'
+                    }}>
+                      <div style={{
+                        width: '64px',
+                        height: '64px',
+                        background: selected
+                          ? 'rgba(86, 211, 204, 0.15)'
+                          : 'rgba(255,255,255,0.08)',
+                        borderRadius: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: selected ? '#56d3cc' : '#fff'
+                      }}>
+                        <OptionIcon width={32} height={32} />
+                      </div>
+
+                      {selected && (
+                        <CheckCircle style={{
+                          color: '#56d3cc',
+                          width: '28px',
+                          height: '28px'
+                        }} />
+                      )}
+                    </div>
+
+                    <h3 style={{
+                      fontSize: '22px',
+                      fontWeight: '800',
+                      marginBottom: '10px',
+                      letterSpacing: '-0.5px'
+                    }}>
+                      {option.title}
+                    </h3>
+
+                    <p style={{
+                      fontSize: '14px',
+                      color: 'rgba(255,255,255,0.65)',
+                      marginBottom: '20px',
+                      lineHeight: '1.6'
+                    }}>
+                      {option.description}
+                    </p>
+
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px',
+                      marginBottom: '24px'
+                    }}>
+                      {option.features.map((feature, idx) => (
+                        <div key={idx} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          fontSize: '13px',
+                          color: 'rgba(255,255,255,0.7)',
+                          fontWeight: '500'
+                        }}>
+                          <div style={{
+                            width: '4px',
+                            height: '4px',
+                            background: selected ? '#56d3cc' : 'rgba(255,255,255,0.4)',
+                            borderRadius: '50%'
+                          }}></div>
+                          {feature}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{
+                      fontSize: '28px',
+                      fontWeight: '900',
+                      color: selected ? '#56d3cc' : 'rgba(255,255,255,0.6)'
+                    }}>
+                      +${option.price.toLocaleString()}/mo
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -2334,212 +2678,7 @@ function LVTConfigurator() {
               flexDirection: 'column',
               gap: '32px'
             }}>
-              {/* Section 1: Placement Map */}
-              <div style={{
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: '16px',
-                padding: '32px'
-              }}>
-                <h3 style={{
-                  fontSize: '20px',
-                  fontWeight: '800',
-                  marginBottom: '8px',
-                  color: '#56d3cc'
-                }}>
-                  Placement Map
-                </h3>
-                <p style={{
-                  fontSize: '14px',
-                  color: 'rgba(255,255,255,0.6)',
-                  marginBottom: '24px',
-                  lineHeight: '1.6'
-                }}>
-                  Upload an aerial or satellite view of your site so we can confirm expected unit placement and camera coverage.
-                </p>
-                <label
-                  htmlFor="placement-map-upload"
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    padding: '32px',
-                    background: 'rgba(39, 42, 47, 0.4)',
-                    border: '2px dashed rgba(86, 211, 204, 0.4)',
-                    borderRadius: '12px',
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onMouseOver={(e) => { e.currentTarget.style.border = '2px dashed #56d3cc'; e.currentTarget.style.background = 'rgba(86, 211, 204, 0.06)'; }}
-                  onMouseOut={(e) => { e.currentTarget.style.border = '2px dashed rgba(86, 211, 204, 0.4)'; e.currentTarget.style.background = 'rgba(39, 42, 47, 0.4)'; }}
-                >
-                  <div style={{ fontSize: '16px', fontWeight: '700', color: '#56d3cc' }}>
-                    {config.siteConfig.placementMapName ? 'Change file' : 'Click to upload'}
-                  </div>
-                  <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.5)' }}>
-                    Aerial image or PDF (PNG, JPG, PDF)
-                  </div>
-                  <input
-                    id="placement-map-upload"
-                    type="file"
-                    accept="image/*,application/pdf"
-                    onChange={handlePlacementMapChange}
-                    style={{ display: 'none' }}
-                  />
-                </label>
-                {config.siteConfig.placementMapName && (
-                  <div style={{
-                    marginTop: '16px',
-                    padding: '12px 16px',
-                    background: 'rgba(86, 211, 204, 0.1)',
-                    border: '1px solid rgba(86, 211, 204, 0.3)',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '12px'
-                  }}>
-                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#fff', wordBreak: 'break-all' }}>
-                      {config.siteConfig.placementMapName}
-                    </span>
-                    <button
-                      onClick={() => updateSiteConfig('placementMapName', '')}
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'rgba(255,255,255,0.6)',
-                        cursor: 'pointer',
-                        fontSize: '14px',
-                        fontWeight: '700',
-                        flexShrink: 0
-                      }}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Section 2: GPS Coordinates */}
-              <div style={{
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: '16px',
-                padding: '32px'
-              }}>
-                <h3 style={{
-                  fontSize: '20px',
-                  fontWeight: '800',
-                  marginBottom: '8px',
-                  color: '#56d3cc'
-                }}>
-                  GPS Coordinates
-                </h3>
-                <p style={{
-                  fontSize: '14px',
-                  color: 'rgba(255,255,255,0.6)',
-                  marginBottom: '24px',
-                  lineHeight: '1.6'
-                }}>
-                  Provide the latitude and longitude for each unit to confirm exact placement. One entry is shown for each of your {gpsUnitList.length} {gpsUnitList.length === 1 ? 'unit' : 'units'} selected in Step 1.
-                </p>
-
-                {gpsUnitList.length === 0 ? (
-                  <div style={{
-                    padding: '20px',
-                    background: 'rgba(255,255,255,0.02)',
-                    borderRadius: '12px',
-                    textAlign: 'center',
-                    fontSize: '14px',
-                    color: 'rgba(255,255,255,0.6)'
-                  }}>
-                    Add units in Step 1 to set GPS coordinates.
-                  </div>
-                ) : (
-                  gpsUnitList.map((u, idx) => {
-                    const coord = config.siteConfig.gpsCoordinates[idx] || { lat: '', long: '' };
-                    return (
-                      <div key={idx} style={{ marginBottom: '24px' }}>
-                        <div style={{
-                          fontSize: '13px',
-                          fontWeight: '800',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px',
-                          marginBottom: '12px',
-                          color: '#fff'
-                        }}>
-                          Unit {idx + 1}
-                          <span style={{
-                            fontSize: '12px',
-                            fontWeight: '600',
-                            textTransform: 'none',
-                            letterSpacing: '0',
-                            color: 'rgba(255,255,255,0.5)',
-                            marginLeft: '8px'
-                          }}>
-                            {u.typeName}{u.zip ? ` · Zip ${u.zip}` : ''}
-                          </span>
-                        </div>
-                        <div
-                          className="contact-grid"
-                          style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}
-                        >
-                          {[
-                            { label: 'Latitude', field: 'lat', placeholder: 'e.g. 40.7128' },
-                            { label: 'Longitude', field: 'long', placeholder: 'e.g. -111.8910' }
-                          ].map(cell => (
-                            <div key={cell.field}>
-                              <label style={{
-                                display: 'block',
-                                fontSize: '12px',
-                                fontWeight: '700',
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.5px',
-                                marginBottom: '8px',
-                                color: 'rgba(255,255,255,0.7)'
-                              }}>
-                                {cell.label}
-                              </label>
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                value={coord[cell.field]}
-                                onChange={(e) => updateGpsCoordinate(idx, cell.field, e.target.value)}
-                                placeholder={cell.placeholder}
-                                style={{
-                                  width: '100%',
-                                  padding: '12px 16px',
-                                  background: 'rgba(39, 42, 47, 0.6)',
-                                  border: '2px solid rgba(255,255,255,0.15)',
-                                  borderRadius: '8px',
-                                  color: '#fff',
-                                  fontSize: '16px',
-                                  fontWeight: '500',
-                                  outline: 'none',
-                                  transition: 'all 0.3s ease'
-                                }}
-                                onFocus={(e) => {
-                                  e.target.style.border = '2px solid #56d3cc';
-                                  e.target.style.background = 'rgba(86, 211, 204, 0.08)';
-                                }}
-                                onBlur={(e) => {
-                                  e.target.style.border = '2px solid rgba(255,255,255,0.15)';
-                                  e.target.style.background = 'rgba(39, 42, 47, 0.6)';
-                                }}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {/* Section 3: Security Schedule */}
+              {/* Section 1: Security Schedule */}
               <div style={{
                 background: 'rgba(255,255,255,0.03)',
                 border: '1px solid rgba(255,255,255,0.12)',
@@ -2631,7 +2770,7 @@ function LVTConfigurator() {
                 ))}
               </div>
 
-              {/* Section 4: Deterrence */}
+              {/* Section 2: Deterrence */}
               <div style={{
                 background: 'rgba(255,255,255,0.03)',
                 border: '1px solid rgba(255,255,255,0.12)',
@@ -2747,7 +2886,212 @@ function LVTConfigurator() {
                 ))}
               </div>
 
-              {/* Section 5: Areas of Concern */}
+              {/* Section 3: Alert Response Services (ARS) */}
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '16px',
+                padding: '32px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                  <Headset width={22} height={22} style={{ color: '#56d3cc' }} />
+                  <h3 style={{
+                    fontSize: '20px',
+                    fontWeight: '800',
+                    color: '#56d3cc'
+                  }}>
+                    ARS (Alert Response Services)
+                  </h3>
+                </div>
+                <p style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.6)',
+                  marginBottom: '24px',
+                  lineHeight: '1.6'
+                }}>
+                  Add live monitoring so trained LVT operators review alerts from your site and escalate to your team when something needs attention.
+                </p>
+
+                {/* Yes / No */}
+                <div style={{
+                  fontSize: '13px',
+                  fontWeight: '800',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  marginBottom: '12px',
+                  color: '#fff'
+                }}>
+                  Add Alert Response Services?
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: '8px' }}>
+                  {[
+                    { value: 'yes', label: 'Yes' },
+                    { value: 'no', label: 'No' }
+                  ].map(opt => {
+                    const active = config.siteConfig.ars.enabled === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => updateArs('enabled', opt.value)}
+                        style={{
+                          padding: '12px 32px',
+                          background: active ? '#56d3cc' : 'rgba(39, 42, 47, 0.6)',
+                          color: active ? '#1b1e23' : '#fff',
+                          border: active ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.15)',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          transition: 'all 0.3s ease'
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {config.siteConfig.ars.enabled === 'yes' && (
+                  <div style={{
+                    marginTop: '28px',
+                    paddingTop: '24px',
+                    borderTop: '1px solid rgba(255,255,255,0.1)'
+                  }}>
+                    {/* Monitoring window */}
+                    <div style={{
+                      fontSize: '13px',
+                      fontWeight: '800',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                      marginBottom: '12px',
+                      color: '#fff'
+                    }}>
+                      Monitoring Coverage *
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: '28px' }}>
+                      {[
+                        { value: '12', label: '12 Hours of Monitoring' },
+                        { value: '24', label: '24 Hours of Monitoring' }
+                      ].map(opt => {
+                        const active = config.siteConfig.ars.hours === opt.value;
+                        return (
+                          <button
+                            key={opt.value}
+                            onClick={() => updateArs('hours', opt.value)}
+                            style={{
+                              flex: '1 1 240px',
+                              padding: '18px 24px',
+                              background: active ? 'rgba(86, 211, 204, 0.15)' : 'rgba(39, 42, 47, 0.6)',
+                              color: '#fff',
+                              border: active ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.15)',
+                              borderRadius: '10px',
+                              cursor: 'pointer',
+                              transition: 'all 0.3s ease',
+                              textAlign: 'left'
+                            }}
+                          >
+                            <div style={{ fontSize: '15px', fontWeight: '800', marginBottom: '4px' }}>
+                              {opt.label}
+                            </div>
+                            <div style={{
+                              fontSize: '18px',
+                              fontWeight: '900',
+                              color: active ? '#56d3cc' : 'rgba(255,255,255,0.6)'
+                            }}>
+                              +${ARS_PRICING[opt.value].toLocaleString()}/mo
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Escalation contacts */}
+                    <div style={{
+                      fontSize: '13px',
+                      fontWeight: '800',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                      marginBottom: '6px',
+                      color: '#fff'
+                    }}>
+                      Escalation Contacts *
+                    </div>
+                    <p style={{
+                      fontSize: '13px',
+                      color: 'rgba(255,255,255,0.6)',
+                      marginBottom: '20px',
+                      lineHeight: '1.6'
+                    }}>
+                      Two contacts are required so our operators always have someone to reach.
+                    </p>
+
+                    {config.siteConfig.ars.contacts.map((contact, idx) => (
+                      <div key={idx} style={{ marginBottom: '24px' }}>
+                        <div style={{
+                          fontSize: '13px',
+                          fontWeight: '800',
+                          marginBottom: '12px',
+                          color: 'rgba(255,255,255,0.85)'
+                        }}>
+                          Contact {idx + 1}
+                        </div>
+                        <div
+                          className="contact-grid"
+                          style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}
+                        >
+                          {[
+                            { label: 'Name *', field: 'name', type: 'text', placeholder: 'Full Name' },
+                            { label: 'Email *', field: 'email', type: 'email', placeholder: 'name@company.com' },
+                            { label: 'Phone Number *', field: 'phone', type: 'tel', placeholder: '(555) 555-5555' }
+                          ].map(cell => (
+                            <div key={cell.field}>
+                              <label style={{
+                                display: 'block',
+                                fontSize: '12px',
+                                fontWeight: '700',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.5px',
+                                marginBottom: '8px',
+                                color: 'rgba(255,255,255,0.7)'
+                              }}>
+                                {cell.label}
+                              </label>
+                              <input
+                                type={cell.type}
+                                value={contact[cell.field]}
+                                onChange={(e) => updateArsContact(idx, cell.field, e.target.value)}
+                                placeholder={cell.placeholder}
+                                style={{
+                                  width: '100%',
+                                  padding: '12px 16px',
+                                  background: 'rgba(39, 42, 47, 0.6)',
+                                  border: '2px solid rgba(255,255,255,0.15)',
+                                  borderRadius: '8px',
+                                  color: '#fff',
+                                  fontSize: '16px',
+                                  fontWeight: '500',
+                                  outline: 'none',
+                                  transition: 'all 0.3s ease'
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.border = '2px solid #56d3cc';
+                                  e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                                }}
+                                onBlur={(e) => {
+                                  e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                                  e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Section 4: Areas of Concern */}
               <div style={{
                 background: 'rgba(255,255,255,0.03)',
                 border: '1px solid rgba(255,255,255,0.12)',
@@ -2800,6 +3144,251 @@ function LVTConfigurator() {
                   }}
                 />
               </div>
+              {/* Section 5: Placement Map */}
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '16px',
+                padding: '32px'
+              }}>
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  marginBottom: '8px',
+                  color: '#56d3cc'
+                }}>
+                  Placement Map <span style={{ fontSize: '13px', fontWeight: '600', color: 'rgba(255,255,255,0.45)' }}>· Optional</span>
+                </h3>
+                <p style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.6)',
+                  marginBottom: '24px',
+                  lineHeight: '1.6'
+                }}>
+                  Upload an aerial or satellite view of your site so we can confirm expected unit placement and camera coverage. You can skip this and sort it out with your rep later.
+                </p>
+                <label
+                  htmlFor="placement-map-upload"
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    padding: '32px',
+                    background: 'rgba(39, 42, 47, 0.4)',
+                    border: '2px dashed rgba(86, 211, 204, 0.4)',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    transition: 'all 0.3s ease'
+                  }}
+                  onMouseOver={(e) => { e.currentTarget.style.border = '2px dashed #56d3cc'; e.currentTarget.style.background = 'rgba(86, 211, 204, 0.06)'; }}
+                  onMouseOut={(e) => { e.currentTarget.style.border = '2px dashed rgba(86, 211, 204, 0.4)'; e.currentTarget.style.background = 'rgba(39, 42, 47, 0.4)'; }}
+                >
+                  <div style={{ fontSize: '16px', fontWeight: '700', color: '#56d3cc' }}>
+                    {config.siteConfig.placementMapName ? 'Change file' : 'Click to upload'}
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.5)' }}>
+                    Aerial image or PDF (PNG, JPG, PDF)
+                  </div>
+                  <input
+                    id="placement-map-upload"
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={handlePlacementMapChange}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+                {config.siteConfig.placementMapName && (
+                  <div style={{
+                    marginTop: '16px',
+                    padding: '12px 16px',
+                    background: 'rgba(86, 211, 204, 0.1)',
+                    border: '1px solid rgba(86, 211, 204, 0.3)',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '12px'
+                  }}>
+                    <span style={{ fontSize: '14px', fontWeight: '600', color: '#fff', wordBreak: 'break-all' }}>
+                      {config.siteConfig.placementMapName}
+                    </span>
+                    <button
+                      onClick={() => updateSiteConfig('placementMapName', '')}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'rgba(255,255,255,0.6)',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        fontWeight: '700',
+                        flexShrink: 0
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
+
+                {/* Bypass — placement map determined later */}
+                <div
+                  onClick={() => {
+                    const next = !config.siteConfig.placementMapLater;
+                    updateSiteConfig('placementMapLater', next);
+                    if (next) updateSiteConfig('placementMapName', '');
+                  }}
+                  style={{
+                    marginTop: '20px',
+                    paddingTop: '20px',
+                    borderTop: '1px solid rgba(255,255,255,0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div style={{
+                    width: '22px',
+                    height: '22px',
+                    minWidth: '22px',
+                    borderRadius: '5px',
+                    border: config.siteConfig.placementMapLater ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.35)',
+                    background: config.siteConfig.placementMapLater ? '#56d3cc' : 'transparent',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease'
+                  }}>
+                    {config.siteConfig.placementMapLater && (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1b1e23" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m5 12 5 5L20 7"/>
+                      </svg>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '14px', fontWeight: '700', color: '#fff' }}>
+                    Placement map will be determined later
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 6: GPS Coordinates */}
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '16px',
+                padding: '32px'
+              }}>
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  marginBottom: '8px',
+                  color: '#56d3cc'
+                }}>
+                  GPS Coordinates <span style={{ fontSize: '13px', fontWeight: '600', color: 'rgba(255,255,255,0.45)' }}>· Optional</span>
+                </h3>
+                <p style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.6)',
+                  marginBottom: '24px',
+                  lineHeight: '1.6'
+                }}>
+                  Provide the latitude and longitude for each unit to confirm exact placement. One entry is shown for each of your {gpsUnitList.length} {gpsUnitList.length === 1 ? 'unit' : 'units'} selected in Step 1.
+                </p>
+
+                {gpsUnitList.length === 0 ? (
+                  <div style={{
+                    padding: '20px',
+                    background: 'rgba(255,255,255,0.02)',
+                    borderRadius: '12px',
+                    textAlign: 'center',
+                    fontSize: '14px',
+                    color: 'rgba(255,255,255,0.6)'
+                  }}>
+                    Add units in Step 1 to set GPS coordinates.
+                  </div>
+                ) : (
+                  gpsUnitList.map((u, idx) => {
+                    const coord = config.siteConfig.gpsCoordinates[idx] || { lat: '', long: '' };
+                    return (
+                      <div key={idx} style={{ marginBottom: '24px' }}>
+                        <div style={{
+                          fontSize: '13px',
+                          fontWeight: '800',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          marginBottom: '12px',
+                          color: '#fff'
+                        }}>
+                          Unit {idx + 1}
+                          <span style={{
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            textTransform: 'none',
+                            letterSpacing: '0',
+                            color: 'rgba(255,255,255,0.5)',
+                            marginLeft: '8px'
+                          }}>
+                            {u.typeName}{u.zip ? ` · Zip ${u.zip}` : ''}
+                          </span>
+                        </div>
+                        <div
+                          className="contact-grid"
+                          style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}
+                        >
+                          {[
+                            { label: 'Latitude', field: 'lat', placeholder: 'e.g. 40.7128' },
+                            { label: 'Longitude', field: 'long', placeholder: 'e.g. -111.8910' }
+                          ].map(cell => (
+                            <div key={cell.field}>
+                              <label style={{
+                                display: 'block',
+                                fontSize: '12px',
+                                fontWeight: '700',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.5px',
+                                marginBottom: '8px',
+                                color: 'rgba(255,255,255,0.7)'
+                              }}>
+                                {cell.label}
+                              </label>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={coord[cell.field]}
+                                onChange={(e) => updateGpsCoordinate(idx, cell.field, e.target.value)}
+                                placeholder={cell.placeholder}
+                                style={{
+                                  width: '100%',
+                                  padding: '12px 16px',
+                                  background: 'rgba(39, 42, 47, 0.6)',
+                                  border: '2px solid rgba(255,255,255,0.15)',
+                                  borderRadius: '8px',
+                                  color: '#fff',
+                                  fontSize: '16px',
+                                  fontWeight: '500',
+                                  outline: 'none',
+                                  transition: 'all 0.3s ease'
+                                }}
+                                onFocus={(e) => {
+                                  e.target.style.border = '2px solid #56d3cc';
+                                  e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                                }}
+                                onBlur={(e) => {
+                                  e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                                  e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
             </div>
           </div>
         )}
@@ -2940,9 +3529,13 @@ function LVTConfigurator() {
                       justifyContent: 'space-between',
                       alignItems: 'center'
                     }}>
-                      <span>{generatorUnitCount} × Smart Generator Backup</span>
+                      <span>
+                        {config.generatorBypass
+                          ? `${generatorUnitCount} × Smart Generator Backup (declined)`
+                          : `${generatorUnitCount} × Smart Generator Backup`}
+                      </span>
                       <span style={{ color: '#56d3cc' }}>
-                        +${(GENERATOR_MONTHLY * generatorUnitCount).toLocaleString()}/mo
+                        +${(GENERATOR_MONTHLY * billedGeneratorCount).toLocaleString()}/mo
                       </span>
                     </div>
                     <div style={{
@@ -2950,13 +3543,15 @@ function LVTConfigurator() {
                       color: 'rgba(255,255,255,0.5)',
                       marginTop: '4px'
                     }}>
-                      Monthly per generator
+                      {config.generatorBypass
+                        ? 'Customer accepted downtime unless externally powered'
+                        : 'Monthly per generator'}
                     </div>
                   </div>
                 )}
                 
                 {/* Hardware Options */}
-                {(config.ndaaCompliant || config.nightVision) && (
+                {(config.ndaaCompliant || config.nightVision || config.lpr || config.satCom) && (
                   <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                     <div style={{
                       fontSize: '11px',
@@ -2989,11 +3584,41 @@ function LVTConfigurator() {
                         fontWeight: '600',
                         display: 'flex',
                         justifyContent: 'space-between',
-                        alignItems: 'center'
+                        alignItems: 'center',
+                        marginBottom: '8px'
                       }}>
                         <span>{totalUnits} × Long-Range Thermal</span>
                         <span style={{ color: '#56d3cc' }}>
                           +${(NIGHT_VISION_MONTHLY * totalUnits).toLocaleString()}/mo
+                        </span>
+                      </div>
+                    )}
+                    {config.lpr && (
+                      <div style={{
+                        fontSize: '16px',
+                        fontWeight: '600',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '8px'
+                      }}>
+                        <span>{totalUnits} × LPR (License Plate Reader)</span>
+                        <span style={{ color: '#56d3cc' }}>
+                          +${(LPR_MONTHLY * totalUnits).toLocaleString()}/mo
+                        </span>
+                      </div>
+                    )}
+                    {config.satCom && (
+                      <div style={{
+                        fontSize: '16px',
+                        fontWeight: '600',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <span>{totalUnits} × SatCom</span>
+                        <span style={{ color: '#56d3cc' }}>
+                          +${(SATCOM_MONTHLY * totalUnits).toLocaleString()}/mo
                         </span>
                       </div>
                     )}
@@ -3048,7 +3673,7 @@ function LVTConfigurator() {
                   </div>
                 )}
 
-                {generatorUnits.length === 0 && !config.ndaaCompliant && !config.nightVision && config.softwarePackages.length === 0 && (
+                {generatorUnits.length === 0 && !config.ndaaCompliant && !config.nightVision && !config.lpr && !config.satCom && config.softwarePackages.length === 0 && (
                   <div style={{
                     padding: '24px',
                     background: 'rgba(255,255,255,0.02)',
@@ -3074,9 +3699,10 @@ function LVTConfigurator() {
                   const filledGps = gpsUnitList
                     .map((u, i) => ({ u, c: sc.gpsCoordinates[i] || { lat: '', long: '' }, i }))
                     .filter(entry => entry.c.lat || entry.c.long);
-                  const hasConfig = sc.placementMapName || filledGps.length > 0 || hasSchedule ||
-                    sc.deterrence.strobes !== 'off' || sc.deterrence.floodlight || sc.deterrence.audio ||
-                    sc.areasOfConcern;
+                  const arsOn = sc.ars.enabled === 'yes' && sc.ars.hours;
+                  const hasConfig = sc.placementMapName || sc.placementMapLater || filledGps.length > 0 ||
+                    hasSchedule || sc.ars.enabled || sc.deterrence.strobes !== 'off' ||
+                    sc.deterrence.floodlight || sc.deterrence.audio || sc.areasOfConcern;
                   if (!hasConfig) return null;
                   const rowStyle = {
                     fontSize: '15px',
@@ -3100,12 +3726,32 @@ function LVTConfigurator() {
                       }}>
                         Site Configuration
                       </div>
-                      {sc.placementMapName && (
+                      {(sc.placementMapName || sc.placementMapLater) && (
                         <div style={rowStyle}>
                           <span>Placement Map</span>
-                          <span style={{ color: '#56d3cc', wordBreak: 'break-all', textAlign: 'right' }}>{sc.placementMapName}</span>
+                          <span style={{ color: '#56d3cc', wordBreak: 'break-all', textAlign: 'right' }}>
+                            {sc.placementMapLater ? 'To be determined later' : sc.placementMapName}
+                          </span>
                         </div>
                       )}
+                      {sc.ars.enabled && (
+                        <div style={rowStyle}>
+                          <span>Alert Response Services</span>
+                          <span style={{ color: '#56d3cc', textAlign: 'right' }}>
+                            {arsOn ? `${sc.ars.hours} hrs · +$${ARS_PRICING[sc.ars.hours].toLocaleString()}/mo` : 'Not included'}
+                          </span>
+                        </div>
+                      )}
+                      {arsOn && sc.ars.contacts.map((contact, i) => (
+                        (contact.name || contact.email || contact.phone) ? (
+                          <div key={i} style={rowStyle}>
+                            <span>ARS Contact {i + 1}</span>
+                            <span style={{ color: '#56d3cc', textAlign: 'right', wordBreak: 'break-word' }}>
+                              {[contact.name, contact.email, contact.phone].filter(Boolean).join(' · ')}
+                            </span>
+                          </div>
+                        ) : null
+                      ))}
                       {filledGps.length > 0 && filledGps.map(entry => (
                         <div key={entry.i} style={rowStyle}>
                           <span>Unit {entry.i + 1} GPS</span>
@@ -3234,7 +3880,7 @@ function LVTConfigurator() {
                     
                     setIsSubmitting(true);
                     
-                    const webhookUrl = 'https://webhooks.workato.com/webhooks/rest/6a7e39d0-1da9-4e30-8ab7-b7c732cbcb0f/order';
+                    const webhookUrl = WEBHOOK_URL;
                     
                     const monthlyTotal = Math.round(calculateMonthlyTotal());
                     const contractTotal = calculateContractTotal();
@@ -3294,6 +3940,11 @@ function LVTConfigurator() {
                       // Hardware Options
                       ndaaCompliant: config.ndaaCompliant ? 'Yes' : 'No',
                       nightVision: config.nightVision ? 'Yes' : 'No',
+                      lpr: config.lpr ? 'Yes' : 'No',
+                      satCom: config.satCom ? 'Yes' : 'No',
+                      generatorDeclined: config.generatorBypass ? 'Yes' : 'No',
+                      generatorDowntimeAccepted: config.generatorBypass ? 'Yes' : 'N/A',
+                      generatorsBilled: billedGeneratorCount,
                       
                       // Software Packages
                       softwarePackages: config.softwarePackages.length > 0
@@ -3301,7 +3952,24 @@ function LVTConfigurator() {
                         : 'None',
 
                       // Site Configuration
-                      placementMap: config.siteConfig.placementMapName || 'Not provided',
+                      placementMap: config.siteConfig.placementMapLater
+                        ? 'To be determined later'
+                        : (config.siteConfig.placementMapName || 'Not provided'),
+                      arsEnabled: config.siteConfig.ars.enabled === 'yes' ? 'Yes' : 'No',
+                      arsMonitoringHours: config.siteConfig.ars.enabled === 'yes' && config.siteConfig.ars.hours
+                        ? `${config.siteConfig.ars.hours} hours`
+                        : 'N/A',
+                      arsMonthlyCharge: config.siteConfig.ars.enabled === 'yes' && config.siteConfig.ars.hours
+                        ? ARS_PRICING[config.siteConfig.ars.hours]
+                        : 0,
+                      arsContacts: config.siteConfig.ars.enabled === 'yes'
+                        ? config.siteConfig.ars.contacts.map((contact, i) => ({
+                            contact: i + 1,
+                            name: contact.name,
+                            email: contact.email,
+                            phone: contact.phone
+                          }))
+                        : [],
                       gpsCoordinates: gpsUnitList.length > 0
                         ? gpsUnitList.map((u, i) => {
                             const c = config.siteConfig.gpsCoordinates[i] || { lat: '', long: '' };
@@ -3504,6 +4172,198 @@ function LVTConfigurator() {
             >
               Start Over
             </button>
+          )}
+        </div>
+
+        {/* Talk to a Sales Rep — available on every step */}
+        <div style={{
+          marginTop: '56px',
+          maxWidth: '800px',
+          marginLeft: 'auto',
+          marginRight: 'auto',
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid rgba(255,255,255,0.12)',
+          borderRadius: '16px',
+          padding: '28px 32px'
+        }}>
+          {salesRep.submitted ? (
+            <div style={{ textAlign: 'center' }}>
+              <CheckCircle style={{ color: '#56d3cc', width: '32px', height: '32px' }} />
+              <div style={{
+                fontSize: '18px',
+                fontWeight: '800',
+                marginTop: '12px',
+                marginBottom: '6px'
+              }}>
+                Thanks — we'll be in touch shortly.
+              </div>
+              <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.6)' }}>
+                An LVT sales rep will reach out to {salesRep.email}. Your configuration has been saved, so you can keep going where you left off.
+              </div>
+            </div>
+          ) : (
+            <React.Fragment>
+              <div
+                onClick={() => updateSalesRep('open', !salesRep.open)}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '16px',
+                  cursor: 'pointer'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <Headset width={24} height={24} style={{ color: '#56d3cc' }} />
+                  <div style={{
+                    fontSize: '17px',
+                    fontWeight: '800',
+                    letterSpacing: '-0.2px'
+                  }}>
+                    Have Questions? Talk to an LVT Sales Rep Directly!
+                  </div>
+                </div>
+                <div style={{
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  color: '#56d3cc',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  whiteSpace: 'nowrap'
+                }}>
+                  {salesRep.open ? 'Close' : 'Contact Us'}
+                </div>
+              </div>
+
+              {salesRep.open && (
+                <div style={{
+                  marginTop: '24px',
+                  paddingTop: '24px',
+                  borderTop: '1px solid rgba(255,255,255,0.1)'
+                }}>
+                  <p style={{
+                    fontSize: '14px',
+                    color: 'rgba(255,255,255,0.6)',
+                    marginBottom: '20px',
+                    lineHeight: '1.6'
+                  }}>
+                    Leave your details and a rep will get back to you. You won't lose your progress.
+                  </p>
+                  <div
+                    className="contact-grid"
+                    style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '16px' }}
+                  >
+                    {[
+                      { label: 'Name *', field: 'name', type: 'text', placeholder: 'Full Name' },
+                      { label: 'Email Address *', field: 'email', type: 'email', placeholder: 'your.email@company.com' },
+                      { label: 'Phone Number', field: 'phone', type: 'tel', placeholder: '(555) 555-5555' }
+                    ].map(cell => (
+                      <div key={cell.field}>
+                        <label style={{
+                          display: 'block',
+                          fontSize: '12px',
+                          fontWeight: '700',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          marginBottom: '8px',
+                          color: 'rgba(255,255,255,0.7)'
+                        }}>
+                          {cell.label}
+                        </label>
+                        <input
+                          type={cell.type}
+                          value={salesRep[cell.field]}
+                          onChange={(e) => updateSalesRep(cell.field, e.target.value)}
+                          placeholder={cell.placeholder}
+                          style={{
+                            width: '100%',
+                            padding: '12px 16px',
+                            background: 'rgba(39, 42, 47, 0.6)',
+                            border: '2px solid rgba(255,255,255,0.15)',
+                            borderRadius: '8px',
+                            color: '#fff',
+                            fontSize: '16px',
+                            fontWeight: '500',
+                            outline: 'none',
+                            transition: 'all 0.3s ease'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.border = '2px solid #56d3cc';
+                            e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                          }}
+                          onBlur={(e) => {
+                            e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                            e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <label style={{
+                    display: 'block',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    marginBottom: '8px',
+                    color: 'rgba(255,255,255,0.7)'
+                  }}>
+                    What can we help with?
+                  </label>
+                  <textarea
+                    value={salesRep.question}
+                    onChange={(e) => updateSalesRep('question', e.target.value)}
+                    placeholder="Ask us anything about pricing, hardware, or deployment..."
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      padding: '14px 16px',
+                      background: 'rgba(39, 42, 47, 0.6)',
+                      border: '2px solid rgba(255,255,255,0.15)',
+                      borderRadius: '8px',
+                      color: '#fff',
+                      fontSize: '16px',
+                      fontWeight: '500',
+                      fontFamily: 'inherit',
+                      lineHeight: '1.6',
+                      outline: 'none',
+                      resize: 'vertical',
+                      marginBottom: '20px',
+                      transition: 'all 0.3s ease'
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.border = '2px solid #56d3cc';
+                      e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                      e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                    }}
+                  />
+
+                  <button
+                    onClick={submitSalesRepRequest}
+                    disabled={!salesRepValid || salesRep.submitting}
+                    style={{
+                      padding: '14px 32px',
+                      background: (!salesRepValid || salesRep.submitting) ? 'rgba(86, 211, 204, 0.2)' : '#56d3cc',
+                      color: (!salesRepValid || salesRep.submitting) ? 'rgba(255,255,255,0.4)' : '#1b1e23',
+                      border: 'none',
+                      borderRadius: '10px',
+                      fontSize: '14px',
+                      fontWeight: '800',
+                      cursor: (!salesRepValid || salesRep.submitting) ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.3s ease',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px'
+                    }}
+                  >
+                    {salesRep.submitting ? 'Sending...' : 'Request a Call'}
+                  </button>
+                </div>
+              )}
+            </React.Fragment>
           )}
         </div>
       </main>
