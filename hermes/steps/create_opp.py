@@ -18,6 +18,8 @@ left alone.
 
 from __future__ import annotations
 
+import json
+import re
 from datetime import date, timedelta
 
 from .. import sfcli
@@ -84,6 +86,150 @@ def create_opportunity(normalised: dict, resolved: dict, config: dict, org: str,
 
     opportunity_id = sfcli.create("Opportunity", fields, org=org)
     return {"id": opportunity_id, "already_existed": False, "fields": fields}
+
+
+NOTES_BEGIN = "--- LVT Online Order configuration (managed by Hermes) ---"
+NOTES_END = "--- end LVT Online Order configuration ---"
+
+# Coded values the portal sends, mapped to the wording it shows the customer. Anything not
+# listed falls back to a title-cased version of the raw value, so an unmapped new option
+# still reads sensibly instead of being dropped.
+VALUE_LABELS = {
+    "safety-recorded": "For your safety, area being recorded",
+    "parking-recorded": "Parking lot being recorded",
+    "classical": "Royalty free classical music",
+    "intelligentDeterrence": "Intelligent Deterrence",
+    "strobe": "Strobe Light",
+    "floodlight": "Flood Light",
+    "audible": "Trespassing audible",
+    "loiter": "Loiter",
+    "immediate": "Immediate",
+    "yes": "Yes",
+    "no": "No",
+    "on": "On",
+    "off": "Off",
+    "day": "Day",
+    "night": "Night",
+}
+
+
+ACRONYMS = {"gps": "GPS", "zip": "ZIP", "ars": "ARS", "lpr": "LPR", "id": "ID",
+            "ndaa": "NDAA", "sku": "SKU"}
+
+
+def _label(key: str) -> str:
+    """camelCase / snake_case KEY -> readable label.
+
+    Only ever applied to keys. Applying it to values mangled free text - a placement map
+    named "Cartersville-Yard-North.pdf" came out as "Cartersville- Yard- North.pdf".
+    """
+    if key in VALUE_LABELS:
+        return VALUE_LABELS[key]
+    spaced = re.sub(r"(?<!^)(?=[A-Z])", " ", str(key).replace("_", " ")).strip()
+    words = [ACRONYMS.get(w.lower(), w) for w in spaced.split()]
+    if words:
+        words[0] = words[0] if words[0] in ACRONYMS.values() else words[0].capitalize()
+    return " ".join(words)
+
+
+def _render_value(value, indent: int) -> list[str]:
+    """Render a value as readable lines. Generic on purpose.
+
+    Rendering structurally rather than field-by-field means a new key the portal starts
+    sending shows up in the notes automatically. A hand-written template would silently
+    omit it, which is the worse failure - a rep would have no idea something was missing.
+    """
+    pad = "  " * indent
+    lines: list[str] = []
+
+    if isinstance(value, dict):
+        # A dict of booleans reads best as a list of what is switched on.
+        if value and all(isinstance(v, bool) for v in value.values()):
+            enabled = [_label(k) for k, v in value.items() if v]
+            return [f"{pad}{', '.join(enabled) if enabled else 'None'}"]
+        for key, sub in value.items():
+            if sub is None or sub == "" or sub == [] or sub == {}:
+                continue
+            if isinstance(sub, (dict, list)):
+                nested = _render_value(sub, indent + 1)
+                if len(nested) == 1 and not nested[0].strip().startswith("-"):
+                    lines.append(f"{pad}{_label(key)}: {nested[0].strip()}")
+                else:
+                    lines.append(f"{pad}{_label(key)}:")
+                    lines.extend(nested)
+            else:
+                lines.append(f"{pad}{_label(key)}: {_scalar(sub)}")
+        return lines or [f"{pad}(none)"]
+
+    if isinstance(value, list):
+        for index, item in enumerate(value, start=1):
+            if isinstance(item, dict):
+                lines.append(f"{pad}{index}.")
+                lines.extend(_render_value(item, indent + 1))
+            else:
+                lines.append(f"{pad}- {_scalar(item)}")
+        return lines or [f"{pad}(none)"]
+
+    return [f"{pad}{_scalar(value)}"]
+
+
+def _scalar(value) -> str:
+    """Render a leaf value. Strings pass through verbatim unless they are a known code -
+    free text like a filename or a description must not be reformatted.
+    """
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    if isinstance(value, str):
+        return VALUE_LABELS.get(value, value)
+    return str(value)
+
+
+def render_configuration(site_config: dict) -> str:
+    """Render site_config as readable text rather than JSON."""
+    return "\n".join(_render_value(site_config, 0))
+
+
+def set_configuration_notes(opportunity_id: str, payload: dict, org: str) -> dict:
+    """Write the order's configuration section into Opportunity.Notes__c.
+
+    The block is fenced by markers and only that block is ever rewritten, so anything a
+    rep types into Notes__c survives a re-submission. Blindly overwriting the field would
+    destroy their work - it is a general-purpose notes field, not ours alone.
+
+    Written via the REST helper: the JSON contains quotes and newlines, which the CLI's
+    --values form cannot carry.
+    """
+    site_config = payload.get("site_config")
+    if not site_config:
+        return {"written": False, "reason": "payload carries no site_config"}
+
+    rendered = render_configuration(site_config)
+    block = f"{NOTES_BEGIN}\n{rendered}\n{NOTES_END}"
+
+    record = sfcli.query_one(
+        f"SELECT Id, Notes__c FROM Opportunity WHERE Id = '{opportunity_id}'", org=org
+    )
+    existing = (record or {}).get("Notes__c") or ""
+
+    if NOTES_BEGIN in existing and NOTES_END in existing:
+        head = existing.split(NOTES_BEGIN)[0]
+        tail = existing.split(NOTES_END, 1)[1]
+        updated = f"{head}{block}{tail}"
+    elif existing.strip():
+        updated = f"{existing.rstrip()}\n\n{block}"
+    else:
+        updated = block
+
+    # Notes__c holds 100,000 characters. Truncate the rendered config rather than let the
+    # write fail, and say so in the field so nobody reads a partial config as complete.
+    limit = 100_000
+    if len(updated) > limit:
+        marker = "\n[configuration truncated to fit Notes__c]\n"
+        updated = updated[: limit - len(marker) - len(NOTES_END) - 1] + marker + NOTES_END
+
+    sfcli.update_fields("Opportunity", opportunity_id, {"Notes__c": updated}, org=org)
+    return {"written": True, "characters": len(block), "replaced_existing_block":
+            NOTES_BEGIN in existing}
 
 
 def advance_stage(opportunity_id: str, config: dict, org: str) -> dict:

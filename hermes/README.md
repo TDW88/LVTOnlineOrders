@@ -282,6 +282,59 @@ behind; without that check the next run adopts it and reports a $0 order as proc
 happened for real during development, and `verify` caught it via the expected-total
 mismatch.
 
+## Configuration notes
+
+The payload's `site_config` — the Configuration step's answers: placement map, areas of
+concern, GPS coordinates, and the per-location intrusion detection / schedule / announcement
+/ response settings — is written into `Opportunity.Notes__c` (textarea, 100,000 chars) as
+readable text, not JSON:
+
+```
+Placement map: Cartersville-Yard-North.pdf
+Areas of concern: Equipment yard, north fence line after hours.
+Per location:
+  1.
+    ZIP code: 30120
+    Intrusion Detection: Yes
+    Schedule:
+      Arm From: 18:00
+      Arm Until: 06:00
+    Detect: Human, Vehicle
+    Trigger: Loiter
+    Response: Intelligent Deterrence, Strobe Light, Flood Light
+```
+
+`render_configuration` walks the structure generically rather than templating known fields,
+so **a new key the portal starts sending appears automatically**. A hand-written template
+would omit it silently, and a rep would have no way to know something was missing. Coded
+values (`safety-recorded`, `loiter`, `floodlight`) map to the wording the customer saw via
+`VALUE_LABELS`; unmapped values fall through unchanged.
+
+Formatting rules worth knowing: booleans read Yes/No, an all-boolean dict collapses to the
+list of what is switched on ("None" if nothing is), and empty or null values are omitted
+entirely. Title-casing is applied **only to keys** — doing it to values mangled free text,
+turning `Cartersville-Yard-North.pdf` into `Cartersville- Yard- North.pdf`.
+
+**Rep-authored notes are preserved.** The block is fenced by markers:
+
+```
+--- LVT Online Order configuration (managed by Hermes) ---
+{ ...site_config... }
+--- end LVT Online Order configuration ---
+```
+
+Only the text between those markers is rewritten. `Notes__c` is a general-purpose field a
+rep may already be using, so overwriting it wholesale would destroy their work. A re-run
+replaces the block in place rather than appending a second copy (verified). A payload with
+no `site_config` writes nothing and says so.
+
+Written through `sfcli.update_fields`, which PATCHes via the REST API rather than using
+`sf data update record --values`. The `--values` form is a space-separated `key="value"`
+string, so field content containing quotes, newlines or spaces corrupts it — and a JSON
+blob has all three. Two gotchas found along the way: `sf api request rest` rejects the
+`--json` flag (hence `expect_json=False`), and `--body` needs an `@` prefix on the file path
+or the path itself is sent as the body.
+
 ## Primary contact
 
 The name on the portal's contact step becomes the primary contact in the two places this
@@ -321,8 +374,7 @@ silently dropped: `Ana Maria Reyes` → `Ana` / `Maria Reyes`.
 | `unit_type: mobile` | `BASEUNIT` Mobile Mounting Structure - Solar |
 | `unit_type: mobile` + `needs_generator` | `BASEUNIT` …SMART GENERATOR variant |
 | `unit_type: wall` | `BASEUNIT` Universal Pole/Wall Mount-AC |
-| `ndaa_compliant: true` | `HEADUNIT` A-IR-PTZ Base-**Axis**, NDAA |
-| `ndaa_compliant: false` | `HEADUNIT` D-IR-PTZ Base-**Dahua** (non-NDAA) |
+| `order.cameras.default_sku` | the matching `HEADUNIT` option (see below) |
 | software packages | `MODULE` Intelligent Deterrence / Investigations / Safety, $500 each |
 | recurring charge | `FORM FACTOR SUBSCRIPTION` … LVT Managed |
 | always added | `Setup Fee` $400 (bundle option) |
@@ -375,6 +427,32 @@ product.
 unit. It travels in the payload for the rep and produces no line. Likewise the portal's
 $125 NDAA and $1000 generator uplifts do not exist as SKUs; both are expressed by
 product selection instead.
+
+### Camera selection
+
+The portal's `CAMERA_OPTIONS` skus **are** the Salesforce HEADUNIT product names, so they
+map straight onto bundle options via `head_units_by_sku`:
+
+| Camera sku | Option | NDAA |
+|---|---|---|
+| `NR/MR A-IR-PTZ (L,R,C), NDAA` | `a1PUm0000049j2PMAQ` | yes |
+| `NR/MR A-IR-PTZ (L,R), IR Fisheye w/Analytics (C), NDAA` | `a1PUm0000049j29MAA` | yes |
+| `NR BIS (L,R), IR Fisheye w/Analytics (C)` | `a1PUm0000049j2JMAQ` | no |
+| `MR BIS (L,R), IR Fisheye w/Analytics (C)` | `a1PUm0000049j2LMAQ` | no |
+| `LR BIS (L,R), IR Fisheye w/Analytics (C)` | `a1PUm0000049j2HMAQ` | no |
+
+**`ndaa_compliant` is a fallback only**, used when a payload carries no camera selection at
+all. Deriving the head unit from that boolean was a real bug: it discarded the customer's
+choice entirely and put a generic `D-IR-PTZ- Base-Dahua` on every non-NDAA order. An order
+resolved via the fallback should be treated as under-specified.
+
+An unknown sku is rejected (`PRODUCT_NOT_FOUND`) rather than substituted — quietly shipping
+a different camera than the one ordered is worse than refusing.
+
+**Mixed cameras are rejected**, not defaulted. When `mixed` is true or per-unit overrides
+disagree with the default, the order needs one bundle per camera package, which is not
+built yet. Applying the default to every unit would silently drop the override — the same
+class of bug as above.
 
 ## Known gaps
 
