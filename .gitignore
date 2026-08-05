@@ -1,0 +1,23 @@
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+
+# Test / tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local order payloads emitted by the portal's Submit Order button. These carry real
+# customer contact details and account UUIDs, so they should not be committed.
+LVT-*.json
+hermes/payloads/local-*.json
+
+# macOS
+.DS_Store
