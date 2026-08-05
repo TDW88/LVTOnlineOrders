@@ -165,9 +165,9 @@ const CAMERA_OPTIONS = [
 
 // Per-location intrusion detection / deterrence configuration
 const ANNOUNCEMENT_OPTIONS = [
-  { value: 'classical', label: 'Royalty free classical music' },
-  { value: 'safety-recorded', label: 'For your safety, area being recorded' },
-  { value: 'parking-recorded', label: 'Parking lot being recorded' }
+  { value: 'classical', label: 'Royalty Free Classical Music' },
+  { value: 'safety-recorded', label: 'For your safety, area being recorded.' },
+  { value: 'parking-recorded', label: 'Parking lot being recorded.' }
 ];
 
 const ANNOUNCEMENT_SCHEDULES = [
@@ -213,9 +213,10 @@ function LVTConfigurator() {
     locations: [
       {
         id: 1,
+        name: '',
         zipCode: '',
         units: [
-          { id: 1, unitType: 'mobile', needsGenerator: false, quantity: 1 }
+          { id: 1, unitType: 'mobile', needsGenerator: false, recommendedGenerator: false, quantity: 1 }
         ]
       }
     ],
@@ -324,10 +325,11 @@ function LVTConfigurator() {
   }, 0);
 
   // One GPS entry per physical unit selected in Step 1 (expanded by quantity)
-  const gpsUnitList = config.locations.flatMap(location =>
+  const gpsUnitList = config.locations.flatMap((location, locationIdx) =>
     location.units.flatMap(unit =>
       Array.from({ length: unit.quantity || 0 }, () => ({
         typeName: getUnitType(unit.unitType).name,
+        locationName: (location.name && location.name.trim()) || `Location ${locationIdx + 1}`,
         zip: location.zipCode
       }))
     )
@@ -409,6 +411,47 @@ function LVTConfigurator() {
 
   // Simulate zip code lookup for generator requirements
   // In production, this would call an API
+  const toggleUnitGenerator = (locationId, unitId) => {
+    setConfig(prev => ({
+      ...prev,
+      locations: prev.locations.map(location => {
+        if (location.id !== locationId) return location;
+        return {
+          ...location,
+          units: location.units.map(unit => {
+            if (unit.id !== unitId) return unit;
+            if (!getUnitType(unit.unitType).generatorEligible) return unit;
+            return { ...unit, needsGenerator: !unit.needsGenerator };
+          })
+        };
+      })
+    }));
+  };
+
+  const setAllGeneratorsAtLocation = (locationId, value) => {
+    setConfig(prev => ({
+      ...prev,
+      locations: prev.locations.map(location => {
+        if (location.id !== locationId) return location;
+        return {
+          ...location,
+          units: location.units.map(unit =>
+            getUnitType(unit.unitType).generatorEligible ? { ...unit, needsGenerator: value } : unit
+          )
+        };
+      })
+    }));
+  };
+
+  const updateLocationName = (locationId, name) => {
+    setConfig(prev => ({
+      ...prev,
+      locations: prev.locations.map(location =>
+        location.id === locationId ? { ...location, name } : location
+      )
+    }));
+  };
+
   const checkGeneratorRequirement = (zip) => {
     // Simplified logic: certain regions need generators
     // This would be replaced with actual API call to lookup table
@@ -434,8 +477,9 @@ function LVTConfigurator() {
         ...prev.locations,
         {
           id: newId,
+          name: '',
           zipCode: '',
-          units: [{ id: 1, unitType: 'mobile', needsGenerator: false, quantity: 1 }]
+          units: [{ id: 1, unitType: 'mobile', needsGenerator: false, recommendedGenerator: false, quantity: 1 }]
         }
       ]
     }));
@@ -469,7 +513,7 @@ function LVTConfigurator() {
         const nextId = Math.max(...location.units.map(unit => unit.id)) + 1;
         return {
           ...location,
-          units: [...location.units, { id: nextId, unitType: 'mobile', needsGenerator: false, quantity: 1 }]
+          units: [...location.units, { id: nextId, unitType: 'mobile', needsGenerator: false, recommendedGenerator: false, quantity: 1 }]
         };
       })
     }));
@@ -525,12 +569,12 @@ function LVTConfigurator() {
             }
             const unitType = getUnitType(unitTypeId);
             if (!unitType.generatorEligible) {
-              return { ...unit, unitType: unitTypeId, needsGenerator: false };
+              return { ...unit, unitType: unitTypeId, needsGenerator: false, recommendedGenerator: false };
             }
             const needsGenerator = location.zipCode.length === 5
               ? checkGeneratorRequirement(location.zipCode)
               : unit.needsGenerator;
-            return { ...unit, unitType: unitTypeId, needsGenerator };
+            return { ...unit, unitType: unitTypeId, needsGenerator, recommendedGenerator: needsGenerator };
           })
         };
       })
@@ -557,7 +601,7 @@ function LVTConfigurator() {
           return {
             ...loc,
             units: loc.units.map(line =>
-              line.id === unitId ? { ...line, needsGenerator: false } : line
+              line.id === unitId ? { ...line, needsGenerator: false, recommendedGenerator: false } : line
             )
           };
         })
@@ -574,7 +618,7 @@ function LVTConfigurator() {
         return {
           ...loc,
           units: loc.units.map(line =>
-            line.id === unitId ? { ...line, needsGenerator: needsGen } : line
+            line.id === unitId ? { ...line, needsGenerator: needsGen, recommendedGenerator: needsGen } : line
           )
         };
       })
@@ -626,10 +670,7 @@ function LVTConfigurator() {
         .reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
       return sum + locationGenerators;
     }, 0);
-    // Skipped when the customer opts to accept downtime instead of a generator
-    if (!config.generatorBypass) {
-      monthlyTotal += generatorCount * GENERATOR_MONTHLY;
-    }
+    monthlyTotal += generatorCount * GENERATOR_MONTHLY;
     
     // Add software packages (per unit)
     config.softwarePackages.forEach(id => {
@@ -687,10 +728,7 @@ function LVTConfigurator() {
         .reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
       return sum + locationGenerators;
     }, 0);
-    // Skipped when the customer opts to accept downtime instead of a generator
-    if (!config.generatorBypass) {
-      monthlyTotal += generatorCount * GENERATOR_MONTHLY;
-    }
+    monthlyTotal += generatorCount * GENERATOR_MONTHLY;
     
     // Add software packages (per unit)
     config.softwarePackages.forEach(id => {
@@ -819,6 +857,14 @@ function LVTConfigurator() {
     });
   }, [config.locations.map(l => l.id).join(',')]);
 
+  // A location's display name, falling back to its position when unnamed
+  const locationLabel = (location, idx) =>
+    (location && location.name && location.name.trim()) || `Location ${idx + 1}`;
+  const locationLabelById = (locationId) => {
+    const idx = config.locations.findIndex(l => l.id === locationId);
+    return idx === -1 ? 'Location' : locationLabel(config.locations[idx], idx);
+  };
+
   const getLocationConfig = (locationId) =>
     config.siteConfig.locationConfigs[locationId] || makeLocationConfig();
 
@@ -894,6 +940,19 @@ function LVTConfigurator() {
   // Selecting the Intelligent Deterrence software package fixes the response
   const intelligentDeterrenceIncluded = config.softwarePackages.includes('detect-deter');
 
+  // With the package selected it is the only response offered; without it, it is
+  // not offered at all.
+  const availableResponses = intelligentDeterrenceIncluded
+    ? DETECTION_RESPONSES.filter(r => r.field === 'intelligentDeterrence')
+    : DETECTION_RESPONSES.filter(r => r.field !== 'intelligentDeterrence');
+
+  // Reads back whatever the customer chose to detect, for use in later prompts
+  const detectedLabel = (lc) => {
+    const picked = [lc.detect.human ? 'Humans' : null, lc.detect.vehicle ? 'Vehicles' : null].filter(Boolean);
+    if (picked.length === 0) return 'these objects';
+    return picked.join(' and ');
+  };
+
   const locationConfigComplete = (locationId) => {
     const lc = getLocationConfig(locationId);
     if (!lc.idleStrobe) return false;
@@ -910,8 +969,7 @@ function LVTConfigurator() {
     if (!lc.trigger) return false;
     if (lc.trigger === 'loiter' && !(lc.loiterSeconds >= 1 && lc.loiterSeconds <= 100)) return false;
     if (!lc.detectWhere.trim()) return false;
-    const r = lc.response;
-    if (!(intelligentDeterrenceIncluded || r.intelligentDeterrence || r.strobe || r.floodlight || r.audible)) return false;
+    if (!intelligentDeterrenceIncluded && !availableResponses.some(opt => lc.response[opt.field])) return false;
     return true;
   };
 
@@ -989,13 +1047,25 @@ function LVTConfigurator() {
   };
 
   const updateArs = (field, value) => {
-    setConfig(prev => ({
-      ...prev,
-      siteConfig: {
+    setConfig(prev => {
+      const nextSiteConfig = {
         ...prev.siteConfig,
         ars: { ...prev.siteConfig.ars, [field]: value }
+      };
+      // Buying monitoring implies you want alerting, so answering yes turns
+      // intrusion detection on for every location that has not said otherwise.
+      if (field === 'enabled' && value === 'yes') {
+        const nextConfigs = { ...nextSiteConfig.locationConfigs };
+        prev.locations.forEach(location => {
+          const lc = nextConfigs[location.id] || makeLocationConfig();
+          if (lc.intrusionDetection === null) {
+            nextConfigs[location.id] = { ...lc, intrusionDetection: 'yes' };
+          }
+        });
+        nextSiteConfig.locationConfigs = nextConfigs;
       }
-    }));
+      return { ...prev, siteConfig: nextSiteConfig };
+    });
   };
 
   const updateArsContact = (index, field, value) => {
@@ -1032,7 +1102,11 @@ function LVTConfigurator() {
       // The NDAA answer drives which SKUs are offered, so both are required
       return config.cameraConfig.ndaaRequired !== null && config.cameraConfig.sku !== null;
     }
-    if (currentStep === 2) return true; // Hardware options are optional
+    if (currentStep === 2) {
+      // Hardware options are optional, but declining a recommended EFOY
+      // generator requires acknowledging the downtime
+      return declinedRecommendedLineCount === 0 || config.generatorBypass;
+    }
     if (currentStep === 3) return true; // Software packages are optional
     if (currentStep === 4) return config.leaseTerm !== null; // Lease term required
     if (currentStep === 5) {
@@ -1077,7 +1151,18 @@ function LVTConfigurator() {
   );
   const generatorUnitCount = generatorUnits.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
   // Generators are only billed when the customer has NOT opted to accept downtime
-  const billedGeneratorCount = config.generatorBypass ? 0 : generatorUnitCount;
+  // Generators are billed straight off the per-unit selections
+  const billedGeneratorCount = generatorUnitCount;
+  const generatorEligibleLines = config.locations.flatMap(location =>
+    location.units
+      .filter(unit => getUnitType(unit.unitType).generatorEligible)
+      .map(unit => ({ ...unit, locationId: location.id }))
+  );
+  const recommendedGeneratorLineCount = generatorEligibleLines.filter(u => u.recommendedGenerator).length;
+  const declinedRecommendedLineCount = generatorEligibleLines.filter(u => u.recommendedGenerator && !u.needsGenerator).length;
+  const wallMountOnlyLocations = config.locations.filter(location =>
+    location.units.length > 0 && location.units.every(unit => !getUnitType(unit.unitType).generatorEligible)
+  );
 
   // Camera packages offered for the current NDAA answer. Requiring NDAA narrows
   // the list to compliant packages; not requiring it offers everything.
@@ -1094,7 +1179,9 @@ function LVTConfigurator() {
       location.units.flatMap(unit =>
         Array.from({ length: unit.quantity || 0 }, (_, n) => ({
           key: `${location.id}-${unit.id}-${n + 1}`,
+          locationId: location.id,
           locationNumber: locationIdx + 1,
+          locationName: locationLabel(location, locationIdx),
           zipCode: location.zipCode,
           unitTypeName: getUnitType(unit.unitType).name
         }))
@@ -1144,6 +1231,7 @@ function LVTConfigurator() {
 
     const locations = config.locations.map((location, idx) => ({
       locationNumber: idx + 1,
+      locationName: locationLabel(location, idx),
       zipCode: location.zipCode,
       units: location.units.map(unit => {
         const unitType = getUnitType(unit.unitType);
@@ -1167,6 +1255,7 @@ function LVTConfigurator() {
       return {
         unitNumber: i + 1,
         unitTypeName: u.typeName,
+        locationName: u.locationName || null,
         zipCode: u.zip,
         latitude: asNumber(coord.lat),
         longitude: asNumber(coord.long)
@@ -1269,6 +1358,7 @@ function LVTConfigurator() {
             const on = lc.intrusionDetection === 'yes';
             return {
               locationNumber: idx + 1,
+              locationName: locationLabel(location, idx),
               zipCode: location.zipCode,
               intrusionDetection: lc.intrusionDetection === null ? null : on,
               idleStrobeLight: lc.idleStrobe,
@@ -1525,12 +1615,13 @@ function LVTConfigurator() {
       baseMonthlyTotal: model.lease.baseMonthlyTotal,
       deploymentZips: model.deployment.locations.map(l => l.zipCode).join(', '),
       deploymentDetails: unitLines.map(({ loc, unit }) =>
-        `Location ${loc.locationNumber}: ${unit.quantity} ${unit.quantity === 1 ? 'Unit' : 'Units'} • ${unit.unitTypeName} • Zip ${loc.zipCode}${unit.needsGenerator ? ' (+ Generator)' : ''}`
+        `${loc.locationName}: ${unit.quantity} ${unit.quantity === 1 ? 'Unit' : 'Units'} • ${unit.unitTypeName} • Zip ${loc.zipCode}${unit.needsGenerator ? ' (+ EFOY Generator)' : ''}`
       ).join(' | '),
       unitBreakdown: unitLines.map(({ loc, unit }) => {
         const ship = shippingByZip[loc.zipCode] || null;
         return {
           location: loc.locationNumber,
+          locationName: loc.locationName,
           unitType: unit.unitTypeName,
           quantity: unit.quantity,
           zipCode: loc.zipCode,
@@ -1601,6 +1692,7 @@ function LVTConfigurator() {
         : 'None',
       locationAnalytics: model.site.schedule.perLocation.map(l => ({
         location: l.locationNumber,
+        locationName: l.locationName,
         zipCode: l.zipCode,
         intrusionDetection: l.intrusionDetection === null ? 'Not answered' : (l.intrusionDetection ? 'Yes' : 'No'),
         idleStrobeLight: l.idleStrobeLight ? (l.idleStrobeLight === 'on' ? 'On' : 'Off') : 'Not answered',
@@ -1897,7 +1989,7 @@ function LVTConfigurator() {
                         fontWeight: '800',
                         color: '#56d3cc'
                       }}>
-                        Location {locationIndex + 1}
+                        {locationLabel(location, locationIndex)}
                       </div>
                       {config.locations.length > 1 && (
                         <button
@@ -1931,6 +2023,45 @@ function LVTConfigurator() {
                       className="location-zip-grid"
                       style={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: '16px' }}
                     >
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={{
+                          display: 'block',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          marginBottom: '8px',
+                          color: 'rgba(255,255,255,0.7)'
+                        }}>
+                          Location Name <span style={{ textTransform: 'none', fontWeight: '600', color: 'rgba(255,255,255,0.45)' }}>· Optional</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={location.name}
+                          onChange={(e) => updateLocationName(location.id, e.target.value)}
+                          placeholder={`e.g. North Yard, Main Campus (defaults to "Location ${locationIndex + 1}")`}
+                          style={{
+                            width: '100%',
+                            padding: '14px 16px',
+                            background: 'rgba(39, 42, 47, 0.6)',
+                            border: '2px solid rgba(255,255,255,0.15)',
+                            borderRadius: '8px',
+                            color: '#fff',
+                            fontSize: '16px',
+                            fontWeight: '500',
+                            outline: 'none',
+                            transition: 'all 0.3s ease'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.border = '2px solid #56d3cc';
+                            e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                          }}
+                          onBlur={(e) => {
+                            e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                            e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                          }}
+                        />
+                      </div>
                       <div>
                         <label style={{
                           display: 'block',
@@ -2444,8 +2575,29 @@ function LVTConfigurator() {
                       : ''}
                   </p>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {cameraUnitList.map(unit => {
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+                    {config.locations.map((location, locationIdx) => {
+                      const unitsHere = cameraUnitList.filter(u => u.locationId === location.id);
+                      if (unitsHere.length === 0) return null;
+                      const overridesHere = unitsHere.filter(u => config.cameraConfig.overrides[u.key]).length;
+                      return (
+                        <div key={location.id}>
+                          <div style={{
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                            gap: '12px', marginBottom: '10px', paddingBottom: '8px',
+                            borderBottom: '1px solid rgba(255,255,255,0.1)'
+                          }}>
+                            <div style={{ fontSize: '14px', fontWeight: '800', color: '#56d3cc' }}>
+                              {locationLabel(location, locationIdx)}
+                              {location.zipCode ? <span style={{ fontSize: '12px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}> · Zip {location.zipCode}</span> : null}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap' }}>
+                              {unitsHere.length} {unitsHere.length === 1 ? 'unit' : 'units'}
+                              {overridesHere > 0 ? ` · ${overridesHere} customised` : ''}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {unitsHere.map(unit => {
                       const override = config.cameraConfig.overrides[unit.key] || '';
                       return (
                         <div
@@ -2491,6 +2643,10 @@ function LVTConfigurator() {
                               <option key={option.sku} value={option.sku}>{option.name} · {option.coverage}</option>
                             ))}
                           </select>
+                        </div>
+                      );
+                    })}
+                          </div>
                         </div>
                       );
                     })}
@@ -2546,129 +2702,160 @@ function LVTConfigurator() {
             </div>
 
             {/* Generator Recommendations */}
-            {generatorUnits.length > 0 && (
+            {/* EFOY generator backup — explicit per location and per unit */}
+            {generatorEligibleLines.length > 0 && (
               <div style={{
-                background: 'linear-gradient(135deg, rgba(86, 211, 204, 0.12), rgba(125, 232, 224, 0.04))',
-                border: '2px solid #56d3cc',
+                background: 'rgba(86, 211, 204, 0.06)',
+                border: '1px solid rgba(86, 211, 204, 0.25)',
                 borderRadius: '16px',
-                padding: '28px 32px',
+                padding: '32px',
                 marginBottom: '40px'
               }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '20px'
-                }}>
-                  <Zap style={{ width: '32px', height: '32px', color: '#56d3cc', minWidth: '32px', marginTop: '4px' }} />
-                  <div style={{ flex: 1 }}>
-                    <h3 style={{
-                      fontSize: '20px',
-                      fontWeight: '800',
-                      marginBottom: '12px',
-                      letterSpacing: '-0.3px'
-                    }}>
-                      Smart Generator Backup Required
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: '20px' }}>
+                  <Zap width={26} height={26} style={{ color: '#56d3cc', flexShrink: 0, marginTop: '2px' }} />
+                  <div>
+                    <h3 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '6px' }}>
+                      EFOY Generator Backup
                     </h3>
-                    <p style={{
-                      fontSize: '14px',
-                      color: 'rgba(255,255,255,0.7)',
-                      lineHeight: '1.6',
-                      marginBottom: '16px'
-                    }}>
-                      Solar conditions at your deployment {generatorUnitCount === 1 ? 'location' : 'locations'} cannot sustain continuous operation year-round. {generatorUnitCount} of your {totalUnits} {generatorUnitCount === 1 ? 'unit requires' : 'units require'} smart generator backup to stay online:
+                    <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.6' }}>
+                      Solar alone cannot always sustain continuous operation. Choose which units get EFOY
+                      backup — {recommendedGeneratorLineCount > 0
+                        ? `${recommendedGeneratorLineCount} of ${generatorEligibleLines.length} eligible ${generatorEligibleLines.length === 1 ? 'line is' : 'lines are'} recommended based on solar conditions.`
+                        : 'none are strictly required at these locations.'}
+                      {wallMountOnlyLocations.length > 0 && ' Wall mounts are excluded — they run on building power.'}
                     </p>
-                    <div style={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      gap: '12px'
-                    }}>
-                      {generatorUnits.map((unit, idx) => (
-                        <div key={`${unit.locationId}-${unit.id}`} style={{
-                          background: 'rgba(86, 211, 204, 0.15)',
-                          padding: '8px 16px',
-                          borderRadius: '8px',
-                          fontSize: '13px',
-                          fontWeight: '700',
-                          color: '#fff'
-                        }}>
-                          Location {config.locations.findIndex(location => location.id === unit.locationId) + 1}: {unit.quantity} {unit.quantity === 1 ? 'Unit' : 'Units'} • {unit.locationZip}
-                        </div>
-                      ))}
-                    </div>
                   </div>
-                  <div style={{
-                    textAlign: 'right'
-                  }}>
-                    <div style={{
-                      fontSize: '28px',
-                      fontWeight: '900',
-                      color: '#56d3cc',
-                      whiteSpace: 'nowrap'
-                    }}>
+                  <div style={{ marginLeft: 'auto', textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{ fontSize: '26px', fontWeight: '900', color: '#56d3cc', whiteSpace: 'nowrap' }}>
                       +${(GENERATOR_MONTHLY * billedGeneratorCount).toLocaleString()}
                     </div>
-                    <div style={{
-                      fontSize: '11px',
-                      color: 'rgba(255,255,255,0.6)',
-                      marginTop: '4px'
-                    }}>
-                      {config.generatorBypass
-                        ? 'Declined'
-                        : `${generatorUnitCount} ${generatorUnitCount === 1 ? 'generator' : 'generators'}`}
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', marginTop: '4px' }}>
+                      {billedGeneratorCount} {billedGeneratorCount === 1 ? 'generator' : 'generators'}
                     </div>
                   </div>
                 </div>
 
-                {/* Generator bypass — requires accepting downtime */}
-                <div
-                  onClick={() => toggleHardwareOption('generatorBypass')}
-                  style={{
-                    marginTop: '24px',
-                    paddingTop: '20px',
-                    borderTop: '1px solid rgba(255,255,255,0.15)',
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: '14px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <div style={{
-                    width: '22px',
-                    height: '22px',
-                    minWidth: '22px',
-                    marginTop: '2px',
-                    borderRadius: '5px',
-                    border: config.generatorBypass ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.35)',
-                    background: config.generatorBypass ? '#56d3cc' : 'transparent',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.2s ease'
-                  }}>
-                    {config.generatorBypass && (
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1b1e23" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="m5 12 5 5L20 7"/>
-                      </svg>
-                    )}
-                  </div>
-                  <div>
-                    <div style={{
-                      fontSize: '14px',
-                      fontWeight: '700',
-                      color: '#fff',
-                      marginBottom: '4px'
-                    }}>
-                      Skip the generator — I accept the downtime
+                {config.locations.map((location, locationIdx) => {
+                  const eligible = location.units.filter(unit => getUnitType(unit.unitType).generatorEligible);
+                  const ineligible = location.units.filter(unit => !getUnitType(unit.unitType).generatorEligible);
+                  return (
+                    <div key={location.id} style={{ marginBottom: '18px' }}>
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                        gap: '12px', marginBottom: '10px', paddingBottom: '8px',
+                        borderBottom: '1px solid rgba(255,255,255,0.1)'
+                      }}>
+                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#fff' }}>
+                          {locationLabel(location, locationIdx)}
+                          {location.zipCode ? <span style={{ fontSize: '12px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}> · Zip {location.zipCode}</span> : null}
+                        </div>
+                        {eligible.length > 1 && (
+                          <button
+                            onClick={() => setAllGeneratorsAtLocation(location.id, !eligible.every(u => u.needsGenerator))}
+                            style={{
+                              background: 'transparent', border: '1px solid rgba(255,255,255,0.2)',
+                              borderRadius: '6px', color: 'rgba(255,255,255,0.7)', cursor: 'pointer',
+                              fontSize: '11px', fontWeight: '700', padding: '5px 10px', whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {eligible.every(u => u.needsGenerator) ? 'Clear all' : 'Select all'}
+                          </button>
+                        )}
+                      </div>
+
+                      {eligible.length === 0 ? (
+                        <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.45)', padding: '4px 0' }}>
+                          No generator-eligible units at this location.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {eligible.map(unit => {
+                            const unitType = getUnitType(unit.unitType);
+                            const on = !!unit.needsGenerator;
+                            const declined = unit.recommendedGenerator && !on;
+                            return (
+                              <label
+                                key={unit.id}
+                                onClick={() => toggleUnitGenerator(location.id, unit.id)}
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: '14px',
+                                  padding: '12px 16px', cursor: 'pointer', borderRadius: '8px',
+                                  background: on ? 'rgba(86, 211, 204, 0.1)' : 'rgba(39, 42, 47, 0.4)',
+                                  border: on ? '1px solid rgba(86,211,204,0.35)' : '1px solid rgba(255,255,255,0.08)'
+                                }}
+                              >
+                                <div style={{
+                                  width: '20px', height: '20px', minWidth: '20px', borderRadius: '5px',
+                                  border: on ? '2px solid #56d3cc' : '2px solid rgba(255,255,255,0.35)',
+                                  background: on ? '#56d3cc' : 'transparent',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                }}>
+                                  {on && (
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#1b1e23" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5L20 7"/></svg>
+                                  )}
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontSize: '14px', fontWeight: '700', color: '#fff' }}>
+                                    {unit.quantity} × {unitType.name}
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: declined ? '#e8746a' : 'rgba(255,255,255,0.5)' }}>
+                                    {unit.recommendedGenerator
+                                      ? (on ? 'Recommended for this zip' : 'Recommended — declining accepts downtime')
+                                      : 'Not required for this zip'}
+                                  </div>
+                                </div>
+                                <div style={{ fontSize: '13px', fontWeight: '700', color: on ? '#56d3cc' : 'rgba(255,255,255,0.35)', whiteSpace: 'nowrap' }}>
+                                  {on ? `+$${(GENERATOR_MONTHLY * (unit.quantity || 0)).toLocaleString()}/mo` : '—'}
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {ineligible.length > 0 && (
+                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '8px' }}>
+                          {ineligible.map(u => `${u.quantity} × ${getUnitType(u.unitType).name}`).join(', ')} — not applicable
+                        </div>
+                      )}
                     </div>
+                  );
+                })}
+
+                {/* Acknowledgement only matters when a recommended unit was declined */}
+                {declinedRecommendedLineCount > 0 && (
+                  <div
+                    onClick={() => toggleHardwareOption('generatorBypass')}
+                    style={{
+                      marginTop: '12px',
+                      paddingTop: '18px',
+                      borderTop: '1px solid rgba(255,255,255,0.15)',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '14px',
+                      cursor: 'pointer'
+                    }}
+                  >
                     <div style={{
-                      fontSize: '13px',
-                      color: 'rgba(255,255,255,0.6)',
-                      lineHeight: '1.5'
+                      width: '22px', height: '22px', minWidth: '22px', marginTop: '2px', borderRadius: '5px',
+                      border: config.generatorBypass ? '2px solid #56d3cc' : '2px solid #e8746a',
+                      background: config.generatorBypass ? '#56d3cc' : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
                     }}>
-                      I understand {generatorUnitCount === 1 ? 'this unit' : 'these units'} will lose power and stop recording during periods of insufficient solar charge unless connected to external power.
+                      {config.generatorBypass && (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#1b1e23" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5L20 7"/></svg>
+                      )}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: '700', color: '#fff', marginBottom: '4px' }}>
+                        I accept the downtime on {declinedRecommendedLineCount} declined {declinedRecommendedLineCount === 1 ? 'unit line' : 'unit lines'} *
+                      </div>
+                      <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', lineHeight: '1.5' }}>
+                        Those units will lose power and stop recording during periods of insufficient solar charge unless connected to external power.
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
 
@@ -3481,7 +3668,7 @@ function LVTConfigurator() {
                           fontWeight: '700',
                           color: '#fff'
                         }}>
-                          Location {idx + 1} • Zip {zip}
+                          {locationLabelById((config.locations.find(l => l.zipCode === zip) || {}).id)} • Zip {zip}
                         </div>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                           <input
@@ -3742,7 +3929,7 @@ function LVTConfigurator() {
                   marginBottom: '24px',
                   lineHeight: '1.6'
                 }}>
-                  Add live monitoring so trained LVT operators review alerts from your site and escalate to your team when something needs attention.
+                  Add live monitoring so Professional 3rd Party Monitoring reviews alerts from your site and escalates to your team when something needs attention.
                 </p>
 
                 {/* Yes / No */}
@@ -4079,7 +4266,7 @@ function LVTConfigurator() {
                     }}>
                       <div>
                         <h3 style={{ fontSize: '20px', fontWeight: '800', color: '#56d3cc' }}>
-                          Location {locationIdx + 1}
+                          {locationLabel(location, locationIdx)}
                           {location.zipCode ? <span style={{ fontSize: '14px', fontWeight: '600', color: 'rgba(255,255,255,0.5)' }}> · Zip {location.zipCode}</span> : null}
                         </h3>
                         <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.55)', marginTop: '4px' }}>
@@ -4099,7 +4286,7 @@ function LVTConfigurator() {
                           <option value="">Copy settings from…</option>
                           {otherFilled.map(other => {
                             const idx = config.locations.findIndex(l => l.id === other.id);
-                            return <option key={other.id} value={other.id}>Location {idx + 1}{other.zipCode ? ` · Zip ${other.zipCode}` : ''}</option>;
+                            return <option key={other.id} value={other.id}>{locationLabel(other, idx)}{other.zipCode ? ` · Zip ${other.zipCode}` : ''}</option>;
                           })}
                         </select>
                       )}
@@ -4245,8 +4432,8 @@ function LVTConfigurator() {
                           <div style={{ marginBottom: '20px' }}>
                             {helper('When would you like an object to trigger an alert?')}
                             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-                              {pill(lc.trigger === 'loiter', () => upd('trigger', 'loiter'), 'Loiter time', 'lt')}
-                              {pill(lc.trigger === 'immediate', () => upd('trigger', 'immediate'), 'Immediate detection', 'imm')}
+                              {pill(lc.trigger === 'loiter', () => upd('trigger', 'loiter'), 'Loiter Time', 'lt')}
+                              {pill(lc.trigger === 'immediate', () => upd('trigger', 'immediate'), 'Immediate Detection', 'imm')}
                             </div>
                             {lc.trigger === 'loiter' && (
                               <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -4270,7 +4457,7 @@ function LVTConfigurator() {
                           </div>
 
                           <div style={{ marginBottom: '20px' }}>
-                            {helper('Where on the location are you wanting to detect said objects?')}
+                            {helper(`Where on the location are you wanting to detect ${detectedLabel(lc).toLowerCase()}?`)}
                             <textarea
                               value={lc.detectWhere}
                               onChange={(e) => upd('detectWhere', e.target.value)}
@@ -4288,18 +4475,13 @@ function LVTConfigurator() {
                           <div>
                             {helper('How would you like the unit to perform once an object is detected?')}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                              {DETECTION_RESPONSES.map(opt => {
-                                const isID = opt.field === 'intelligentDeterrence';
-                                const forced = intelligentDeterrenceIncluded;
-                                const checked = forced ? isID : lc.response[opt.field];
-                                return check(
-                                  checked,
-                                  () => upd(`response.${opt.field}`, !lc.response[opt.field]),
-                                  opt.label,
-                                  opt.field,
-                                  forced
-                                );
-                              })}
+                              {availableResponses.map(opt => check(
+                                intelligentDeterrenceIncluded ? true : lc.response[opt.field],
+                                () => upd(`response.${opt.field}`, !lc.response[opt.field]),
+                                opt.label,
+                                opt.field,
+                                intelligentDeterrenceIncluded
+                              ))}
                             </div>
                             {intelligentDeterrenceIncluded && (
                               <div style={{ fontSize: '12px', color: 'rgba(86, 211, 204, 0.85)', marginTop: '10px', lineHeight: '1.5' }}>
@@ -4714,7 +4896,7 @@ function LVTConfigurator() {
                           background: 'rgba(255,255,255,0.4)',
                           borderRadius: '50%'
                         }}></div>
-                        <span>Location {config.locations.findIndex(location => location.id === entry.locationId) + 1}: {entry.unit.quantity} {entry.unit.quantity === 1 ? 'Unit' : 'Units'} • {getUnitType(entry.unit.unitType).name} • {entry.locationZip}</span>
+                        <span>{locationLabelById(entry.locationId)}: {entry.unit.quantity} {entry.unit.quantity === 1 ? 'Unit' : 'Units'} • {getUnitType(entry.unit.unitType).name} • {entry.locationZip}</span>
                         {entry.unit.needsGenerator && (
                           <span style={{
                             background: 'rgba(86, 211, 204, 0.2)',
@@ -4797,7 +4979,7 @@ function LVTConfigurator() {
                 )}
 
                 {/* Generators */}
-                    {generatorUnits.length > 0 && (
+                    {billedGeneratorCount > 0 && (
                       <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                         <div style={{
                           fontSize: '11px',
@@ -4816,11 +4998,7 @@ function LVTConfigurator() {
                       justifyContent: 'space-between',
                       alignItems: 'center'
                     }}>
-                      <span>
-                        {config.generatorBypass
-                          ? `${generatorUnitCount} × Smart Generator Backup (declined)`
-                          : `${generatorUnitCount} × Smart Generator Backup`}
-                      </span>
+                      <span>{billedGeneratorCount} × EFOY Generator Backup</span>
                       <span style={{ color: '#56d3cc' }}>
                         +${(GENERATOR_MONTHLY * billedGeneratorCount).toLocaleString()}/mo
                       </span>
@@ -4830,8 +5008,8 @@ function LVTConfigurator() {
                       color: 'rgba(255,255,255,0.5)',
                       marginTop: '4px'
                     }}>
-                      {config.generatorBypass
-                        ? 'Customer accepted downtime unless externally powered'
+                      {declinedRecommendedLineCount > 0
+                        ? `Monthly per generator · ${declinedRecommendedLineCount} recommended ${declinedRecommendedLineCount === 1 ? 'line' : 'lines'} declined, downtime accepted`
                         : 'Monthly per generator'}
                     </div>
                   </div>
@@ -4961,141 +5139,118 @@ function LVTConfigurator() {
                   const hasConfig = sc.placementMapName || sc.placementMapLater || filledGps.length > 0 ||
                     configuredLocations.length > 0 || sc.ars.enabled || sc.areasOfConcern;
                   if (!hasConfig) return null;
-                  const rowStyle = {
-                    fontSize: '15px',
-                    fontWeight: '600',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '16px',
-                    marginBottom: '8px'
-                  };
-                  const fmtWindow = (arm, disarm) => (arm || disarm) ? `${arm || '—'} to ${disarm || '—'}` : 'Not set';
+
+                  const groupLabel = (text) => (
+                    <div style={{
+                      fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1px',
+                      color: 'rgba(255,255,255,0.5)', fontWeight: '600',
+                      marginTop: '20px', marginBottom: '10px'
+                    }}>{text}</div>
+                  );
+                  const row = (label, value, key) => (
+                    <div key={key} style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                      gap: '16px', padding: '5px 0', fontSize: '14px'
+                    }}>
+                      <span style={{ color: 'rgba(255,255,255,0.65)', flexShrink: 0 }}>{label}</span>
+                      <span style={{ color: '#fff', fontWeight: '600', textAlign: 'right', wordBreak: 'break-word' }}>{value}</span>
+                    </div>
+                  );
+                  const fmtWindow = (from, until) => (from || until) ? `${from || '—'} to ${until || '—'}` : 'Not set';
+                  const note = (label, text, key) => (
+                    <div key={key} style={{ padding: '6px 0' }}>
+                      <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.65)', marginBottom: '3px' }}>{label}</div>
+                      <div style={{ fontSize: '14px', color: '#fff', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{text}</div>
+                    </div>
+                  );
+
                   return (
-                    <div>
+                    <div style={{ marginTop: '28px', paddingTop: '28px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
                       <div style={{
-                        fontSize: '11px',
-                        textTransform: 'uppercase',
-                        color: 'rgba(255,255,255,0.5)',
-                        letterSpacing: '1px',
-                        marginBottom: '10px',
-                        fontWeight: '600'
+                        fontSize: '13px', fontWeight: '800', color: '#56d3cc',
+                        textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px'
                       }}>
                         Site Configuration
                       </div>
-                      {(sc.placementMapName || sc.placementMapLater) && (
-                        <div style={rowStyle}>
-                          <span>Placement Map</span>
-                          <span style={{ color: '#56d3cc', wordBreak: 'break-all', textAlign: 'right' }}>
-                            {sc.placementMapLater ? 'To be determined later' : sc.placementMapName}
-                          </span>
-                        </div>
-                      )}
+
+                      {/* Monitoring */}
                       {sc.ars.enabled && (
-                        <div style={rowStyle}>
-                          <span>Alert Response Services</span>
-                          <span style={{ color: '#56d3cc', textAlign: 'right' }}>
-                            {!arsOn
-                              ? 'Not included'
-                              : arsTier.monthly
+                        <React.Fragment>
+                          {groupLabel('Alert Response Services')}
+                          {row('Monitoring', arsOn
+                            ? (arsTier.monthly
                                 ? `${arsTier.label} · ${totalUnits} × +$${(arsTier.monthly * totalUnits).toLocaleString()}/mo`
-                                : `${arsTier.label} · quoted by rep`}
-                          </span>
-                        </div>
+                                : `${arsTier.label} · quoted by rep`)
+                            : 'Not included', 'ars')}
+                          {arsOn && arsTier.coverage && row('Coverage', arsTier.coverage, 'arscov')}
+                          {arsOn && sc.ars.tier === 'custom' && sc.ars.customDetail &&
+                            note('Custom coverage', sc.ars.customDetail, 'arscustom')}
+                          {arsOn && sc.ars.contacts.map((c, i) => (
+                            (c.name || c.email || c.phone)
+                              ? row(`Escalation contact ${i + 1}`, [c.name, c.email, c.phone].filter(Boolean).join(' · '), `arsc${i}`)
+                              : null
+                          ))}
+                        </React.Fragment>
                       )}
-                      {arsOn && sc.ars.tier === 'custom' && sc.ars.customDetail && (
-                        <div style={{ marginTop: '4px', marginBottom: '8px' }}>
-                          <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>Custom ARS Coverage</div>
-                          <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{sc.ars.customDetail}</div>
-                        </div>
+
+                      {/* Per location */}
+                      {configuredLocations.map(({ location, idx, lc }) => {
+                        const on = lc.intrusionDetection === 'yes';
+                        const rows = [];
+                        rows.push(row('Intrusion detection', lc.intrusionDetection === null ? 'Not answered' : (on ? 'Yes' : 'No'), 'id'));
+                        rows.push(row('Idle strobe light', lc.idleStrobe ? (lc.idleStrobe === 'on' ? 'On' : 'Off') : 'Not answered', 'st'));
+                        if (on) {
+                          const mins = scheduleMinutes(lc.schedule);
+                          rows.push(row('Armed', `${fmtWindow(lc.schedule.armFrom, lc.schedule.armUntil)}${mins !== null ? ` (${formatMinutes(mins)})` : ''}`, 'sch'));
+                          const special = [
+                            lc.specialDays.allHolidays ? 'All annual recurring holidays' : null,
+                            lc.specialDays.writeInEnabled && lc.specialDays.writeIn ? lc.specialDays.writeIn : null
+                          ].filter(Boolean);
+                          if (special.length) rows.push(row('Special days', special.join(' · '), 'sd'));
+                          rows.push(row('Detecting', detectedLabel(lc), 'det'));
+                          rows.push(row('Alert trigger', lc.trigger === 'loiter'
+                            ? `Loiter Time — ${lc.loiterSeconds}s`
+                            : (lc.trigger === 'immediate' ? 'Immediate Detection' : '—'), 'trg'));
+                          if (lc.detectWhere) rows.push(note('Detection zones', lc.detectWhere, 'zones'));
+                          rows.push(row('Response', (intelligentDeterrenceIncluded
+                            ? ['Intelligent Deterrence']
+                            : availableResponses.filter(r => lc.response[r.field]).map(r => r.label)
+                          ).join(', ') || '—', 'resp'));
+                          if (lc.announcement) {
+                            const a = ANNOUNCEMENT_OPTIONS.find(o => o.value === lc.announcement);
+                            const asch = ANNOUNCEMENT_SCHEDULES.find(o => o.value === lc.announcementSchedule);
+                            rows.push(row('Announcement', `${a ? a.label : ''}${asch ? ` · ${asch.label}` : ''}`, 'ann'));
+                          }
+                        }
+                        return (
+                          <React.Fragment key={location.id}>
+                            {groupLabel(`${locationLabel(location, idx)}${location.zipCode ? ` · Zip ${location.zipCode}` : ''}`)}
+                            {rows}
+                          </React.Fragment>
+                        );
+                      })}
+
+                      {/* Logistics */}
+                      {(sc.placementMapName || sc.placementMapLater || filledGps.length > 0) && (
+                        <React.Fragment>
+                          {groupLabel('Placement')}
+                          {(sc.placementMapName || sc.placementMapLater) && row('Placement map',
+                            sc.placementMapLater ? 'To be determined later' : sc.placementMapName, 'pm')}
+                          {filledGps.map(entry => row(
+                            `Unit ${entry.i + 1} GPS`,
+                            `${entry.c.lat || '—'}, ${entry.c.long || '—'}`,
+                            `gps${entry.i}`
+                          ))}
+                        </React.Fragment>
                       )}
-                      {arsOn && sc.ars.contacts.map((contact, i) => (
-                        (contact.name || contact.email || contact.phone) ? (
-                          <div key={i} style={rowStyle}>
-                            <span>ARS Contact {i + 1}</span>
-                            <span style={{ color: '#56d3cc', textAlign: 'right', wordBreak: 'break-word' }}>
-                              {[contact.name, contact.email, contact.phone].filter(Boolean).join(' · ')}
-                            </span>
-                          </div>
-                        ) : null
-                      ))}
-                      {filledGps.length > 0 && filledGps.map(entry => (
-                        <div key={entry.i} style={rowStyle}>
-                          <span>Unit {entry.i + 1} GPS</span>
-                          <span style={{ color: '#56d3cc', textAlign: 'right' }}>{entry.c.lat || '—'}, {entry.c.long || '—'}</span>
-                        </div>
-                      ))}
-                      {configuredLocations.map(({ location, idx, lc }) => (
-                        <div key={location.id} style={{ marginTop: '10px', marginBottom: '6px' }}>
-                          <div style={{ fontSize: '14px', fontWeight: '700', marginBottom: '4px' }}>
-                            Location {idx + 1}{location.zipCode ? ` · Zip ${location.zipCode}` : ''}
-                          </div>
-                          <div style={rowStyle}>
-                            <span>Intrusion detection</span>
-                            <span style={{ color: '#56d3cc' }}>
-                              {lc.intrusionDetection === null ? 'Not answered' : (lc.intrusionDetection === 'yes' ? 'Yes' : 'No')}
-                            </span>
-                          </div>
-                          <div style={rowStyle}>
-                            <span>Idle strobe light</span>
-                            <span style={{ color: '#56d3cc' }}>
-                              {lc.idleStrobe ? (lc.idleStrobe === 'on' ? 'On' : 'Off') : 'Not answered'}
-                            </span>
-                          </div>
-                          {lc.intrusionDetection === 'yes' && (
-                            <React.Fragment>
-                              <div style={rowStyle}>
-                                <span>Armed</span>
-                                <span style={{ color: '#56d3cc' }}>
-                                  {fmtWindow(lc.schedule.armFrom, lc.schedule.armUntil)}
-                                  {scheduleMinutes(lc.schedule) !== null ? ` (${formatMinutes(scheduleMinutes(lc.schedule))})` : ''}
-                                </span>
-                              </div>
-                              <div style={rowStyle}>
-                                <span>Detecting</span>
-                                <span style={{ color: '#56d3cc' }}>
-                                  {[lc.detect.human ? 'Humans' : null, lc.detect.vehicle ? 'Vehicles' : null].filter(Boolean).join(', ') || '—'}
-                                </span>
-                              </div>
-                              <div style={rowStyle}>
-                                <span>Alert trigger</span>
-                                <span style={{ color: '#56d3cc' }}>
-                                  {lc.trigger === 'loiter' ? `Loiter ${lc.loiterSeconds}s` : (lc.trigger === 'immediate' ? 'Immediate' : '—')}
-                                </span>
-                              </div>
-                              <div style={rowStyle}>
-                                <span>Response</span>
-                                <span style={{ color: '#56d3cc', textAlign: 'right' }}>
-                                  {(intelligentDeterrenceIncluded
-                                    ? ['Intelligent Deterrence']
-                                    : DETECTION_RESPONSES.filter(r => lc.response[r.field]).map(r => r.label)
-                                  ).join(', ') || '—'}
-                                </span>
-                              </div>
-                              {lc.announcement && (
-                                <div style={rowStyle}>
-                                  <span>Announcement</span>
-                                  <span style={{ color: '#56d3cc', textAlign: 'right' }}>
-                                    {(ANNOUNCEMENT_OPTIONS.find(o => o.value === lc.announcement) || {}).label}
-                                    {lc.announcementSchedule ? ` · ${(ANNOUNCEMENT_SCHEDULES.find(o => o.value === lc.announcementSchedule) || {}).label}` : ''}
-                                  </span>
-                                </div>
-                              )}
-                              {lc.detectWhere && (
-                                <div style={rowStyle}>
-                                  <span>Detection zones</span>
-                                  <span style={{ color: '#56d3cc', textAlign: 'right' }}>{lc.detectWhere}</span>
-                                </div>
-                              )}
-                            </React.Fragment>
-                          )}
-                        </div>
-                      ))}
+
                       {sc.areasOfConcern && (
-                        <div style={{ marginTop: '12px' }}>
-                          <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>Areas of Concern</div>
-                          <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{sc.areasOfConcern}</div>
-                        </div>
+                        <React.Fragment>
+                          {groupLabel('Areas of Concern')}
+                          <div style={{ fontSize: '14px', color: '#fff', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
+                            {sc.areasOfConcern}
+                          </div>
+                        </React.Fragment>
                       )}
                     </div>
                   );
