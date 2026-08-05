@@ -80,8 +80,23 @@ def _env() -> dict[str, str]:
     return env
 
 
-def run(args: list[str], *, timeout: int = 180) -> dict:
-    """Run `sf <args> --json` and return the parsed result payload."""
+def run(args: list[str], *, timeout: int = 180, expect_json: bool = True) -> dict:
+    """Run `sf <args> --json` and return the parsed result payload.
+
+    `expect_json=False` is for commands that reject the --json flag (notably
+    `api request rest`, which is also a beta command and returns 204 with no body on a
+    successful PATCH). Those are judged by exit code instead.
+    """
+    if not expect_json:
+        proc = subprocess.run(
+            _resolve_sf() + args, capture_output=True, text=True, env=_env(),
+            timeout=timeout,
+        )
+        if proc.returncode != 0:
+            detail = (proc.stderr or proc.stdout or "").strip()
+            raise SalesforceError(f"sf {' '.join(args[:3])} failed: {detail}")
+        return {}
+
     argv = _resolve_sf() + args + ["--json"]
     proc = subprocess.run(
         argv, capture_output=True, text=True, env=_env(), timeout=timeout
@@ -186,6 +201,38 @@ def upsert(sobject: str, external_id_field: str, fields: dict, *, org: str) -> s
     if result.get("numberRecordsFailed"):
         raise SalesforceError(f"upsert failed for {sobject}", result)
     return result.get("id", "")
+
+
+def update_fields(sobject: str, record_id: str, fields: dict, *, org: str) -> None:
+    """Update a record via the REST API rather than `sf data update record --values`.
+
+    The --values form is a space-separated key="value" string, so any field content
+    containing double quotes, newlines or spaces corrupts it. Writing a JSON blob into a
+    long text field does all three. This sends a proper JSON body instead.
+    """
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(
+        "w", suffix=".json", delete=False, encoding="utf-8"
+    ) as handle:
+        json.dump(fields, handle)
+        body_path = handle.name
+
+    try:
+        run(
+            [
+                "api", "request", "rest",
+                f"/services/data/v62.0/sobjects/{sobject}/{record_id}",
+                "--method", "PATCH",
+                # The @ prefix is required. A bare path is sent as the literal body and
+                # Salesforce rejects it with JSON_PARSER_ERROR on the leading slash.
+                "--body", f"@{body_path}",
+                "--target-org", org,
+            ],
+            expect_json=False,
+        )
+    finally:
+        os.unlink(body_path)
 
 
 def _values(fields: dict) -> str:

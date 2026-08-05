@@ -14,6 +14,7 @@ from ..errors import (
     INVALID_FIELD,
     INVALID_PAYLOAD,
     MISSING_FIELD,
+    PRODUCT_NOT_FOUND,
     UNSUPPORTED_OPTION,
     Rejection,
 )
@@ -188,6 +189,46 @@ def validate(payload: dict, config: dict) -> dict:
         )
 
     hardware = order.get("hardware_options") or {}
+
+    # Camera selection. The portal sends the chosen sku(s) in order.cameras; those are
+    # authoritative. Resolving from ndaa_compliant alone used to discard the choice and
+    # put a generic Dahua head unit on every non-NDAA order.
+    cameras = order.get("cameras") or {}
+    known_skus = {s for s in config["head_units_by_sku"] if not s.startswith("_")}
+    default_sku = cameras.get("default_sku")
+
+    if default_sku is not None and default_sku not in known_skus:
+        raise Rejection(
+            PRODUCT_NOT_FOUND,
+            f"unknown camera sku {default_sku!r}; expected one of {sorted(known_skus)}",
+            field="order.cameras.default_sku",
+        )
+
+    per_unit = cameras.get("per_unit") or []
+    distinct_per_unit = {
+        entry.get("sku") for entry in per_unit if entry.get("sku")
+    }
+    for sku in distinct_per_unit:
+        if sku not in known_skus:
+            raise Rejection(
+                PRODUCT_NOT_FOUND,
+                f"unknown camera sku {sku!r} in per-unit overrides",
+                field="order.cameras.per_unit",
+            )
+
+    # Mixed cameras mean different units need different head units, which means splitting
+    # the order into one bundle per camera. Refuse rather than quietly applying the default
+    # to everything - silently dropping a per-unit override is the exact bug this fixes.
+    mixed = bool(cameras.get("mixed")) or len(distinct_per_unit - {default_sku}) > 0
+    if mixed:
+        raise Rejection(
+            UNSUPPORTED_OPTION,
+            "per-unit camera overrides are not supported yet: this order mixes camera "
+            f"packages ({sorted(distinct_per_unit | ({default_sku} if default_sku else set()))}). "
+            "A rep needs to build it, or submit one order per camera package.",
+            field="order.cameras",
+        )
+
     total_units = sum(u["quantity"] for loc in normalised_locations for u in loc["units"])
 
     return {
@@ -200,5 +241,6 @@ def validate(payload: dict, config: dict) -> dict:
         "locations": normalised_locations,
         "software_packages": resolved_modules,
         "ndaa_compliant": bool(hardware.get("ndaa_compliant", False)),
+        "camera_sku": default_sku,
         "total_units": total_units,
     }

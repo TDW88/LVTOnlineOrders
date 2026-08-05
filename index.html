@@ -209,6 +209,11 @@ function LVTConfigurator() {
     submitting: false,
     submitted: false
   });
+  // Set once an order has been filed. Persists on screen rather than living in an alert()
+  // the customer can dismiss and lose, and it gates the submit button so the same order
+  // cannot be sent twice — a resubmission mints a fresh order id, so Hermes would file it
+  // as a second, separate order rather than deduplicating it.
+  const [orderConfirmation, setOrderConfirmation] = useState(null);
   const [config, setConfig] = useState({
     locations: [
       {
@@ -5155,7 +5160,9 @@ function LVTConfigurator() {
                 </div>
                 
                 <button
-                  disabled={isSubmitting}
+                  // Locked once placed: resubmitting mints a new order id, so it would
+                  // file a duplicate rather than update the existing order.
+                  disabled={isSubmitting || !!(orderConfirmation && orderConfirmation.placed)}
                   style={{
                     width: '100%',
                     padding: '18px',
@@ -5231,26 +5238,32 @@ function LVTConfigurator() {
                       }
                       console.error('Submission error:', error);
                     } finally {
-                      if (submitted) {
-                        const hermesNote = hermesResult.ok
-                          ? `\n\nSalesforce\n${describeHermesResult(hermesResult.summary)}`
-                          : `\n\nSalesforce: not filed — ${hermesResult.message}`;
-                        const verificationNote = verified
-                          ? ''
-                          : '\n\nNote: The request was sent, but the browser could not verify a response due to cross-origin restrictions.';
-                        alert(`Thank you — your order has been submitted!\n\n${totalUnits} Security ${totalUnits === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${hermesNote}${verificationNote}`);
-                        
-                        // Optional: Reset form or redirect
-                        // setCurrentStep(0);
-                        // window.location.href = '/thank-you';
-                      } else {
-                        alert('There was an error submitting your request. Please try again or contact us directly at sales@lvt.com');
-                      }
+                      // The order counts as placed when HERMES filed it — that is the
+                      // Opportunity and Quote in Salesforce, the record of truth.
+                      // Previously this was gated on the Workato webhook instead, so a
+                      // successfully filed order whose webhook failed told the customer
+                      // it had errored, inviting a resubmission and a duplicate order.
+                      setOrderConfirmation({
+                        placed: hermesResult.ok,
+                        orderId: orderData.orderId,
+                        units: totalUnits,
+                        termMonths: config.leaseTerm,
+                        monthly: monthlyTotal,
+                        contractTotal,
+                        email: config.contactInfo.email,
+                        hermes: hermesResult,
+                        webhookSubmitted: submitted,
+                        webhookVerified: verified
+                      });
                       setIsSubmitting(false);
                     }
                   }}
                 >
-                  {isSubmitting ? 'Submitting...' : 'Submit Order'}
+                  {isSubmitting
+                    ? 'Submitting...'
+                    : orderConfirmation && orderConfirmation.placed
+                      ? 'Order Placed'
+                      : 'Submit Order'}
                 </button>
                 
                 <div style={{
@@ -5609,9 +5622,180 @@ function LVTConfigurator() {
           )}
         </div>
       )}
+
+      {/* Order confirmation. Rendered at the component root so it overlays whatever step
+          is showing, and it does not auto-dismiss — an alert() the customer clicks away
+          takes the order id and Salesforce references with it. */}
+      {orderConfirmation && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="order-confirmation-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.78)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+            zIndex: 1100,
+            overflowY: 'auto'
+          }}
+        >
+          <div style={{
+            background: '#1b1e23',
+            border: `1px solid ${orderConfirmation.placed ? 'rgba(86,211,204,0.35)' : 'rgba(255,90,90,0.35)'}`,
+            borderRadius: '16px',
+            padding: '40px',
+            maxWidth: '560px',
+            width: '100%',
+            boxShadow: '0 32px 80px rgba(0,0,0,0.6)'
+          }}>
+            {orderConfirmation.placed ? (
+              <>
+                <div style={{ marginBottom: '20px', color: '#56d3cc' }}>
+                  <CheckCircle width={56} height={56} />
+                </div>
+                <h2 id="order-confirmation-title" style={{
+                  margin: '0 0 8px',
+                  fontSize: '30px',
+                  fontWeight: '900',
+                  color: '#fff',
+                  letterSpacing: '-0.5px'
+                }}>
+                  Your order is placed
+                </h2>
+                <p style={{
+                  margin: '0 0 28px',
+                  fontSize: '15px',
+                  lineHeight: '1.6',
+                  color: 'rgba(255,255,255,0.7)'
+                }}>
+                  It has been filed with our sales team and a quote has been prepared.
+                  We'll contact you at <strong style={{ color: '#fff' }}>{orderConfirmation.email}</strong>
+                  {' '}to confirm pricing and schedule deployment.
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 id="order-confirmation-title" style={{
+                  margin: '0 0 8px',
+                  fontSize: '26px',
+                  fontWeight: '900',
+                  color: '#ff8a8a'
+                }}>
+                  We couldn't place your order
+                </h2>
+                <p style={{
+                  margin: '0 0 20px',
+                  fontSize: '15px',
+                  lineHeight: '1.6',
+                  color: 'rgba(255,255,255,0.75)'
+                }}>
+                  Nothing has been filed, so please try again. If it keeps failing, contact
+                  us at <strong style={{ color: '#fff' }}>sales@lvt.com</strong> and quote
+                  reference <strong style={{ color: '#fff' }}>{orderConfirmation.orderId}</strong>.
+                </p>
+                <div style={{
+                  fontSize: '13px',
+                  lineHeight: '1.5',
+                  color: '#ff8a8a',
+                  background: 'rgba(255,90,90,0.1)',
+                  border: '1px solid rgba(255,90,90,0.28)',
+                  borderRadius: '8px',
+                  padding: '12px 14px',
+                  marginBottom: '24px'
+                }}>
+                  {orderConfirmation.hermes.message}
+                </div>
+              </>
+            )}
+
+            <div style={{
+              borderTop: '1px solid rgba(255,255,255,0.1)',
+              paddingTop: '20px',
+              fontSize: '14px',
+              lineHeight: '2',
+              color: 'rgba(255,255,255,0.8)'
+            }}>
+              <Row label="Order reference" value={orderConfirmation.orderId} />
+              <Row
+                label="Units"
+                value={`${orderConfirmation.units} ${orderConfirmation.units === 1 ? 'unit' : 'units'}`}
+              />
+              {orderConfirmation.termMonths && (
+                <Row label="Lease term" value={`${orderConfirmation.termMonths} months`} />
+              )}
+              <Row
+                label="Estimated monthly"
+                value={`$${orderConfirmation.monthly.toLocaleString()}`}
+              />
+              {orderConfirmation.placed
+                && orderConfirmation.hermes.summary
+                && orderConfirmation.hermes.summary.quote_name && (
+                <Row label="Quote" value={orderConfirmation.hermes.summary.quote_name} />
+              )}
+            </div>
+
+            {orderConfirmation.placed && (
+              <p style={{
+                margin: '20px 0 0',
+                fontSize: '12px',
+                lineHeight: '1.5',
+                color: 'rgba(255,255,255,0.5)'
+              }}>
+                Figures shown are a non-binding estimate. Your formal quote is priced from
+                the current LVT price book and may differ.
+              </p>
+            )}
+
+            {/* Surfaced but not treated as a failure: the order is filed either way, and
+                this is an internal integration detail rather than the customer's problem. */}
+            {orderConfirmation.placed && !orderConfirmation.webhookSubmitted && (
+              <p style={{
+                margin: '12px 0 0',
+                fontSize: '12px',
+                color: '#e0b341'
+              }}>
+                Note: a secondary notification could not be delivered. Your order is filed
+                and no action is needed.
+              </p>
+            )}
+
+            <button
+              onClick={() => setOrderConfirmation(null)}
+              style={{
+                width: '100%',
+                marginTop: '28px',
+                padding: '16px',
+                background: orderConfirmation.placed ? '#56d3cc' : 'transparent',
+                color: orderConfirmation.placed ? '#1b1e23' : 'rgba(255,255,255,0.85)',
+                border: orderConfirmation.placed ? 'none' : '1px solid rgba(255,255,255,0.25)',
+                borderRadius: '10px',
+                fontSize: '15px',
+                fontWeight: '800',
+                cursor: 'pointer',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}
+            >
+              {orderConfirmation.placed ? 'Done' : 'Close and try again'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+// One label/value line in the confirmation summary.
+const Row = ({ label, value }) => (
+  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px' }}>
+    <span style={{ color: 'rgba(255,255,255,0.55)' }}>{label}</span>
+    <span style={{ fontWeight: '700', color: '#fff', textAlign: 'right' }}>{value}</span>
+  </div>
+);
 
     ReactDOM.createRoot(document.getElementById('root')).render(<LVTConfigurator />);
   </script>

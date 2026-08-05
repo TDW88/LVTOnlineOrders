@@ -83,8 +83,37 @@
     }
   },
 
-  "head_units": {
-    "_note": "18 of 59 HEADUNIT options are NDAA. Axis hardware is NDAA-compliant, Dahua is not, which is what the portal's ndaa_compliant toggle actually selects between.",
+  "head_units_by_sku": {
+    "_note": "Keyed by the exact sku string the portal's CAMERA_OPTIONS sends in order.cameras. This is the authoritative camera selection - resolving a head unit from the ndaa_compliant boolean alone (see head_units_fallback) ignored the customer's choice and filed every non-NDAA order against a generic Dahua base unit. All five verified as options under 'LVT Bundle'.",
+    "NR/MR A-IR-PTZ (L,R,C), NDAA": {
+      "option_id": "a1PUm0000049j2PMAQ",
+      "ndaa": true,
+      "list_price": 0
+    },
+    "NR/MR A-IR-PTZ (L,R), IR Fisheye w/Analytics (C), NDAA": {
+      "option_id": "a1PUm0000049j29MAA",
+      "ndaa": true,
+      "list_price": 0
+    },
+    "NR BIS (L,R), IR Fisheye w/Analytics (C)": {
+      "option_id": "a1PUm0000049j2JMAQ",
+      "ndaa": false,
+      "list_price": 0
+    },
+    "MR BIS (L,R), IR Fisheye w/Analytics (C)": {
+      "option_id": "a1PUm0000049j2LMAQ",
+      "ndaa": false,
+      "list_price": 0
+    },
+    "LR BIS (L,R), IR Fisheye w/Analytics (C)": {
+      "option_id": "a1PUm0000049j2HMAQ",
+      "ndaa": false,
+      "list_price": 0
+    }
+  },
+
+  "head_units_fallback": {
+    "_note": "Used ONLY when a payload carries no camera sku at all (older contract). Generic base units, not a real customer selection - an order resolved this way should be treated as under-specified.",
     "ndaa": {
       "option_id": "a1PUm0000049j2QMAQ",
       "name": "A-IR-PTZ- Base-Axis, NDAA",

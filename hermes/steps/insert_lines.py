@@ -59,8 +59,7 @@ def plan_lines(normalised: dict, resolved: dict, config: dict) -> list[dict]:
     Iterates the *resolved* locations because they carry the Salesforce account Ids
     alongside the normalised unit data.
     """
-    head_key = "ndaa" if normalised["ndaa_compliant"] else "non_ndaa"
-    head_unit_option = config["head_units"][head_key]["option_id"]
+    head_unit_option = _head_unit_option(normalised, config)
 
     module_options = [
         config["software_modules"][name]["option_id"]
@@ -103,6 +102,28 @@ def plan_lines(normalised: dict, resolved: dict, config: dict) -> list[dict]:
                 }
             )
     return planned
+
+
+def _head_unit_option(normalised: dict, config: dict) -> str:
+    """Resolve the HEADUNIT option from the camera the customer actually chose.
+
+    The portal's camera skus are the real Salesforce HEADUNIT product names, so they map
+    straight onto bundle options. The ndaa_compliant boolean is only a fallback for older
+    payloads that carry no camera selection: deriving the head unit from it put a generic
+    Dahua base unit on every non-NDAA order regardless of what was picked.
+    """
+    sku = normalised.get("camera_sku")
+    if sku:
+        entry = config["head_units_by_sku"].get(sku)
+        if not entry:
+            # validate() should have caught this; refuse rather than substitute a camera.
+            raise Rejection(
+                PRODUCT_NOT_FOUND, f"no HEADUNIT option pinned for camera sku {sku!r}"
+            )
+        return entry["option_id"]
+
+    fallback_key = "ndaa" if normalised["ndaa_compliant"] else "non_ndaa"
+    return config["head_units_fallback"][fallback_key]["option_id"]
 
 
 def _standalone_fees_for(unit_type: str, config: dict) -> list[dict]:
