@@ -98,6 +98,10 @@ def run_order(payload: dict, config: dict, org: str, *, dry_run: bool = False) -
     # --- from here on we are writing ---
     opportunity = create_opp.create_opportunity(normalised, resolved, config, org)
 
+    # The Configuration step's answers go into Opportunity.Notes__c so a rep can read what
+    # the customer specified. Fenced by markers so rep-authored notes are preserved.
+    notes = create_opp.set_configuration_notes(opportunity["id"], payload, org)
+
     # The person named on the portal's contact step becomes the primary contact on both
     # the opportunity and the quote. Find-or-create; see resolve_contact for why this
     # step creates while the account steps refuse to.
@@ -172,6 +176,7 @@ def run_order(payload: dict, config: dict, org: str, *, dry_run: bool = False) -
             "contact": contact,
             "line_group": line_group,
             "stage_change": stage_change,
+            "configuration_notes": notes,
             "provisioned": resolved.get("provisioned"),
         }
     )
@@ -232,6 +237,12 @@ def _print_human(result: dict) -> None:
     print(f"  stage            {opportunity.get('StageName')}{stage_note}")
     print(f"  type             {opportunity.get('Type')}")
     print(f"  lead source      {opportunity.get('LeadSource')}")
+    notes = result.get("configuration_notes") or {}
+    if notes.get("written"):
+        print(f"  config notes     {notes['characters']} chars -> Notes__c"
+              f"{'  [replaced prior block]' if notes.get('replaced_existing_block') else ''}")
+    elif notes.get("reason"):
+        print(f"  config notes     not written - {notes['reason']}")
     print(f"  account          {(opportunity.get('Account') or {}).get('Name')}")
     provisioned = result.get("provisioned")
     if provisioned:
