@@ -5308,7 +5308,36 @@ function LVTConfigurator() {
                 }}>
                   ${calculateContractTotal().toLocaleString()} total contract
                 </div>
-                
+
+                <div style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: '10px',
+                  padding: '14px 16px',
+                  marginBottom: '20px'
+                }}>
+                  <div style={{
+                    fontSize: '11px',
+                    fontWeight: '800',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    color: 'rgba(255,255,255,0.8)',
+                    marginBottom: '6px'
+                  }}>
+                    Before you submit
+                  </div>
+                  <div style={{
+                    fontSize: '12px',
+                    color: 'rgba(255,255,255,0.7)',
+                    lineHeight: '1.6'
+                  }}>
+                    This is <strong style={{ color: '#fff' }}>not a binding agreement</strong>. Shipping and
+                    set-up fees are <strong style={{ color: '#fff' }}>not included</strong> in the figures above
+                    and will be applied to your final quote. An LVT specialist will confirm pricing with you
+                    before anything is signed.
+                  </div>
+                </div>
+
                 <button
                   disabled={isSubmitting}
                   style={{
@@ -5393,7 +5422,7 @@ function LVTConfigurator() {
                         const verificationNote = verified
                           ? ''
                           : '\n\nNote: The request was sent, but the browser could not verify a response due to cross-origin restrictions.';
-                        alert(`Thank you — your order has been submitted!\n\n${totalUnits} Security ${totalUnits === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${hermesNote}${verificationNote}`);
+                        alert(`Thank you — your order has been submitted!\n\n${totalUnits} Security ${totalUnits === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nLease Term: ${config.leaseTerm} months\nMonthly Payment: $${monthlyTotal.toLocaleString()}\nTotal Contract: $${contractTotal.toLocaleString()}\n\nThis is not a binding agreement. Shipping and set-up fees are not included above and will be applied to your final quote.\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your configuration and schedule deployment.${hermesNote}${verificationNote}`);
                         
                         // Optional: Reset form or redirect
                         // setCurrentStep(0);
@@ -5414,7 +5443,7 @@ function LVTConfigurator() {
                   textAlign: 'center',
                   lineHeight: '1.4'
                 }}>
-                  Installation, training, and ongoing support included
+                  Installation, training, and ongoing support included · Shipping and set-up billed separately
                 </div>
               </div>
             </div>
