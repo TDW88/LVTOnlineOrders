@@ -90,14 +90,50 @@ const UNIT_TYPES = [
   }
 ];
 
+const EXISTING_LOCATIONS = [
+  {
+    id: 'glenwood-yard',
+    name: 'Glenwood Laydown Yard',
+    city: 'Salt Lake City',
+    state: 'UT',
+    zip: '84104'
+  },
+  {
+    id: 'north-dc',
+    name: 'North Distribution Center',
+    city: 'Boise',
+    state: 'ID',
+    zip: '83705'
+  },
+  {
+    id: 'sandy-crossdock',
+    name: 'Sandy Crossdock',
+    city: 'Sandy',
+    state: 'UT',
+    zip: '84070'
+  },
+  {
+    id: 'reno-yard',
+    name: 'Reno Equipment Yard',
+    city: 'Reno',
+    state: 'NV',
+    zip: '89502'
+  }
+];
+
+const EXISTING_MULTI_UNIT_DISCOUNT = 0.07;
+
 function LVTConfigurator() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [config, setConfig] = useState({
+    customerType: 'new',
     locations: [
       {
         id: 1,
         zipCode: '',
+        existingLocationId: '',
+        locationType: 'new',
         units: [
           { id: 1, unitType: 'mobile', needsGenerator: false, quantity: 1 }
         ]
@@ -123,6 +159,26 @@ function LVTConfigurator() {
   });
 
   const getUnitType = (unitTypeId) => UNIT_TYPES.find(type => type.id === unitTypeId) || UNIT_TYPES[0];
+  const getExistingLocation = (locationId) => EXISTING_LOCATIONS.find(location => location.id === locationId);
+  const formatExistingLocationLabel = (location) =>
+    location ? `${location.name} • ${location.city}, ${location.state} (${location.zip})` : '';
+  const createNewLocation = (id) => ({
+    id,
+    zipCode: '',
+    existingLocationId: '',
+    locationType: 'new',
+    units: [{ id: 1, unitType: 'mobile', needsGenerator: false, quantity: 1 }]
+  });
+  const createExistingLocation = (id, locationId) => {
+    const selected = getExistingLocation(locationId) || EXISTING_LOCATIONS[0];
+    return {
+      id,
+      zipCode: selected?.zip || '',
+      existingLocationId: selected?.id || '',
+      locationType: 'existing',
+      units: [{ id: 1, unitType: 'mobile', needsGenerator: false, quantity: 1 }]
+    };
+  };
   
   // Generator cost (monthly)
   const GENERATOR_MONTHLY = 1000;
@@ -163,7 +219,9 @@ function LVTConfigurator() {
     { months: 36, label: '36 Months', discount: 0.10 }  // 10% discount
   ];
 
-  const steps = ['Location', 'Hardware', 'Software', 'Lease Term', 'Contact Info', 'Review'];
+  const steps = config.customerType === 'existing'
+    ? ['Location', 'Contact Info', 'Review']
+    : ['Location', 'Hardware', 'Software', 'Lease Term', 'Contact Info', 'Review'];
 
   const totalUnits = config.locations.reduce((sum, location) => {
     const locationTotal = location.units.reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
@@ -171,7 +229,12 @@ function LVTConfigurator() {
   }, 0);
 
   const uniqueLocationZips = [
-    ...new Set(config.locations.map(location => location.zipCode).filter(zip => zip.length === 5))
+    ...new Set(
+      config.locations
+        .filter(location => config.customerType !== 'existing' || location.locationType === 'new')
+        .map(location => location.zipCode)
+        .filter(zip => zip.length === 5)
+    )
   ];
 
   const unitsByZip = config.locations.reduce((acc, location) => {
@@ -181,6 +244,16 @@ function LVTConfigurator() {
     }
     return acc;
   }, {});
+  const existingLocationIds = config.locations
+    .map(location => location.existingLocationId)
+    .filter(Boolean);
+  const availableExistingLocations = EXISTING_LOCATIONS.filter(
+    location => !existingLocationIds.includes(location.id)
+  );
+  const existingMultiUnitDiscountRate = config.customerType === 'existing' && totalUnits >= 3
+    ? EXISTING_MULTI_UNIT_DISCOUNT
+    : 0;
+  const canAddExistingLocation = config.customerType !== 'existing' || availableExistingLocations.length > 0;
 
   useEffect(() => {
     setConfig(prev => {
@@ -256,19 +329,54 @@ function LVTConfigurator() {
     }
   };
 
+  const handleCustomerTypeChange = (type) => {
+    setConfig(prev => {
+      if (prev.customerType === type) {
+        return prev;
+      }
+      const nextLocation = type === 'existing'
+        ? createExistingLocation(1, EXISTING_LOCATIONS[0]?.id)
+        : createNewLocation(1);
+      return {
+        ...prev,
+        customerType: type,
+        locations: [nextLocation],
+        leaseTerm: type === 'existing' ? null : prev.leaseTerm,
+        ndaaCompliant: type === 'existing' ? false : prev.ndaaCompliant,
+        nightVision: type === 'existing' ? false : prev.nightVision,
+        softwarePackages: type === 'existing' ? [] : prev.softwarePackages,
+        contactInfo: {
+          ...prev.contactInfo,
+          shippingAddresses: []
+        }
+      };
+    });
+    setCurrentStep(0);
+  };
 
 
-  const addLocation = () => {
+  const addLocation = (type = 'new') => {
     const newId = Math.max(...config.locations.map(location => location.id)) + 1;
+    if (type === 'existing') {
+      const selectedIds = config.locations.map(location => location.existingLocationId);
+      const nextLocation = EXISTING_LOCATIONS.find(location => !selectedIds.includes(location.id));
+      if (!nextLocation) {
+        return;
+      }
+      setConfig(prev => ({
+        ...prev,
+        locations: [
+          ...prev.locations,
+          createExistingLocation(newId, nextLocation.id)
+        ]
+      }));
+      return;
+    }
     setConfig(prev => ({
       ...prev,
       locations: [
         ...prev.locations,
-        {
-          id: newId,
-          zipCode: '',
-          units: [{ id: 1, unitType: 'mobile', needsGenerator: false, quantity: 1 }]
-        }
+        createNewLocation(newId)
       ]
     }));
   };
@@ -287,6 +395,21 @@ function LVTConfigurator() {
       ...prev,
       locations: prev.locations.map(location =>
         location.id === locationId ? { ...location, zipCode } : location
+      )
+    }));
+  };
+
+  const updateExistingLocationSelection = (locationId, existingLocationId) => {
+    const selected = getExistingLocation(existingLocationId);
+    if (!selected) {
+      return;
+    }
+    setConfig(prev => ({
+      ...prev,
+      locations: prev.locations.map(location =>
+        location.id === locationId
+          ? { ...location, existingLocationId, zipCode: selected.zip, locationType: 'existing' }
+          : location
       )
     }));
   };
@@ -428,9 +551,9 @@ function LVTConfigurator() {
     }
   };
 
-  const calculateMonthlyTotal = () => {
+  const calculateMonthlySubtotal = () => {
     const unitCount = totalUnits;
-    
+
     const baseMonthlyTotal = config.locations.reduce((sum, location) => {
       const locationTotal = location.units.reduce((unitSum, unit) => {
         const unitType = getUnitType(unit.unitType);
@@ -439,7 +562,7 @@ function LVTConfigurator() {
       return sum + locationTotal;
     }, 0);
     let perUnitMonthly = 0;
-    
+
     // Add hardware options (applied to all units)
     if (config.ndaaCompliant) {
       perUnitMonthly += NDAA_MONTHLY;
@@ -447,10 +570,10 @@ function LVTConfigurator() {
     if (config.nightVision) {
       perUnitMonthly += NIGHT_VISION_MONTHLY;
     }
-    
+
     // Calculate base cost for all units
     let monthlyTotal = baseMonthlyTotal + (perUnitMonthly * unitCount);
-    
+
     // Add generators (varies by unit location)
     const generatorCount = config.locations.reduce((sum, location) => {
       const locationGenerators = location.units
@@ -459,13 +582,26 @@ function LVTConfigurator() {
       return sum + locationGenerators;
     }, 0);
     monthlyTotal += generatorCount * GENERATOR_MONTHLY;
-    
+
     // Add software packages (per unit)
     config.softwarePackages.forEach(id => {
       const pkg = softwarePackages.find(p => p.id === id);
       if (pkg) monthlyTotal += pkg.monthlyPrice * unitCount;
     });
-    
+
+    return monthlyTotal;
+  };
+
+  const applyExistingMultiUnitDiscount = (amount) => {
+    if (existingMultiUnitDiscountRate > 0) {
+      return amount * (1 - existingMultiUnitDiscountRate);
+    }
+    return amount;
+  };
+
+  const calculateMonthlyTotal = () => {
+    let monthlyTotal = applyExistingMultiUnitDiscount(calculateMonthlySubtotal());
+
     // Apply lease term discount if selected
     if (config.leaseTerm) {
       const term = leaseTerms.find(t => t.months === config.leaseTerm);
@@ -473,55 +609,20 @@ function LVTConfigurator() {
         monthlyTotal = monthlyTotal * (1 - term.discount);
       }
     }
-    
+
     return monthlyTotal;
   };
 
   // Helper to calculate monthly total for a specific term (for lease term cards)
   const calculateMonthlyForTerm = (termMonths) => {
-    const unitCount = totalUnits;
-    
-    const baseMonthlyTotal = config.locations.reduce((sum, location) => {
-      const locationTotal = location.units.reduce((unitSum, unit) => {
-        const unitType = getUnitType(unit.unitType);
-        return unitSum + (unitType.baseMonthly * (unit.quantity || 0));
-      }, 0);
-      return sum + locationTotal;
-    }, 0);
-    let perUnitMonthly = 0;
-    
-    // Add hardware options (applied to all units)
-    if (config.ndaaCompliant) {
-      perUnitMonthly += NDAA_MONTHLY;
-    }
-    if (config.nightVision) {
-      perUnitMonthly += NIGHT_VISION_MONTHLY;
-    }
-    
-    // Calculate base cost for all units
-    let monthlyTotal = baseMonthlyTotal + (perUnitMonthly * unitCount);
-    
-    // Add generators (varies by unit location)
-    const generatorCount = config.locations.reduce((sum, location) => {
-      const locationGenerators = location.units
-        .filter(unit => getUnitType(unit.unitType).generatorEligible && unit.needsGenerator)
-        .reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
-      return sum + locationGenerators;
-    }, 0);
-    monthlyTotal += generatorCount * GENERATOR_MONTHLY;
-    
-    // Add software packages (per unit)
-    config.softwarePackages.forEach(id => {
-      const pkg = softwarePackages.find(p => p.id === id);
-      if (pkg) monthlyTotal += pkg.monthlyPrice * unitCount;
-    });
-    
+    let monthlyTotal = applyExistingMultiUnitDiscount(calculateMonthlySubtotal());
+
     // Apply discount for this specific term
     const term = leaseTerms.find(t => t.months === termMonths);
     if (term && term.discount > 0) {
       monthlyTotal = monthlyTotal * (1 - term.discount);
     }
-    
+
     return monthlyTotal;
   };
 
@@ -580,9 +681,27 @@ function LVTConfigurator() {
 
   const canProceed = () => {
     if (currentStep === 0) {
-      return config.locations.every(location =>
-        location.zipCode.length === 5 && location.units.every(unit => unit.quantity > 0)
-      );
+      return config.locations.every(location => {
+        const zipValid = location.locationType === 'existing' || location.zipCode.length === 5;
+        return zipValid && location.units.every(unit => unit.quantity > 0);
+      });
+    }
+    if (config.customerType === 'existing') {
+      if (currentStep === 1) {
+        const { email, phone, companyName, fullName, billingAddress, shippingAddresses } = config.contactInfo;
+        const billingValid = billingAddress.street && billingAddress.city &&
+                            billingAddress.state && billingAddress.zip;
+        const shippingValid = uniqueLocationZips.length > 0
+          ? uniqueLocationZips.every(zip => {
+            const address = shippingAddresses.find(entry => entry.zipCode === zip);
+            if (!address) return false;
+            if (address.sameAsBilling) return true;
+            return address.street && address.city && address.state && address.zip;
+          })
+          : true;
+        return email && phone && companyName && fullName && billingValid && shippingValid;
+      }
+      return true;
     }
     if (currentStep === 1) return true; // Hardware options are optional
     if (currentStep === 2) return true; // Software packages are optional
@@ -605,6 +724,32 @@ function LVTConfigurator() {
     return true;
   };
 
+  const getLocationLabel = (location, index) => {
+    if (config.customerType === 'existing') {
+      if (location.locationType === 'existing') {
+        const existing = getExistingLocation(location.existingLocationId);
+        if (existing) {
+          return existing.name;
+        }
+      }
+      return `New Location ${index + 1}`;
+    }
+    return `Location ${index + 1}`;
+  };
+
+  const getLocationDescriptor = (location, index) => {
+    if (config.customerType === 'existing') {
+      if (location.locationType === 'existing') {
+        const existing = getExistingLocation(location.existingLocationId);
+        if (existing) {
+          return `${existing.name} (${existing.city}, ${existing.state})`;
+        }
+      }
+      return `New Location ${index + 1}`;
+    }
+    return `Location ${index + 1}`;
+  };
+
   const generatorUnits = config.locations.flatMap(location =>
     location.units
       .filter(unit => getUnitType(unit.unitType).generatorEligible && unit.needsGenerator)
@@ -618,6 +763,11 @@ function LVTConfigurator() {
     }, 0);
     return sum + locationTotal;
   }, 0);
+  const monthlySubtotal = calculateMonthlySubtotal();
+  const existingDiscountSavings = existingMultiUnitDiscountRate > 0
+    ? monthlySubtotal * existingMultiUnitDiscountRate
+    : 0;
+  const existingDiscountPercent = Math.round(EXISTING_MULTI_UNIT_DISCOUNT * 100);
 
   return (
     <div className="app-shell">
@@ -680,6 +830,69 @@ function LVTConfigurator() {
         {/* Step 0: Location */}
         {currentStep === 0 && (
           <div>
+            <div style={{
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: '16px',
+              padding: '24px 28px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '20px',
+              marginBottom: '32px',
+              flexWrap: 'wrap'
+            }}>
+              <div>
+                <div style={{
+                  fontSize: '12px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.6px',
+                  color: 'rgba(255,255,255,0.6)',
+                  marginBottom: '6px',
+                  fontWeight: '600'
+                }}>
+                  Customer Type
+                </div>
+                <div style={{
+                  fontSize: '22px',
+                  fontWeight: '800',
+                  letterSpacing: '-0.5px'
+                }}>
+                  {config.customerType === 'existing' ? 'Expand an Existing Deployment' : 'Start a New Deployment'}
+                </div>
+              </div>
+              <div style={{
+                display: 'flex',
+                gap: '12px',
+                flexWrap: 'wrap'
+              }}>
+                {[
+                  { id: 'new', label: 'New Customer' },
+                  { id: 'existing', label: 'Existing Customer' }
+                ].map(option => (
+                  <button
+                    key={option.id}
+                    onClick={() => handleCustomerTypeChange(option.id)}
+                    style={{
+                      padding: '10px 18px',
+                      borderRadius: '999px',
+                      border: option.id === config.customerType ? '2px solid #56d3cc' : '1px solid rgba(255,255,255,0.2)',
+                      background: option.id === config.customerType
+                        ? 'rgba(86, 211, 204, 0.18)'
+                        : 'rgba(255,255,255,0.05)',
+                      color: '#fff',
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.6px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <h2 className="hero-title">
               Surveillance, Deterrence, <br />and Versatility
             </h2>
@@ -812,7 +1025,10 @@ function LVTConfigurator() {
                     color: 'rgba(255,255,255,0.7)',
                     lineHeight: '1.6'
                   }}>
-                    Configure unit quantities and deployment locations. Generator requirements apply to mobile units only.
+                    {config.customerType === 'existing'
+                      ? 'Select the existing locations you want to expand and configure additional units. Generator requirements apply to mobile units only.'
+                      : 'Configure unit quantities and deployment locations. Generator requirements apply to mobile units only.'
+                    }
                   </p>
                 </div>
                 
@@ -827,6 +1043,36 @@ function LVTConfigurator() {
                   {totalUnits} {totalUnits === 1 ? 'Unit' : 'Units'}
                 </div>
               </div>
+
+              {config.customerType === 'existing' && (
+                <div style={{
+                  background: 'rgba(86, 211, 204, 0.08)',
+                  border: '1px solid rgba(86, 211, 204, 0.3)',
+                  borderRadius: '12px',
+                  padding: '16px 20px',
+                  marginBottom: '24px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '16px',
+                  flexWrap: 'wrap'
+                }}>
+                  <div>
+                    <div style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.6px', color: 'rgba(255,255,255,0.6)', marginBottom: '6px', fontWeight: '600' }}>
+                      Expansion Incentive
+                    </div>
+                    <div style={{ fontSize: '16px', fontWeight: '700' }}>
+                      {totalUnits < 3
+                        ? `Add ${3 - totalUnits} more ${totalUnits === 2 ? 'unit' : 'units'} to unlock ${existingDiscountPercent}% savings.`
+                        : `Multi-unit savings unlocked: ${existingDiscountPercent}% off monthly hardware.`
+                      }
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)' }}>
+                    Eligible on 3+ units for existing accounts.
+                  </div>
+                </div>
+              )}
 
               {/* Unit Inputs */}
               <div style={{
@@ -857,7 +1103,10 @@ function LVTConfigurator() {
                         fontWeight: '800',
                         color: '#56d3cc'
                       }}>
-                        Location {locationIndex + 1}
+                        {config.customerType === 'existing'
+                          ? `${getLocationLabel(location, locationIndex)} • ${location.zipCode}`
+                          : `Location ${locationIndex + 1}`
+                        }
                       </div>
                       {config.locations.length > 1 && (
                         <button
@@ -889,51 +1138,136 @@ function LVTConfigurator() {
 
                     <div
                       className="location-zip-grid"
-                      style={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: '16px' }}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: location.locationType === 'existing' ? '2fr 3fr' : '2fr',
+                        gap: '16px'
+                      }}
                     >
-                      <div>
-                        <label style={{
-                          display: 'block',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px',
-                          marginBottom: '8px',
-                          color: 'rgba(255,255,255,0.7)'
-                        }}>
-                          Deployment Zip Code
-                        </label>
-                        <input
-                          type="text"
-                          maxLength="5"
-                          value={location.zipCode}
-                          onChange={(e) => {
-                            const value = e.target.value.replace(/\D/g, '');
-                            updateLocationZipCode(location.id, value);
-                          }}
-                          placeholder="Enter 5-digit zip"
-                          style={{
-                            width: '100%',
-                            padding: '12px 16px',
-                            background: 'rgba(39, 42, 47, 0.6)',
-                            border: '2px solid rgba(255,255,255,0.15)',
-                            borderRadius: '8px',
-                            color: '#fff',
-                            fontSize: '16px',
-                            fontWeight: '600',
-                            outline: 'none',
-                            transition: 'all 0.3s ease'
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.border = '2px solid #56d3cc';
-                            e.target.style.background = 'rgba(86, 211, 204, 0.08)';
-                          }}
-                          onBlur={(e) => {
-                            e.target.style.border = '2px solid rgba(255,255,255,0.15)';
-                            e.target.style.background = 'rgba(39, 42, 47, 0.6)';
-                          }}
-                        />
-                      </div>
+                      {config.customerType === 'existing' && location.locationType === 'existing' ? (
+                        <>
+                          <div>
+                            <label style={{
+                              display: 'block',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.5px',
+                              marginBottom: '8px',
+                              color: 'rgba(255,255,255,0.7)'
+                            }}>
+                              Existing Location
+                            </label>
+                            <select
+                              value={location.existingLocationId || ''}
+                              onChange={(e) => updateExistingLocationSelection(location.id, e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                background: 'rgba(39, 42, 47, 0.6)',
+                                border: '2px solid rgba(255,255,255,0.15)',
+                                borderRadius: '8px',
+                                color: '#fff',
+                                fontSize: '14px',
+                                fontWeight: '600',
+                                outline: 'none',
+                                transition: 'all 0.3s ease'
+                              }}
+                              onFocus={(e) => {
+                                e.target.style.border = '2px solid #56d3cc';
+                                e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                              }}
+                              onBlur={(e) => {
+                                e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                                e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                              }}
+                            >
+                              {EXISTING_LOCATIONS.map(option => {
+                                const isDisabled = existingLocationIds.includes(option.id)
+                                  && option.id !== location.existingLocationId;
+                                return (
+                                  <option key={option.id} value={option.id} disabled={isDisabled}>
+                                    {formatExistingLocationLabel(option)}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </div>
+                          <div>
+                            <label style={{
+                              display: 'block',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.5px',
+                              marginBottom: '8px',
+                              color: 'rgba(255,255,255,0.7)'
+                            }}>
+                              Deployment Zip Code
+                            </label>
+                            <input
+                              type="text"
+                              value={location.zipCode}
+                              readOnly
+                              style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                background: 'rgba(39, 42, 47, 0.45)',
+                                border: '2px solid rgba(255,255,255,0.1)',
+                                borderRadius: '8px',
+                                color: 'rgba(255,255,255,0.7)',
+                                fontSize: '16px',
+                                fontWeight: '600',
+                                outline: 'none'
+                              }}
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <div>
+                          <label style={{
+                            display: 'block',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px',
+                            marginBottom: '8px',
+                            color: 'rgba(255,255,255,0.7)'
+                          }}>
+                            Deployment Zip Code
+                          </label>
+                          <input
+                            type="text"
+                            maxLength="5"
+                            value={location.zipCode}
+                            onChange={(e) => {
+                              const value = e.target.value.replace(/\D/g, '');
+                              updateLocationZipCode(location.id, value);
+                            }}
+                            placeholder="Enter 5-digit zip"
+                            style={{
+                              width: '100%',
+                              padding: '12px 16px',
+                              background: 'rgba(39, 42, 47, 0.6)',
+                              border: '2px solid rgba(255,255,255,0.15)',
+                              borderRadius: '8px',
+                              color: '#fff',
+                              fontSize: '16px',
+                              fontWeight: '600',
+                              outline: 'none',
+                              transition: 'all 0.3s ease'
+                            }}
+                            onFocus={(e) => {
+                              e.target.style.border = '2px solid #56d3cc';
+                              e.target.style.background = 'rgba(86, 211, 204, 0.08)';
+                            }}
+                            onBlur={(e) => {
+                              e.target.style.border = '2px solid rgba(255,255,255,0.15)';
+                              e.target.style.background = 'rgba(39, 42, 47, 0.6)';
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <div style={{
@@ -1101,42 +1435,106 @@ function LVTConfigurator() {
                 ))}
               </div>
 
-              {/* Add Location Button */}
-              <button
-                onClick={addLocation}
-                style={{
-                  width: '100%',
-                  padding: '14px',
-                  background: 'rgba(255,255,255,0.08)',
-                  border: '2px dashed rgba(255,255,255,0.2)',
-                  borderRadius: '10px',
-                  color: '#fff',
-                  fontSize: '14px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  marginBottom: '24px'
-                }}
-                onMouseOver={(e) => {
-                  e.target.style.background = 'rgba(86, 211, 204, 0.15)';
-                  e.target.style.borderColor = '#56d3cc';
-                }}
-                onMouseOut={(e) => {
-                  e.target.style.background = 'rgba(255,255,255,0.08)';
-                  e.target.style.borderColor = 'rgba(255,255,255,0.2)';
-                }}
-              >
-                + Add Another Location
-              </button>
+              {/* Add Location Buttons */}
+              {config.customerType === 'existing' ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+                  <button
+                    onClick={() => addLocation('existing')}
+                    disabled={!canAddExistingLocation}
+                    style={{
+                      width: '100%',
+                      padding: '14px',
+                      background: !canAddExistingLocation ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.08)',
+                      border: `2px dashed ${!canAddExistingLocation ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.2)'}`,
+                      borderRadius: '10px',
+                      color: !canAddExistingLocation ? 'rgba(255,255,255,0.4)' : '#fff',
+                      fontSize: '14px',
+                      fontWeight: '700',
+                      cursor: !canAddExistingLocation ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.3s ease',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px'
+                    }}
+                    onMouseOver={(e) => {
+                      if (canAddExistingLocation) {
+                        e.target.style.background = 'rgba(86, 211, 204, 0.15)';
+                        e.target.style.borderColor = '#56d3cc';
+                      }
+                    }}
+                    onMouseOut={(e) => {
+                      if (canAddExistingLocation) {
+                        e.target.style.background = 'rgba(255,255,255,0.08)';
+                        e.target.style.borderColor = 'rgba(255,255,255,0.2)';
+                      }
+                    }}
+                  >
+                    {canAddExistingLocation ? '+ Add Existing Location' : 'All Existing Locations Added'}
+                  </button>
+                  <button
+                    onClick={() => addLocation('new')}
+                    style={{
+                      width: '100%',
+                      padding: '14px',
+                      background: 'rgba(255,255,255,0.08)',
+                      border: '2px dashed rgba(255,255,255,0.2)',
+                      borderRadius: '10px',
+                      color: '#fff',
+                      fontSize: '14px',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px'
+                    }}
+                    onMouseOver={(e) => {
+                      e.target.style.background = 'rgba(86, 211, 204, 0.15)';
+                      e.target.style.borderColor = '#56d3cc';
+                    }}
+                    onMouseOut={(e) => {
+                      e.target.style.background = 'rgba(255,255,255,0.08)';
+                      e.target.style.borderColor = 'rgba(255,255,255,0.2)';
+                    }}
+                  >
+                    + Add New Location
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => addLocation('new')}
+                  style={{
+                    width: '100%',
+                    padding: '14px',
+                    background: 'rgba(255,255,255,0.08)',
+                    border: '2px dashed rgba(255,255,255,0.2)',
+                    borderRadius: '10px',
+                    color: '#fff',
+                    fontSize: '14px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    marginBottom: '24px'
+                  }}
+                  onMouseOver={(e) => {
+                    e.target.style.background = 'rgba(86, 211, 204, 0.15)';
+                    e.target.style.borderColor = '#56d3cc';
+                  }}
+                  onMouseOut={(e) => {
+                    e.target.style.background = 'rgba(255,255,255,0.08)';
+                    e.target.style.borderColor = 'rgba(255,255,255,0.2)';
+                  }}
+                >
+                  + Add Another Location
+                </button>
+              )}
 
             </div>
           </div>
         )}
 
         {/* Step 1: Hardware Options */}
-        {currentStep === 1 && (
+        {currentStep === 1 && config.customerType !== 'existing' && (
           <div>
             <h2 style={{
               fontWeight: '900',
@@ -1216,18 +1614,25 @@ function LVTConfigurator() {
                       flexWrap: 'wrap',
                       gap: '12px'
                     }}>
-                      {generatorUnits.map((unit, idx) => (
-                        <div key={`${unit.locationId}-${unit.id}`} style={{
-                          background: 'rgba(86, 211, 204, 0.15)',
-                          padding: '8px 16px',
-                          borderRadius: '8px',
-                          fontSize: '13px',
-                          fontWeight: '700',
-                          color: '#fff'
-                        }}>
-                          Location {config.locations.findIndex(location => location.id === unit.locationId) + 1}: {unit.quantity} {unit.quantity === 1 ? 'Unit' : 'Units'} • {unit.locationZip}
-                        </div>
-                      ))}
+                      {generatorUnits.map((unit) => {
+                        const locationIndex = config.locations.findIndex(location => location.id === unit.locationId);
+                        const location = config.locations[locationIndex];
+                        const locationLabel = location
+                          ? getLocationDescriptor(location, locationIndex)
+                          : `Location ${locationIndex + 1}`;
+                        return (
+                          <div key={`${unit.locationId}-${unit.id}`} style={{
+                            background: 'rgba(86, 211, 204, 0.15)',
+                            padding: '8px 16px',
+                            borderRadius: '8px',
+                            fontSize: '13px',
+                            fontWeight: '700',
+                            color: '#fff'
+                          }}>
+                            {locationLabel}: {unit.quantity} {unit.quantity === 1 ? 'Unit' : 'Units'} • {unit.locationZip}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                   <div style={{
@@ -1476,7 +1881,7 @@ function LVTConfigurator() {
         )}
 
         {/* Step 2: Software Packages */}
-        {currentStep === 2 && (
+        {currentStep === 2 && config.customerType !== 'existing' && (
           <div>
             <h2 style={{
               fontWeight: '900',
@@ -1640,7 +2045,7 @@ function LVTConfigurator() {
 
 
         {/* Step 3: Lease Term */}
-        {currentStep === 3 && (
+        {currentStep === 3 && config.customerType !== 'existing' && (
           <div>
             <h2 style={{
               fontWeight: '700',
@@ -1773,8 +2178,788 @@ function LVTConfigurator() {
           </div>
         )}
 
+        {/* Step 1: Contact Information (Existing Customers) */}
+        {currentStep === 1 && config.customerType === 'existing' && (
+          <div>
+            <h2 style={{
+              fontWeight: '700',
+              marginBottom: '16px',
+              letterSpacing: '-1px',
+              lineHeight: '1.1'
+            }}>
+              Contact & <span className="gradient-text">Delivery Information</span>
+            </h2>
+            <p style={{
+              fontSize: '18px',
+              color: 'rgba(255,255,255,0.8)',
+              marginBottom: '64px',
+              fontWeight: '400',
+              maxWidth: '600px',
+              lineHeight: '1.6'
+            }}>
+              Confirm your contact details and add shipping info only for new deployment locations.
+            </p>
+
+            <div style={{
+              maxWidth: '800px',
+              margin: '0 auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '32px'
+            }}>
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '16px',
+                padding: '32px'
+              }}>
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  marginBottom: '24px',
+                  color: '#56d3cc'
+                }}>
+                  Company Contact
+                </h3>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                  <input
+                    type="text"
+                    value={config.contactInfo.companyName}
+                    onChange={(e) => updateContactInfo('companyName', e.target.value)}
+                    placeholder="Company Name *"
+                    style={{
+                      padding: '12px 16px',
+                      background: 'rgba(39, 42, 47, 0.6)',
+                      border: '2px solid rgba(255,255,255,0.15)',
+                      borderRadius: '8px',
+                      color: '#fff',
+                      fontSize: '16px',
+                      fontWeight: '500',
+                      outline: 'none'
+                    }}
+                  />
+                  <input
+                    type="text"
+                    value={config.contactInfo.fullName}
+                    onChange={(e) => updateContactInfo('fullName', e.target.value)}
+                    placeholder="Full Name *"
+                    style={{
+                      padding: '12px 16px',
+                      background: 'rgba(39, 42, 47, 0.6)',
+                      border: '2px solid rgba(255,255,255,0.15)',
+                      borderRadius: '8px',
+                      color: '#fff',
+                      fontSize: '16px',
+                      fontWeight: '500',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <input
+                    type="email"
+                    value={config.contactInfo.email}
+                    onChange={(e) => updateContactInfo('email', e.target.value)}
+                    placeholder="Email Address *"
+                    style={{
+                      padding: '12px 16px',
+                      background: 'rgba(39, 42, 47, 0.6)',
+                      border: '2px solid rgba(255,255,255,0.15)',
+                      borderRadius: '8px',
+                      color: '#fff',
+                      fontSize: '16px',
+                      fontWeight: '500',
+                      outline: 'none'
+                    }}
+                  />
+                  <input
+                    type="tel"
+                    value={config.contactInfo.phone}
+                    onChange={(e) => updateContactInfo('phone', e.target.value)}
+                    placeholder="Phone Number *"
+                    style={{
+                      padding: '12px 16px',
+                      background: 'rgba(39, 42, 47, 0.6)',
+                      border: '2px solid rgba(255,255,255,0.15)',
+                      borderRadius: '8px',
+                      color: '#fff',
+                      fontSize: '16px',
+                      fontWeight: '500',
+                      outline: 'none'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '16px',
+                padding: '32px'
+              }}>
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  marginBottom: '24px',
+                  color: '#56d3cc'
+                }}>
+                  Billing Address
+                </h3>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <input
+                    type="text"
+                    value={config.contactInfo.billingAddress.street}
+                    onChange={(e) => updateAddress('billingAddress', 'street', e.target.value)}
+                    placeholder="Street Address *"
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      background: 'rgba(39, 42, 47, 0.6)',
+                      border: '2px solid rgba(255,255,255,0.15)',
+                      borderRadius: '8px',
+                      color: '#fff',
+                      fontSize: '16px',
+                      fontWeight: '500',
+                      outline: 'none'
+                    }}
+                  />
+
+                  <div
+                    className="address-grid"
+                    style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '16px' }}
+                  >
+                    <input
+                      type="text"
+                      value={config.contactInfo.billingAddress.city}
+                      onChange={(e) => updateAddress('billingAddress', 'city', e.target.value)}
+                      placeholder="City *"
+                      style={{
+                        padding: '12px 16px',
+                        background: 'rgba(39, 42, 47, 0.6)',
+                        border: '2px solid rgba(255,255,255,0.15)',
+                        borderRadius: '8px',
+                        color: '#fff',
+                        fontSize: '16px',
+                        fontWeight: '500',
+                        outline: 'none'
+                      }}
+                    />
+                    <input
+                      type="text"
+                      value={config.contactInfo.billingAddress.state}
+                      onChange={(e) => updateAddress('billingAddress', 'state', e.target.value)}
+                      placeholder="State *"
+                      maxLength="2"
+                      style={{
+                        padding: '12px 16px',
+                        background: 'rgba(39, 42, 47, 0.6)',
+                        border: '2px solid rgba(255,255,255,0.15)',
+                        borderRadius: '8px',
+                        color: '#fff',
+                        fontSize: '16px',
+                        fontWeight: '500',
+                        outline: 'none'
+                      }}
+                    />
+                    <input
+                      type="text"
+                      value={config.contactInfo.billingAddress.zip}
+                      onChange={(e) => updateAddress('billingAddress', 'zip', e.target.value.replace(/\D/g, ''))}
+                      placeholder="Zip *"
+                      maxLength="5"
+                      style={{
+                        padding: '12px 16px',
+                        background: 'rgba(39, 42, 47, 0.6)',
+                        border: '2px solid rgba(255,255,255,0.15)',
+                        borderRadius: '8px',
+                        color: '#fff',
+                        fontSize: '16px',
+                        fontWeight: '500',
+                        outline: 'none'
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '16px',
+                padding: '32px'
+              }}>
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  marginBottom: '12px',
+                  color: '#56d3cc'
+                }}>
+                  New Location Shipping
+                </h3>
+                <p style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.65)',
+                  marginBottom: '24px'
+                }}>
+                  Provide shipping details only for new locations being added.
+                </p>
+
+                {uniqueLocationZips.length === 0 && (
+                  <div style={{
+                    padding: '16px',
+                    background: 'rgba(255,255,255,0.04)',
+                    borderRadius: '10px',
+                    color: 'rgba(255,255,255,0.6)',
+                    fontSize: '14px'
+                  }}>
+                    No new locations added yet. Add a new location in the Location step to collect shipping details.
+                  </div>
+                )}
+
+                {uniqueLocationZips.map((zip, idx) => {
+                  const address = config.contactInfo.shippingAddresses.find(entry => entry.zipCode === zip);
+                  const sameAsBilling = address?.sameAsBilling;
+
+                  return (
+                    <div
+                      key={zip}
+                      style={{
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '12px',
+                        padding: '20px',
+                        marginBottom: idx === uniqueLocationZips.length - 1 ? '0' : '16px'
+                      }}
+                    >
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '16px',
+                        gap: '16px',
+                        flexWrap: 'wrap'
+                      }}>
+                        <div style={{
+                          fontSize: '16px',
+                          fontWeight: '700',
+                          color: '#fff'
+                        }}>
+                          New Location • Zip {zip}
+                        </div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={!!sameAsBilling}
+                            onChange={(e) => updateShippingAddress(zip, 'sameAsBilling', e.target.checked)}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                          />
+                          <span style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)', fontWeight: '500' }}>
+                            Same as billing address
+                          </span>
+                        </label>
+                      </div>
+
+                      {!sameAsBilling && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                          <input
+                            type="text"
+                            value={address?.street || ''}
+                            onChange={(e) => updateShippingAddress(zip, 'street', e.target.value)}
+                            placeholder="Street Address *"
+                            style={{
+                              width: '100%',
+                              padding: '12px 16px',
+                              background: 'rgba(39, 42, 47, 0.6)',
+                              border: '2px solid rgba(255,255,255,0.15)',
+                              borderRadius: '8px',
+                              color: '#fff',
+                              fontSize: '16px',
+                              fontWeight: '500',
+                              outline: 'none'
+                            }}
+                          />
+
+                          <div
+                            className="address-grid"
+                            style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '16px' }}
+                          >
+                            <input
+                              type="text"
+                              value={address?.city || ''}
+                              onChange={(e) => updateShippingAddress(zip, 'city', e.target.value)}
+                              placeholder="City *"
+                              style={{
+                                padding: '12px 16px',
+                                background: 'rgba(39, 42, 47, 0.6)',
+                                border: '2px solid rgba(255,255,255,0.15)',
+                                borderRadius: '8px',
+                                color: '#fff',
+                                fontSize: '16px',
+                                fontWeight: '500',
+                                outline: 'none'
+                              }}
+                            />
+                            <input
+                              type="text"
+                              value={address?.state || ''}
+                              onChange={(e) => updateShippingAddress(zip, 'state', e.target.value)}
+                              placeholder="State *"
+                              maxLength="2"
+                              style={{
+                                padding: '12px 16px',
+                                background: 'rgba(39, 42, 47, 0.6)',
+                                border: '2px solid rgba(255,255,255,0.15)',
+                                borderRadius: '8px',
+                                color: '#fff',
+                                fontSize: '16px',
+                                fontWeight: '500',
+                                outline: 'none'
+                              }}
+                            />
+                            <input
+                              type="text"
+                              value={address?.zip || ''}
+                              onChange={(e) => updateShippingAddress(zip, 'zip', e.target.value.replace(/\D/g, ''))}
+                              placeholder="Zip *"
+                              maxLength="5"
+                              style={{
+                                padding: '12px 16px',
+                                background: 'rgba(39, 42, 47, 0.6)',
+                                border: '2px solid rgba(255,255,255,0.15)',
+                                borderRadius: '8px',
+                                color: '#fff',
+                                fontSize: '16px',
+                                fontWeight: '500',
+                                outline: 'none'
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Review (Existing Customers) */}
+        {currentStep === 2 && config.customerType === 'existing' && (
+          <div>
+            <h2 style={{
+              fontWeight: '700',
+              marginBottom: '16px',
+              letterSpacing: '-1px',
+              lineHeight: '1.1'
+            }}>
+              Expansion <span className="gradient-text">Summary</span>
+            </h2>
+            <p style={{
+              fontSize: '18px',
+              color: 'rgba(255,255,255,0.8)',
+              marginBottom: '56px',
+              fontWeight: '400',
+              maxWidth: '800px',
+              lineHeight: '1.6'
+            }}>
+              Review your add-on units and confirm details for the addendum to your existing agreement.
+            </p>
+            
+            <div
+              className="review-grid"
+              style={{
+              display: 'grid',
+              gridTemplateColumns: '2fr 1fr',
+              gap: '28px'
+            }}>
+              <div style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '16px',
+                padding: '40px'
+              }}>
+                <h3 style={{
+                  fontSize: '20px',
+                  fontWeight: '800',
+                  marginBottom: '28px',
+                  color: '#56d3cc',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  Added Units
+                </h3>
+                
+                <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                  <div style={{
+                    fontSize: '11px',
+                    textTransform: 'uppercase',
+                    color: 'rgba(255,255,255,0.5)',
+                    letterSpacing: '1px',
+                    marginBottom: '14px',
+                    fontWeight: '600'
+                  }}>
+                    Base Units
+                  </div>
+                  <div style={{
+                    fontSize: '18px',
+                    fontWeight: '700',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '16px'
+                  }}>
+                    <span>{totalUnits} × Security Units</span>
+                    <span style={{ color: '#56d3cc' }}>
+                      ${baseMonthlyTotal.toLocaleString()}
+                    </span>
+                  </div>
+                  
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    marginTop: '12px'
+                  }}>
+                    {config.locations.flatMap(location =>
+                      location.units.map(unit => ({
+                        locationId: location.id,
+                        locationZip: location.zipCode,
+                        unit
+                      }))
+                    ).map((entry) => (
+                      <div key={`${entry.locationId}-${entry.unit.id}`} style={{
+                        fontSize: '13px',
+                        color: 'rgba(255,255,255,0.6)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}>
+                        <div style={{
+                          width: '4px',
+                          height: '4px',
+                          background: 'rgba(255,255,255,0.4)',
+                          borderRadius: '50%'
+                        }}></div>
+                        <span>
+                          {(() => {
+                            const locationIndex = config.locations.findIndex(location => location.id === entry.locationId);
+                            const location = config.locations[locationIndex];
+                            const label = location
+                              ? getLocationDescriptor(location, locationIndex)
+                              : `Location ${locationIndex + 1}`;
+                            return `${label}: ${entry.unit.quantity} ${entry.unit.quantity === 1 ? 'Unit' : 'Units'} • ${getUnitType(entry.unit.unitType).name} • ${entry.locationZip}`;
+                          })()}
+                        </span>
+                        {entry.unit.needsGenerator && (
+                          <span style={{
+                            background: 'rgba(86, 211, 204, 0.2)',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            fontWeight: '700',
+                            color: '#56d3cc'
+                          }}>
+                            + Generator
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {generatorUnits.length > 0 && (
+                  <div style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{
+                      fontSize: '11px',
+                      textTransform: 'uppercase',
+                      color: 'rgba(255,255,255,0.5)',
+                      letterSpacing: '1px',
+                      marginBottom: '10px',
+                      fontWeight: '600'
+                    }}>
+                      Power Systems
+                    </div>
+                    <div style={{
+                      fontSize: '16px',
+                      fontWeight: '600',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <span>{generatorUnitCount} × Smart Generator Backup</span>
+                      <span style={{ color: '#56d3cc' }}>
+                        +${(GENERATOR_MONTHLY * generatorUnitCount).toLocaleString()}/mo
+                      </span>
+                    </div>
+                    <div style={{
+                      fontSize: '12px',
+                      color: 'rgba(255,255,255,0.5)',
+                      marginTop: '4px'
+                    }}>
+                      Monthly per generator
+                    </div>
+                  </div>
+                )}
+
+                {existingMultiUnitDiscountRate > 0 && (
+                  <div>
+                    <div style={{
+                      fontSize: '11px',
+                      textTransform: 'uppercase',
+                      color: 'rgba(255,255,255,0.5)',
+                      letterSpacing: '1px',
+                      marginBottom: '10px',
+                      fontWeight: '600'
+                    }}>
+                      Upsell Discount
+                    </div>
+                    <div style={{
+                      fontSize: '16px',
+                      fontWeight: '700',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <span>{existingDiscountPercent}% multi-unit expansion savings</span>
+                      <span style={{ color: '#56d3cc' }}>
+                        -${Math.round(existingDiscountSavings).toLocaleString()}/mo
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div
+                className="review-summary-card"
+                style={{
+                background: 'linear-gradient(135deg, rgba(86, 211, 204, 0.15), rgba(125, 232, 224, 0.08))',
+                border: '2px solid #56d3cc',
+                borderRadius: '16px',
+                padding: '40px',
+                height: 'fit-content',
+                position: 'sticky',
+                top: '120px'
+              }}>
+                <h3 style={{
+                  fontSize: '13px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '1px',
+                  marginBottom: '20px',
+                  color: 'rgba(255,255,255,0.7)',
+                  fontWeight: '600'
+                }}>
+                  Estimated Addendum Total
+                </h3>
+                
+                <div style={{
+                  fontSize: '52px',
+                  fontWeight: '900',
+                  marginBottom: '8px',
+                  color: '#56d3cc',
+                  letterSpacing: '-2px'
+                }}>
+                  ${Math.round(calculateMonthlyTotal()).toLocaleString()}
+                  <span style={{ fontSize: '24px', color: 'rgba(255,255,255,0.6)' }}>/mo</span>
+                </div>
+
+                <div style={{
+                  fontSize: '14px',
+                  color: 'rgba(255,255,255,0.6)',
+                  marginBottom: '24px',
+                  fontWeight: '600'
+                }}>
+                  Added units for your existing agreement
+                </div>
+                
+                <button
+                  disabled={isSubmitting}
+                  style={{
+                    width: '100%',
+                    padding: '18px',
+                    background: isSubmitting ? 'rgba(86, 211, 204, 0.5)' : '#56d3cc',
+                    color: '#1b1e23',
+                    border: 'none',
+                    borderRadius: '10px',
+                    fontSize: '16px',
+                    fontWeight: '800',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.3s ease',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    marginBottom: '16px',
+                    opacity: isSubmitting ? 0.7 : 1
+                  }}
+                  onMouseOver={(e) => {
+                    if (!isSubmitting) {
+                      e.target.style.background = '#00a19a';
+                      e.target.style.transform = 'scale(1.02)';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    if (!isSubmitting) {
+                      e.target.style.background = '#56d3cc';
+                      e.target.style.transform = 'scale(1)';
+                    }
+                  }}
+                  onClick={async () => {
+                    if (isSubmitting) return;
+                    
+                    setIsSubmitting(true);
+                    
+                    const webhookUrl = 'https://webhooks.workato.com/webhooks/rest/6a7e39d0-1da9-4e30-8ab7-b7c732cbcb0f/order';
+                    
+                    const monthlyTotal = Math.round(calculateMonthlyTotal());
+                    const contractTotal = calculateContractTotal();
+                    
+                    const resolvedShippingAddresses = config.contactInfo.shippingAddresses.map(address => {
+                      const source = address.sameAsBilling
+                        ? config.contactInfo.billingAddress
+                        : address;
+                      return {
+                        locationZip: address.zipCode,
+                        unitCount: unitsByZip[address.zipCode] || 0,
+                        sameAsBilling: address.sameAsBilling ? 'Yes' : 'No',
+                        street: source.street,
+                        city: source.city,
+                        state: source.state,
+                        zip: source.zip,
+                        addressFull: `${source.street}, ${source.city}, ${source.state} ${source.zip}`
+                      };
+                    });
+                    const shippingByZip = resolvedShippingAddresses.reduce((acc, address) => {
+                      acc[address.locationZip] = address;
+                      return acc;
+                    }, {});
+
+                    const orderData = {
+                      // Order Info
+                      timestamp: new Date().toISOString(),
+                      orderId: `LVT-${Date.now()}`,
+                      
+                      // Configuration Summary
+                      customerType: config.customerType === 'existing' ? 'Existing' : 'New',
+                      unitCount: totalUnits,
+                      baseMonthlyTotal,
+                      deploymentZips: config.locations.map(location => location.zipCode).join(', '),
+                      deploymentDetails: config.locations.flatMap((location, locationIdx) =>
+                        location.units.map(unit =>
+                          `${getLocationDescriptor(location, locationIdx)}: ${unit.quantity} ${unit.quantity === 1 ? 'Unit' : 'Units'} • ${getUnitType(unit.unitType).name} • Zip ${location.zipCode}${unit.needsGenerator ? ' (+ Generator)' : ''}`
+                        )
+                      ).join(' | '),
+                      unitBreakdown: config.locations.flatMap((location, locationIdx) => {
+                        const shippingAddress = shippingByZip[location.zipCode] || null;
+                        return location.units.map(unit => ({
+                          location: locationIdx + 1,
+                          locationLabel: getLocationDescriptor(location, locationIdx),
+                          unitType: getUnitType(unit.unitType).name,
+                          quantity: unit.quantity || 0,
+                          zipCode: location.zipCode,
+                          needsGenerator: unit.needsGenerator ? 'Yes' : 'No',
+                          shippingAddress
+                        }));
+                      }),
+                      generatorsNeeded: config.locations.reduce((sum, location) => {
+                        const locationGenerators = location.units
+                          .filter(unit => getUnitType(unit.unitType).generatorEligible && unit.needsGenerator)
+                          .reduce((unitSum, unit) => unitSum + (unit.quantity || 0), 0);
+                        return sum + locationGenerators;
+                      }, 0),
+                      
+                      // Hardware Options
+                      ndaaCompliant: config.ndaaCompliant ? 'Yes' : 'No',
+                      nightVision: config.nightVision ? 'Yes' : 'No',
+                      
+                      // Software Packages
+                      softwarePackages: config.softwarePackages.length > 0 
+                        ? config.softwarePackages.join(', ') 
+                        : 'None',
+                      
+                      // Lease Details
+                      leaseTerm: config.leaseTerm ? `${config.leaseTerm} months` : 'Existing Contract Addendum',
+                      monthlyPayment: monthlyTotal,
+                      totalContract: contractTotal,
+                      
+                      // Contact Information
+                      companyName: config.contactInfo.companyName,
+                      contactName: config.contactInfo.fullName,
+                      email: config.contactInfo.email,
+                      phone: config.contactInfo.phone,
+                      
+                      // Billing Address
+                      billingStreet: config.contactInfo.billingAddress.street,
+                      billingCity: config.contactInfo.billingAddress.city,
+                      billingState: config.contactInfo.billingAddress.state,
+                      billingZip: config.contactInfo.billingAddress.zip,
+                      billingAddressFull: `${config.contactInfo.billingAddress.street}, ${config.contactInfo.billingAddress.city}, ${config.contactInfo.billingAddress.state} ${config.contactInfo.billingAddress.zip}`,
+                      
+                      // Shipping Addresses
+                      shippingAddresses: resolvedShippingAddresses
+                    };
+                    
+                    const payload = JSON.stringify(orderData);
+                    let submitted = false;
+                    let verified = false;
+
+                    try {
+                      const response = await fetch(webhookUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: payload,
+                        credentials: 'omit'
+                      });
+                      submitted = response.ok;
+                      verified = response.ok;
+                    } catch (error) {
+                      try {
+                        await fetch(webhookUrl, {
+                          method: 'POST',
+                          mode: 'no-cors',
+                          headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+                          body: payload
+                        });
+                        submitted = true;
+                      } catch (fallbackError) {
+                        console.error('Submission error:', fallbackError);
+                      }
+                      console.error('Submission error:', error);
+                    } finally {
+                      if (submitted) {
+                        const verificationNote = verified
+                          ? ''
+                          : '\n\nNote: The request was sent, but the browser could not verify a response due to cross-origin restrictions.';
+                        alert(`Thank you for your lease request!\n\n${totalUnits} Security ${totalUnits === 1 ? 'Unit' : 'Units'}\n\nOrder ID: ${orderData.orderId}\nMonthly Payment: $${monthlyTotal.toLocaleString()}\n\nWe'll contact you at ${config.contactInfo.email} shortly to finalize your addendum.${verificationNote}`);
+                        
+                        // Optional: Reset form or redirect
+                        // setCurrentStep(0);
+                        // window.location.href = '/thank-you';
+                      } else {
+                        alert('There was an error submitting your request. Please try again or contact us directly at sales@lvt.com');
+                      }
+                      setIsSubmitting(false);
+                    }
+                  }}
+                >
+                  {isSubmitting ? 'Submitting...' : 'Request Addendum'}
+                </button>
+                
+                <div style={{
+                  fontSize: '12px',
+                  color: 'rgba(255,255,255,0.6)',
+                  textAlign: 'center',
+                  lineHeight: '1.4'
+                }}>
+                  Deployment scheduling coordinated with your account team
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Step 4: Contact Information */}
-        {currentStep === 4 && (
+        {currentStep === 4 && config.customerType !== 'existing' && (
           <div>
             <h2 style={{
               fontWeight: '700',
@@ -2239,7 +3424,7 @@ function LVTConfigurator() {
           </div>
         )}
         {/* Step 5: Review */}
-        {currentStep === 5 && (
+        {currentStep === 5 && config.customerType !== 'existing' && (
           <div>
             <h2 style={{
               fontWeight: '700',
@@ -2337,7 +3522,16 @@ function LVTConfigurator() {
                           background: 'rgba(255,255,255,0.4)',
                           borderRadius: '50%'
                         }}></div>
-                        <span>Location {config.locations.findIndex(location => location.id === entry.locationId) + 1}: {entry.unit.quantity} {entry.unit.quantity === 1 ? 'Unit' : 'Units'} • {getUnitType(entry.unit.unitType).name} • {entry.locationZip}</span>
+                        <span>
+                          {(() => {
+                            const locationIndex = config.locations.findIndex(location => location.id === entry.locationId);
+                            const location = config.locations[locationIndex];
+                            const label = location
+                              ? getLocationDescriptor(location, locationIndex)
+                              : `Location ${locationIndex + 1}`;
+                            return `${label}: ${entry.unit.quantity} ${entry.unit.quantity === 1 ? 'Unit' : 'Units'} • ${getUnitType(entry.unit.unitType).name} • ${entry.locationZip}`;
+                          })()}
+                        </span>
                         {entry.unit.needsGenerator && (
                           <span style={{
                             background: 'rgba(86, 211, 204, 0.2)',
@@ -2483,6 +3677,33 @@ function LVTConfigurator() {
                   </div>
                 )}
 
+                {existingMultiUnitDiscountRate > 0 && (
+                  <div style={{ marginTop: '24px' }}>
+                    <div style={{
+                      fontSize: '11px',
+                      textTransform: 'uppercase',
+                      color: 'rgba(255,255,255,0.5)',
+                      letterSpacing: '1px',
+                      marginBottom: '10px',
+                      fontWeight: '600'
+                    }}>
+                      Upsell Discount
+                    </div>
+                    <div style={{
+                      fontSize: '16px',
+                      fontWeight: '700',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <span>{existingDiscountPercent}% multi-unit expansion savings</span>
+                      <span style={{ color: '#56d3cc' }}>
+                        -${Math.round(existingDiscountSavings).toLocaleString()}/mo
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 {generatorUnits.length === 0 && !config.ndaaCompliant && !config.nightVision && config.softwarePackages.length === 0 && (
                   <div style={{
                     padding: '24px',
@@ -2619,18 +3840,20 @@ function LVTConfigurator() {
                       orderId: `LVT-${Date.now()}`,
                       
                       // Configuration Summary
+                      customerType: config.customerType === 'existing' ? 'Existing' : 'New',
                       unitCount: totalUnits,
                       baseMonthlyTotal,
                       deploymentZips: config.locations.map(location => location.zipCode).join(', '),
                       deploymentDetails: config.locations.flatMap((location, locationIdx) =>
                         location.units.map(unit =>
-                          `Location ${locationIdx + 1}: ${unit.quantity} ${unit.quantity === 1 ? 'Unit' : 'Units'} • ${getUnitType(unit.unitType).name} • Zip ${location.zipCode}${unit.needsGenerator ? ' (+ Generator)' : ''}`
+                          `${getLocationDescriptor(location, locationIdx)}: ${unit.quantity} ${unit.quantity === 1 ? 'Unit' : 'Units'} • ${getUnitType(unit.unitType).name} • Zip ${location.zipCode}${unit.needsGenerator ? ' (+ Generator)' : ''}`
                         )
                       ).join(' | '),
                       unitBreakdown: config.locations.flatMap((location, locationIdx) => {
                         const shippingAddress = shippingByZip[location.zipCode] || null;
                         return location.units.map(unit => ({
                           location: locationIdx + 1,
+                          locationLabel: getLocationDescriptor(location, locationIdx),
                           unitType: getUnitType(unit.unitType).name,
                           quantity: unit.quantity || 0,
                           zipCode: location.zipCode,
@@ -2774,7 +3997,7 @@ function LVTConfigurator() {
             ← Back
           </button>
           
-          {currentStep < 5 ? (
+          {currentStep < steps.length - 1 ? (
             <button
               onClick={() => {
                 if (currentStep === 0 && canProceed()) {
@@ -2844,7 +4067,7 @@ function LVTConfigurator() {
       </main>
 
       {/* Floating Price Summary */}
-      {currentStep > 0 && currentStep < 5 && (
+      {currentStep > 0 && currentStep < steps.length - 1 && (
         <div style={{
           position: 'fixed',
           top: '140px',
